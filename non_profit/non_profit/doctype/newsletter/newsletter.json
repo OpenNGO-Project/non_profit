@@ -1,0 +1,215 @@
+{
+	"actions": [],
+	"allow_rename": 1,
+	"autoname": "field:subject",
+	"creation": "2025-02-18 00:00:00.000000",
+	"doctype": "DocType",
+	"engine": "InnoDB",
+	"field_order": [
+		"subject",
+		"email_group",
+		"sender",
+		"column_break_4",
+		"status",
+		"total_recipients",
+		"sent_count",
+		"failed_count",
+		"section_break_content",
+		"email_template",
+		"use_html",
+		"column_break_content",
+		"content",
+		"html_content",
+		"section_break_schedule",
+		"schedule_send",
+		"send_after",
+		"column_break_schedule",
+		"add_unsubscribe_link",
+		"section_break_attachments",
+		"attachments",
+		"section_break_tracking",
+		"email_queue_link"
+	],
+	"fields": [
+		{
+			"fieldname": "subject",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Subject",
+			"reqd": 1,
+			"unique": 1
+		},
+		{
+			"fieldname": "email_group",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Email Group",
+			"options": "Email Group",
+			"reqd": 1
+		},
+		{
+			"fieldname": "sender",
+			"fieldtype": "Select",
+			"label": "Sender Email"
+		},
+		{
+			"fieldname": "column_break_4",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "Draft",
+			"fieldname": "status",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"in_standard_filter": 1,
+			"label": "Status",
+			"no_copy": 1,
+			"options": "Draft\nQueued\nSending\nSent\nPartially Sent\nFailed",
+			"read_only": 1
+		},
+		{
+			"default": "0",
+			"fieldname": "total_recipients",
+			"fieldtype": "Int",
+			"label": "Total Recipients",
+			"read_only": 1
+		},
+		{
+			"default": "0",
+			"fieldname": "sent_count",
+			"fieldtype": "Int",
+			"label": "Sent Count",
+			"read_only": 1
+		},
+		{
+			"default": "0",
+			"fieldname": "failed_count",
+			"fieldtype": "Int",
+			"label": "Failed Count",
+			"read_only": 1
+		},
+		{
+			"fieldname": "section_break_content",
+			"fieldtype": "Section Break",
+			"label": "Content"
+		},
+		{
+			"fieldname": "email_template",
+			"fieldtype": "Link",
+			"label": "Email Template",
+			"options": "Email Template"
+		},
+		{
+			"default": "0",
+			"fieldname": "use_html",
+			"fieldtype": "Check",
+			"label": "Use HTML"
+		},
+		{
+			"fieldname": "column_break_content",
+			"fieldtype": "Column Break"
+		},
+		{
+			"depends_on": "eval:!doc.use_html",
+			"fieldname": "content",
+			"fieldtype": "Text Editor",
+			"label": "Content",
+			"mandatory_depends_on": "eval:!doc.use_html && !doc.email_template"
+		},
+		{
+			"depends_on": "eval:doc.use_html",
+			"fieldname": "html_content",
+			"fieldtype": "Code",
+			"label": "HTML Content",
+			"mandatory_depends_on": "eval:doc.use_html && !doc.email_template",
+			"options": "HTML"
+		},
+		{
+			"collapsible": 1,
+			"fieldname": "section_break_schedule",
+			"fieldtype": "Section Break",
+			"label": "Schedule & Options"
+		},
+		{
+			"default": "0",
+			"fieldname": "schedule_send",
+			"fieldtype": "Check",
+			"label": "Schedule Send"
+		},
+		{
+			"depends_on": "eval:doc.schedule_send",
+			"fieldname": "send_after",
+			"fieldtype": "Datetime",
+			"label": "Send After"
+		},
+		{
+			"fieldname": "column_break_schedule",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "1",
+			"fieldname": "add_unsubscribe_link",
+			"fieldtype": "Check",
+			"label": "Add Unsubscribe Link"
+		},
+		{
+			"collapsible": 1,
+			"fieldname": "section_break_attachments",
+			"fieldtype": "Section Break",
+			"label": "Attachments"
+		},
+		{
+			"fieldname": "attachments",
+			"fieldtype": "Table",
+			"label": "Attachments",
+			"options": "Newsletter Attachment"
+		},
+		{
+			"collapsible": 1,
+			"fieldname": "section_break_tracking",
+			"fieldtype": "Section Break",
+			"label": "Tracking",
+			"options": "fa fa-bar-chart"
+		},
+		{
+			"fieldname": "email_queue_link",
+			"fieldtype": "HTML",
+			"label": "Email Queue Link"
+		}
+	],
+	"links": [],
+	"modified": "2025-02-18 00:00:00.000000",
+	"module": "Non Profit",
+	"name": "Newsletter",
+	"owner": "Administrator",
+	"permissions": [
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "Newsletter Manager",
+			"share": 1,
+			"write": 1
+		},
+		{
+			"create": 1,
+			"delete": 1,
+			"email": 1,
+			"export": 1,
+			"print": 1,
+			"read": 1,
+			"report": 1,
+			"role": "System Manager",
+			"share": 1,
+			"write": 1
+		}
+	],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": [],
+	"track_changes": 1
+}
