@@ -1,3 +1,5 @@
+import traceback
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -6,21 +8,43 @@ from frappe.utils import get_datetime, now_datetime
 
 class Newsletter(Document):
     def validate(self):
-        self.validate_email_group()
+        self.validate_email_groups()
         self.update_recipient_count()
 
         if self.email_template and not self.content and not self.html_content:
             self.load_from_template()
 
-    def validate_email_group(self):
-        if not frappe.db.exists("Email Group", self.email_group):
-            frappe.throw(_("Email Group {0} does not exist").format(self.email_group))
+    def validate_email_groups(self):
+        if not self.email_groups:
+            frappe.throw(_("Please add at least one Email Group"))
+
+        for row in self.email_groups:
+            if not frappe.db.exists("Email Group", row.email_group):
+                frappe.throw(
+                    _("Email Group {0} does not exist").format(row.email_group)
+                )
 
     def update_recipient_count(self):
-        self.total_recipients = frappe.db.count(
-            "Email Group Member",
-            filters={"email_group": self.email_group, "unsubscribed": 0},
-        )
+        email_group_names = [row.email_group for row in self.email_groups]
+        unique_emails = self.get_unique_recipients(email_group_names)
+        self.total_recipients = len(unique_emails)
+
+        for row in self.email_groups:
+            row.recipient_count = frappe.db.count(
+                "Email Group Member",
+                filters={"email_group": row.email_group, "unsubscribed": 0},
+            )
+
+    def get_unique_recipients(self, email_groups):
+        unique_emails = set()
+        for email_group in email_groups:
+            members = frappe.get_all(
+                "Email Group Member",
+                filters={"email_group": email_group, "unsubscribed": 0},
+                pluck="email",
+            )
+            unique_emails.update(members)
+        return unique_emails
 
     def load_from_template(self):
         template = frappe.get_doc("Email Template", self.email_template)
@@ -49,7 +73,7 @@ class Newsletter(Document):
             frappe.throw(_("Newsletter can only be sent from Draft or Failed status"))
 
         if self.total_recipients == 0:
-            frappe.throw(_("No recipients found in the Email Group"))
+            frappe.throw(_("No recipients found in the Email Groups"))
 
         self.db_set("status", "Queued")
         frappe.enqueue(
@@ -76,23 +100,35 @@ def send_newsletter_emails(newsletter_name):
     newsletter = frappe.get_doc("Newsletter", newsletter_name)
     newsletter.db_set("status", "Sending")
 
-    recipients = frappe.get_all(
-        "Email Group Member",
-        filters={"email_group": newsletter.email_group, "unsubscribed": 0},
-        fields=["email", "first_name", "last_name"],
-    )
+    email_group_names = [row.email_group for row in newsletter.email_groups]
+    unique_recipients = newsletter.get_unique_recipients(email_group_names)
+
+    recipients_data = {}
+    for email_group in email_group_names:
+        members = frappe.get_all(
+            "Email Group Member",
+            filters={"email_group": email_group, "unsubscribed": 0},
+            fields=["email", "first_name", "last_name"],
+        )
+        for member in members:
+            if member.email not in recipients_data:
+                recipients_data[member.email] = {
+                    "email": member.email,
+                    "first_name": member.first_name or "",
+                    "last_name": member.last_name or "",
+                }
 
     sent_count = 0
     failed_count = 0
 
-    for recipient in recipients:
+    for email, recipient in recipients_data.items():
         try:
             send_single_email(newsletter, recipient)
             sent_count += 1
-        except Exception:
+        except Exception as e:
             failed_count += 1
             frappe.log_error(
-                f"Failed to send newsletter {newsletter_name} to {recipient.email}",
+                f"Failed to send newsletter {newsletter_name} to {email}\n\nError: {str(e)}\n\nTraceback:\n{traceback.format_exc()}",
                 "Newsletter Send Error",
             )
 
@@ -113,11 +149,10 @@ def send_newsletter_emails(newsletter_name):
 
 def send_single_email(newsletter, recipient):
     context = {
-        "email": recipient.email,
-        "first_name": recipient.first_name or "",
-        "last_name": recipient.last_name or "",
-        "full_name": f"{recipient.first_name or ''} {recipient.last_name or ''}".strip(),
-        "email_group": newsletter.email_group,
+        "email": recipient["email"],
+        "first_name": recipient.get("first_name") or "",
+        "last_name": recipient.get("last_name") or "",
+        "full_name": f"{recipient.get('first_name') or ''} {recipient.get('last_name') or ''}".strip(),
     }
 
     if newsletter.use_html:
@@ -130,7 +165,7 @@ def send_single_email(newsletter, recipient):
     attachments = get_attachments(newsletter)
 
     frappe.sendmail(
-        recipients=[recipient.email],
+        recipients=[recipient["email"]],
         sender=newsletter.sender,
         subject=subject,
         message=content,
@@ -186,11 +221,25 @@ def get_email_accounts():
 
 
 @frappe.whitelist()
-def get_recipient_count(email_group):
-    return frappe.db.count(
-        "Email Group Member",
-        filters={"email_group": email_group, "unsubscribed": 0},
-    )
+def get_recipient_count(email_groups):
+    if isinstance(email_groups, str):
+        email_groups = frappe.parse_json(email_groups)
+
+    if not email_groups:
+        return 0
+
+    unique_emails = set()
+    for row in email_groups:
+        email_group = row.get("email_group") if isinstance(row, dict) else row
+        if email_group:
+            members = frappe.get_all(
+                "Email Group Member",
+                filters={"email_group": email_group, "unsubscribed": 0},
+                pluck="email",
+            )
+            unique_emails.update(members)
+
+    return len(unique_emails)
 
 
 @frappe.whitelist()

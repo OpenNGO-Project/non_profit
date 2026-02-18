@@ -1,0 +1,37 @@
+{
+	"actions": [],
+	"creation": "2025-02-18 00:00:00.000000",
+	"doctype": "DocType",
+	"editable_grid": 1,
+	"engine": "InnoDB",
+	"field_order": [
+		"email_group",
+		"recipient_count"
+	],
+	"fields": [
+		{
+			"fieldname": "email_group",
+			"fieldtype": "Link",
+			"in_list_view": 1,
+			"label": "Email Group",
+			"options": "Email Group",
+			"reqd": 1
+		},
+		{
+			"fieldname": "recipient_count",
+			"fieldtype": "Int",
+			"in_list_view": 1,
+			"label": "Recipient Count",
+			"read_only": 1
+		}
+	],
+	"istable": 1,
+	"modified": "2025-02-18 00:00:00.000000",
+	"module": "Non Profit",
+	"name": "Newsletter Email Group",
+	"owner": "Administrator",
+	"permissions": [],
+	"sort_field": "creation",
+	"sort_order": "DESC",
+	"states": []
+}

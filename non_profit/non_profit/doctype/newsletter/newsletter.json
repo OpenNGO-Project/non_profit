@@ -7,13 +7,14 @@
 	"engine": "InnoDB",
 	"field_order": [
 		"subject",
-		"email_group",
 		"sender",
 		"column_break_4",
 		"status",
 		"total_recipients",
 		"sent_count",
 		"failed_count",
+		"section_break_recipients",
+		"email_groups",
 		"section_break_content",
 		"email_template",
 		"use_html",
@@ -38,14 +39,6 @@
 			"label": "Subject",
 			"reqd": 1,
 			"unique": 1
-		},
-		{
-			"fieldname": "email_group",
-			"fieldtype": "Link",
-			"in_list_view": 1,
-			"label": "Email Group",
-			"options": "Email Group",
-			"reqd": 1
 		},
 		{
 			"fieldname": "sender",
@@ -87,6 +80,18 @@
 			"fieldtype": "Int",
 			"label": "Failed Count",
 			"read_only": 1
+		},
+		{
+			"fieldname": "section_break_recipients",
+			"fieldtype": "Section Break",
+			"label": "Recipients"
+		},
+		{
+			"fieldname": "email_groups",
+			"fieldtype": "Table",
+			"label": "Email Groups",
+			"options": "Newsletter Email Group",
+			"reqd": 1
 		},
 		{
 			"fieldname": "section_break_content",

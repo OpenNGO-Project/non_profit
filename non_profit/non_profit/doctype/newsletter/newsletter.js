@@ -18,11 +18,11 @@ frappe.ui.form.on("Newsletter", {
 	},
 
 	update_recipient_count_display: function (frm) {
-		if (frm.doc.email_group) {
+		if (frm.doc.email_groups && frm.doc.email_groups.length > 0) {
 			frappe.call({
 				method: "non_profit.non_profit.doctype.newsletter.newsletter.get_recipient_count",
 				args: {
-					email_group: frm.doc.email_group,
+					email_groups: frm.doc.email_groups,
 				},
 				callback: function (r) {
 					if (r.message !== undefined) {
@@ -30,10 +30,16 @@ frappe.ui.form.on("Newsletter", {
 					}
 				},
 			});
+		} else {
+			frm.set_value("total_recipients", 0);
 		}
 	},
 
-	email_group: function (frm) {
+	email_groups_add: function (frm) {
+		frm.trigger("update_recipient_count_display");
+	},
+
+	email_groups_remove: function (frm) {
 		frm.trigger("update_recipient_count_display");
 	},
 
@@ -63,6 +69,10 @@ frappe.ui.form.on("Newsletter", {
 	},
 
 	add_custom_buttons: function (frm) {
+		if (frm.doc.__islocal) {
+			return;
+		}
+
 		if (frm.doc.status === "Draft" || frm.doc.status === "Failed") {
 			frm.add_custom_button(__("Send Now"), function () {
 				frappe.confirm(
@@ -89,44 +99,41 @@ frappe.ui.form.on("Newsletter", {
 	},
 
 	show_email_queue_link: function (frm) {
-		if (frm.doc.status !== "Draft") {
-			frappe.db.get_list("Email Queue", {
-				filters: {
-					reference_doctype: "Newsletter",
-					reference_name: frm.doc.name,
-				},
-				fields: ["name", "status", "creation"],
-				limit: 5,
-			}).then(function (records) {
-				if (records.length > 0) {
-					let html =
-						'<div class="email-queue-links"><p><strong>' +
-						__("Recent Email Queue Entries") +
-						"</strong></p><ul>";
-
-					records.forEach(function (record) {
-						html +=
-							'<li><a href="/app/email-queue/' +
-							record.name +
-							'">' +
-							record.name +
-							"</a> - " +
-							record.status +
-							" (" +
-							frappe.datetime.comment_when(record.creation) +
-							")</li>";
-					});
-
-					const total_count = frappe.db.count("Email Queue", {
-						reference_doctype: "Newsletter",
-						reference_name: frm.doc.name,
-					});
-
-					html += "</ul></div>";
-					$(frm.fields_dict.email_queue_link.wrapper).html(html);
-				}
-			});
+		if (frm.doc.__islocal || frm.doc.status === "Draft") {
+			return;
 		}
+
+		frappe.db.get_list("Email Queue", {
+			filters: {
+				reference_doctype: "Newsletter",
+				reference_name: frm.doc.name,
+			},
+			fields: ["name", "status", "creation"],
+			limit: 5,
+		}).then(function (records) {
+			if (records.length > 0) {
+				let html =
+					'<div class="email-queue-links"><p><strong>' +
+					__("Recent Email Queue Entries") +
+					"</strong></p><ul>";
+
+				records.forEach(function (record) {
+					html +=
+						'<li><a href="/app/email-queue/' +
+						record.name +
+						'">' +
+						record.name +
+						"</a> - " +
+						record.status +
+						" (" +
+						frappe.datetime.comment_when(record.creation) +
+						")</li>";
+				});
+
+				html += "</ul></div>";
+				$(frm.fields_dict.email_queue_link.wrapper).html(html);
+			}
+		});
 	},
 
 	schedule_send: function (frm) {
