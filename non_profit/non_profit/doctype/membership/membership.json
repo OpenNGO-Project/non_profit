@@ -5,35 +5,43 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
+ "is_submittable": 1,
  "field_order": [
   "member",
   "member_name",
+  "column_break_member",
   "membership_type",
   "column_break_3",
   "company",
-  "membership_status",
-  "membership_validity_section",
-  "from_date",
-  "to_date",
-  "column_break_8",
   "member_since_date",
-  "payment_details",
-  "paid",
-  "currency",
-  "amount",
-  "column_break_16",
-  "invoice",
-  "razorpay_details_section",
-  "subscription_id",
-  "column_break_19",
-  "payment_id"
+  "subscription_section",
+  "auto_renew",
+  "subscription",
+  "column_break_subscription",
+  "subscription_status",
+  "amendments_section",
+  "amended_from"
  ],
  "fields": [
   {
    "fieldname": "member",
    "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Member",
-   "options": "Member"
+   "options": "Member",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "member.member_name",
+   "fieldname": "member_name",
+   "fieldtype": "Data",
+   "label": "Member Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_member",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "membership_type",
@@ -48,92 +56,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "membership_status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Membership Status",
-   "options": "New\nCurrent\nExpired\nPending\nCancelled"
-  },
-  {
-   "fieldname": "membership_validity_section",
-   "fieldtype": "Section Break",
-   "label": "Validity"
-  },
-  {
-   "fieldname": "from_date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "label": "From",
-   "reqd": 1
-  },
-  {
-   "fieldname": "to_date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "label": "To",
-   "reqd": 1
-  },
-  {
-   "fieldname": "column_break_8",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "member_since_date",
-   "fieldtype": "Date",
-   "label": "Member Since"
-  },
-  {
-   "fieldname": "payment_details",
-   "fieldtype": "Section Break",
-   "label": "Payment Details"
-  },
-  {
-   "default": "0",
-   "fieldname": "paid",
-   "fieldtype": "Check",
-   "label": "Paid"
-  },
-  {
-   "fieldname": "currency",
-   "fieldtype": "Link",
-   "label": "Currency",
-   "options": "Currency"
-  },
-  {
-   "fieldname": "amount",
-   "fieldtype": "Float",
-   "label": "Amount"
-  },
-  {
-   "fieldname": "razorpay_details_section",
-   "fieldtype": "Section Break",
-   "label": "Razorpay Details"
-  },
-  {
-   "fieldname": "subscription_id",
-   "fieldtype": "Data",
-   "label": "Subscription ID"
-  },
-  {
-   "fieldname": "payment_id",
-   "fieldtype": "Data",
-   "label": "Payment ID"
-  },
-  {
-   "fieldname": "invoice",
-   "fieldtype": "Link",
-   "label": "Invoice",
-   "options": "Sales Invoice"
-  },
-  {
-   "fetch_from": "member.member_name",
-   "fieldname": "member_name",
-   "fieldtype": "Data",
-   "label": "Member Name",
-   "read_only": 1
-  },
-  {
    "fieldname": "company",
    "fieldtype": "Link",
    "label": "Company",
@@ -141,23 +63,70 @@
    "reqd": 1
   },
   {
-    "fieldname": "column_break_19",
-    "fieldtype": "Column Break"
+   "fieldname": "member_since_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Member Since"
   },
   {
-    "fieldname": "column_break_16",
-    "fieldtype": "Column Break"
+   "collapsible": 1,
+   "fieldname": "subscription_section",
+   "fieldtype": "Section Break",
+   "label": "Subscription"
+  },
+  {
+   "default": "1",
+   "description": "Automatically renew membership via subscription billing",
+   "fieldname": "auto_renew",
+   "fieldtype": "Check",
+   "label": "Auto Renew"
+  },
+  {
+   "fieldname": "subscription",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Subscription",
+   "options": "Subscription",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_subscription",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "subscription.status",
+   "fieldname": "subscription_status",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Status",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "amendments_section",
+   "fieldtype": "Section Break",
+   "label": "Amendments"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Membership",
+   "print_hide": 1,
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2022-03-16 17:37:28.672916",
+ "modified": "2025-02-19 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Membership",
  "owner": "Administrator",
  "permissions": [
   {
+   "amend": 1,
+   "cancel": 1,
    "create": 1,
    "delete": 1,
    "email": 1,
@@ -167,11 +136,11 @@
    "report": 1,
    "role": "Non Profit Manager",
    "share": 1,
+   "submit": 1,
    "write": 1
   },
   {
    "create": 1,
-   "delete": 1,
    "email": 1,
    "export": 1,
    "print": 1,

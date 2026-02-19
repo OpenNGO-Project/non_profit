@@ -1,0 +1,19 @@
+{
+	"aggregate_function_based_on": "",
+	"creation": "2026-02-19 00:00:00.000000",
+	"docstatus": 0,
+	"doctype": "Number Card",
+	"document_type": "Member",
+	"dynamic_filters_json": "[]",
+	"filters_json": "[]",
+	"is_public": 1,
+	"label": "Total Members",
+	"modified": "2026-02-19 00:00:00.000000",
+	"module": "Non Profit",
+	"name": "Total Members",
+	"number_card_name": "Total Members",
+	"owner": "Administrator",
+	"show_percentage_stats": 0,
+	"stats_time_interval": "Daily",
+	"type": "Document Count"
+}

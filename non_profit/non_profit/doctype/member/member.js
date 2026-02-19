@@ -1,67 +1,68 @@
-// Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and contributors
-// For license information, please see license.txt
-
 frappe.ui.form.on('Member', {
-	setup: function(frm) {
-		frappe.db.get_single_value('Non Profit Settings', 'enable_razorpay_for_memberships').then(val => {
-			if (val && (frm.doc.subscription_id || frm.doc.customer_id)) {
-				frm.set_df_property('razorpay_details_section', 'hidden', false);
-			}
-		})
-	},
+    setup: function(frm) {
+        frappe.db.get_single_value('Non Profit Settings', 'enable_razorpay_for_memberships').then(val => {
+            if (val && (frm.doc.subscription_id || frm.doc.customer_id)) {
+                frm.set_df_property('razorpay_details_section', 'hidden', false);
+            }
+        })
+    },
 
-	refresh: function(frm) {
+    refresh: function(frm) {
+        if(!frm.doc.__islocal) {
+            frm.add_custom_button(__('Accounting Ledger'), function() {
+                frappe.set_route('query-report', 'General Ledger', {party_type: 'Customer', party: frm.doc.customer});
+            });
 
-		frappe.dynamic_link = {doc: frm.doc, fieldname: 'name', doctype: 'Member'};
+            frm.add_custom_button(__('Accounts Receivable'), function() {
+                frappe.set_route('query-report', 'Accounts Receivable', {customer: frm.doc.customer});
+            });
 
-		frm.toggle_display(['address_html','contact_html'], !frm.doc.__islocal);
+            if (typeof erpnext !== 'undefined' && erpnext.utils && erpnext.utils.set_party_dashboard_indicators) {
+                erpnext.utils.set_party_dashboard_indicators(frm);
+            }
+        }
 
-		if(!frm.doc.__islocal) {
-			frappe.contacts.render_address_and_contact(frm);
+        if (frm.doc.subscription) {
+            frappe.db.get_value('Subscription', frm.doc.subscription, 'status').then(r => {
+                if (r.message) {
+                    let status = r.message.status;
+                    let indicator = '';
+                    if (status === 'Active') {
+                        indicator = {text: __('Active'), color: 'green'};
+                    } else if (status === 'Cancelled') {
+                        indicator = {text: __('Cancelled'), color: 'red'};
+                    } else if (status === 'Unpaid' || status === 'Grace Period') {
+                        indicator = {text: __('Payment Due'), color: 'orange'};
+                    }
+                    if (indicator) {
+                        frm.dashboard.set_headline(indicator.text, indicator.color);
+                    }
+                }
+            });
+        }
+    },
 
-			// custom buttons
-			frm.add_custom_button(__('Accounting Ledger'), function() {
-				if (frm.doc.customer) {
-					frappe.set_route('query-report', 'General Ledger', {party_type: 'Customer', party: frm.doc.customer});
-				} else {
-					frappe.set_route('query-report', 'General Ledger', {party_type: 'Member', party: frm.doc.name});
-				}
-			});
-
-			frm.add_custom_button(__('Accounts Receivable'), function() {
-				frappe.set_route('query-report', 'Accounts Receivable', {customer: frm.doc.customer});
-			});
-
-			if (!frm.doc.customer) {
-				frm.add_custom_button(__('Create Customer'), () => {
-					frm.call('make_customer_and_link').then(() => {
-						frm.reload_doc();
-					});
-				});
-			}
-
-			// indicator
-			erpnext.utils.set_party_dashboard_indicators(frm);
-
-		} else {
-			frappe.contacts.clear_address_and_contact(frm);
-		}
-
-		frappe.call({
-			method:"frappe.client.get_value",
-			args:{
-				'doctype':"Membership",
-				'filters':{'member': frm.doc.name},
-				'fieldname':[
-					'to_date'
-				]
-			},
-			callback: function (data) {
-				if(data.message) {
-					frappe.model.set_value(frm.doctype,frm.docname,
-						"membership_expiry_date", data.message.to_date);
-				}
-			}
-		});
-	}
+    customer: function(frm) {
+        if (frm.doc.customer) {
+            frm.call("get_contact_details").then(r => {
+                if (r.message) {
+                    if (r.message.has_contact) {
+                        frm.set_value("first_name", r.message.first_name);
+                        frm.set_value("last_name", r.message.last_name);
+                    } else {
+                        frappe.msgprint({
+                            title: __("No Contact Found"),
+                            message: __("Customer {0} does not have a Contact record. Please create a Contact first.").replace("{0}", frm.doc.customer),
+                            indicator: "orange"
+                        });
+                        frm.set_value("first_name", "");
+                        frm.set_value("last_name", "");
+                    }
+                }
+            });
+        } else {
+            frm.set_value("first_name", "");
+            frm.set_value("last_name", "");
+        }
+    }
 });

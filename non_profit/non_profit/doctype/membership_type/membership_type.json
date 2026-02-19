@@ -8,8 +8,13 @@
  "field_order": [
   "membership_type",
   "amount",
+  "column_break_4",
+  "linked_item",
   "razorpay_plan_id",
-  "linked_item"
+  "subscription_section",
+  "subscription_plan",
+  "column_break_8",
+  "auto_create_subscription_plan"
  ],
  "fields": [
   {
@@ -23,9 +28,21 @@
   },
   {
    "fieldname": "amount",
-   "fieldtype": "Float",
+   "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Amount",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "linked_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Linked Item",
+   "options": "Item",
    "reqd": 1
   },
   {
@@ -36,15 +53,32 @@
    "unique": 1
   },
   {
-   "fieldname": "linked_item",
+   "collapsible": 1,
+   "fieldname": "subscription_section",
+   "fieldtype": "Section Break",
+   "label": "Subscription Settings"
+  },
+  {
+   "fieldname": "subscription_plan",
    "fieldtype": "Link",
-   "label": "Linked Item",
-   "options": "Item",
-   "unique": 1
+   "label": "Subscription Plan",
+   "options": "Subscription Plan",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_8",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Automatically create a Subscription Plan when this Membership Type is saved",
+   "fieldname": "auto_create_subscription_plan",
+   "fieldtype": "Check",
+   "label": "Auto Create Subscription Plan"
   }
  ],
  "links": [],
- "modified": "2020-08-05 15:21:43.595745",
+ "modified": "2025-02-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Membership Type",

@@ -1,6 +1,3 @@
-// Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and contributors
-// For license information, please see license.txt
-
 frappe.ui.form.on('Membership', {
 	setup: function(frm) {
 		frappe.db.get_single_value("Non Profit Settings", "enable_razorpay_for_memberships").then(val => {
@@ -33,9 +30,37 @@ frappe.ui.form.on('Membership', {
 				});
 			});
 		})
+
+		frm.trigger('set_indicator');
+	},
+
+	set_indicator: function(frm) {
+		if (frm.doc.subscription) {
+			frappe.db.get_value('Subscription', frm.doc.subscription, 'status').then(r => {
+				if (r && r.message) {
+					let status = r.message.status;
+					let indicator = membership_get_status_indicator(status);
+					frm.page.set_indicator(indicator.label, indicator.color);
+				}
+			});
+		} else if (frm.doc.docstatus === 1) {
+			frm.page.set_indicator(__('Active'), 'blue');
+		}
 	},
 
 	onload: function(frm) {
 		frm.add_fetch("membership_type", "amount", "amount");
 	}
 });
+
+function membership_get_status_indicator(status) {
+	const status_map = {
+		'Active': {label: __('Active'), color: 'green'},
+		'Trialing': {label: __('New'), color: 'blue'},
+		'Grace Period': {label: __('Pending'), color: 'orange'},
+		'Unpaid': {label: __('Expired'), color: 'red'},
+		'Cancelled': {label: __('Cancelled'), color: 'red'},
+		'Completed': {label: __('Expired'), color: 'grey'},
+	};
+	return status_map[status] || {label: status || __('Unknown'), color: 'grey'};
+}

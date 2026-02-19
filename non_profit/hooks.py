@@ -91,10 +91,16 @@ after_install = "non_profit.setup.setup_non_profit"
 # -----------
 # Permissions evaluated in scripted ways
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
+permission_query_conditions = {
+    "Member": "non_profit.non_profit.permissions.get_member_query_condition",
+    "Chapter": "non_profit.non_profit.permissions.get_chapter_query_condition",
+    "Membership": "non_profit.non_profit.permissions.get_membership_query_condition",
+    "Subscription": "non_profit.non_profit.permissions.get_subscription_query_condition",
+    "Sales Invoice": "non_profit.non_profit.permissions.get_sales_invoice_query_condition",
+    "Contact": "non_profit.non_profit.permissions.get_contact_query_condition",
+    "Address": "non_profit.non_profit.permissions.get_address_query_condition",
+}
+
 # has_permission = {
 # 	"Event": "frappe.desk.doctype.event.event.has_permission",
 # }
@@ -114,7 +120,15 @@ override_doctype_class = {
 doc_events = {
     "Email Group Member": {
         "before_save": "non_profit.non_profit.custom_doctype.email_group.set_full_name"
-    }
+    },
+    "User Permission": {
+        "on_trash": "non_profit.non_profit.permissions.clear_user_chapter_cache",
+        "on_update": "non_profit.non_profit.permissions.clear_user_chapter_cache",
+    },
+    "Subscription": {
+        "on_update": "non_profit.non_profit.subscription_hooks.sync_membership_status_from_subscription",
+        "on_cancel": "non_profit.non_profit.subscription_hooks.cancel_membership_on_subscription_cancel",
+    },
 }
 
 # Scheduled Tasks
@@ -122,7 +136,7 @@ doc_events = {
 
 scheduler_events = {
     "daily": [
-        "non_profit.non_profit.doctype.membership.membership.set_expired_status",
+        "non_profit.non_profit.subscription_hooks.ensure_subscriptions_for_members",
     ],
     "hourly": [
         "non_profit.non_profit.doctype.newsletter.newsletter.process_scheduled_newsletters",
@@ -199,6 +213,7 @@ global_search_doctypes = {
         {"doctype": "Donor Type", "index": 10},
         {"doctype": "Membership Type", "index": 11},
         {"doctype": "Newsletter", "index": 12},
+        {"doctype": "Letter Campaign", "index": 13},
     ]
 }
 

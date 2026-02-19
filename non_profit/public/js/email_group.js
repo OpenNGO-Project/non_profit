@@ -77,8 +77,8 @@ function show_multiselect_dialog(frm, source_doctype) {
 		},
 		add_filters_group: true,
 		primary_action_label: __("Import Selected"),
-		action: function (selections, args) {
-			if (!selections || selections.length === 0) {
+		action: function (selected_documents, args) {
+			if (!selected_documents || selected_documents.length === 0) {
 				frappe.msgprint(__("Please select at least one record to import."));
 				return;
 			}
@@ -88,7 +88,7 @@ function show_multiselect_dialog(frm, source_doctype) {
 				args: {
 					email_group: frm.doc.name,
 					source_doctype: source_doctype,
-					selected_records: selections,
+					selected_records: selected_documents,
 				},
 				callback: function (r) {
 					if (r.message) {

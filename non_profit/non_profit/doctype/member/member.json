@@ -14,19 +14,27 @@
   "membership_type",
   "email_id",
   "image",
+  "chapter_section",
+  "primary_chapter",
+  "column_break_chapter",
+  "chapter_roles",
   "customer_section",
   "customer",
+  "first_name",
+  "column_break_customer",
+  "last_name",
   "customer_name",
+  "create_customer_btn",
+  "subscription_section",
+  "subscription",
+  "subscription_status_label",
+  "column_break_subscription",
+  "auto_renew_membership",
   "supplier_section",
   "supplier",
-  "address_contacts",
-  "address_html",
-  "column_break_9",
-  "contact_html",
   "razorpay_details_section",
   "subscription_id",
   "customer_id",
-  "subscription_status",
   "column_break_21",
   "subscription_start",
   "subscription_end"
@@ -64,12 +72,42 @@
    "reqd": 1
   },
   {
+   "fieldname": "email_id",
+   "fieldtype": "Data",
+   "label": "Email Address",
+   "options": "Email"
+  },
+  {
    "fieldname": "image",
    "fieldtype": "Attach Image",
    "hidden": 1,
    "label": "Image",
    "no_copy": 1,
    "print_hide": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "chapter_section",
+   "fieldtype": "Section Break",
+   "label": "Chapter Assignment"
+  },
+  {
+   "fieldname": "primary_chapter",
+   "fieldtype": "Link",
+   "in_list_filter": 1,
+   "in_standard_filter": 1,
+   "label": "Primary Chapter",
+   "options": "Chapter"
+  },
+  {
+   "fieldname": "column_break_chapter",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "chapter_roles",
+   "fieldtype": "Table",
+   "label": "Chapter Roles",
+   "options": "Chapter Member Role"
   },
   {
    "collapsible": 1,
@@ -80,15 +118,73 @@
   {
    "fieldname": "customer",
    "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Customer",
-   "options": "Customer"
+   "options": "Customer",
+   "reqd": 1
+  },
+  {
+   "fieldname": "first_name",
+   "fieldtype": "Data",
+   "label": "First Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_customer",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_name",
+   "fieldtype": "Data",
+   "label": "Last Name",
+   "read_only": 1
   },
   {
    "fetch_from": "customer.customer_name",
    "fieldname": "customer_name",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Customer Name",
    "read_only": 1
+  },
+  {
+   "fieldname": "create_customer_btn",
+   "fieldtype": "Button",
+   "label": "Create Customer",
+   "options": "create_customer"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "subscription_section",
+   "fieldtype": "Section Break",
+   "label": "Subscription"
+  },
+  {
+   "fieldname": "subscription",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Subscription",
+   "options": "Subscription",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "subscription.status",
+   "fieldname": "subscription_status_label",
+   "fieldtype": "Data",
+   "label": "Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_subscription",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Automatically renew membership via subscription billing",
+   "fieldname": "auto_renew_membership",
+   "fieldtype": "Check",
+   "label": "Auto Renew Membership"
   },
   {
    "collapsible": 1,
@@ -103,42 +199,15 @@
    "options": "Supplier"
   },
   {
-   "depends_on": "eval:!doc.__islocal;",
-   "fieldname": "address_contacts",
-   "fieldtype": "Section Break",
-   "label": "Address and Contact",
-   "options": "fa fa-map-marker"
-  },
-  {
-   "fieldname": "address_html",
-   "fieldtype": "HTML",
-   "label": "Address HTML"
-  },
-  {
-   "fieldname": "column_break_9",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "contact_html",
-   "fieldtype": "HTML",
-   "label": "Contact HTML"
-  },
-  {
-   "fieldname": "email_id",
-   "fieldtype": "Data",
-   "label": "Email Address",
-   "options": "Email"
-  },
-  {
    "fieldname": "subscription_id",
    "fieldtype": "Data",
-   "label": "Subscription ID",
+   "label": "Razorpay Subscription ID",
    "read_only": 1
   },
   {
    "fieldname": "customer_id",
    "fieldtype": "Data",
-   "label": "Customer ID",
+   "label": "Razorpay Customer ID",
    "read_only": 1
   },
   {
@@ -154,23 +223,25 @@
   {
    "fieldname": "subscription_start",
    "fieldtype": "Date",
-   "label": "Subscription Start "
+   "label": "Subscription Start",
+   "read_only": 1
   },
   {
    "fieldname": "subscription_end",
    "fieldtype": "Date",
-   "label": "Subscription End"
-  },
-  {
-   "fieldname": "subscription_status",
-   "fieldtype": "Select",
-   "label": "Subscription Status",
-   "options": "\nActive\nHalted"
+   "label": "Subscription End",
+   "read_only": 1
   }
  ],
  "image_field": "image",
- "links": [],
- "modified": "2021-07-11 14:27:26.368039",
+ "links": [
+  {
+   "group": "Membership",
+   "link_doctype": "Membership",
+   "link_fieldname": "member"
+  }
+ ],
+ "modified": "2025-02-19 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Member",
@@ -203,6 +274,7 @@
  ],
  "quick_entry": 1,
  "restrict_to_domain": "Non Profit",
+ "search_fields": "customer, first_name, last_name, email_id",
  "sort_field": "modified",
  "sort_order": "DESC",
  "title_field": "member_name",
