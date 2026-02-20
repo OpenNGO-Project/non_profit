@@ -8,7 +8,7 @@ frappe.ui.form.on("Letter Campaign", {
 			frm.add_custom_button(
 				__("Add Recipients"),
 				function () {
-					show_recipient_dialog(frm);
+					show_add_recipients_dialog(frm);
 				},
 				__("Actions")
 			);
@@ -23,10 +23,7 @@ frappe.ui.form.on("Letter Campaign", {
 								frm.call("generate_pdfs").then(function (r) {
 									if (r.message) {
 										frappe.msgprint(
-											__("Generated {0} of {1} PDFs successfully.").format([
-												r.message.generated,
-												r.message.total,
-											])
+											__("Generated {0} of {1} PDFs successfully.").replace("{0}", r.message.generated).replace("{1}", r.message.total)
 										);
 										frm.reload_doc();
 									}
@@ -55,45 +52,32 @@ frappe.ui.form.on("Letter Campaign", {
 	},
 });
 
-function show_recipient_dialog(frm) {
+function show_add_recipients_dialog(frm) {
+	const import_options = [
+		{ value: "records", label: __("Select Records") },
+		{ value: "chapter", label: __("Import by Chapter") },
+	];
+
 	const dialog = new frappe.ui.Dialog({
 		title: __("Add Recipients"),
 		fields: [
 			{
-				fieldname: "source",
+				fieldname: "import_type",
 				fieldtype: "Select",
-				label: __("Select Source"),
-				options: [
-					{ value: "Contact", label: __("Contact") },
-					{ value: "Member", label: __("Member (by Membership Type)") },
-				],
+				label: __("Import Method"),
+				options: import_options,
 				reqd: 1,
-				default: "Contact",
-				onchange: function () {
-					const source = this.get_value();
-					dialog.fields_dict.membership_types.wrapper.toggle(source === "Member");
-				},
-			},
-			{
-				fieldname: "membership_types",
-				fieldtype: "Link",
-				label: __("Membership Type"),
-				options: "Membership Type",
-				hidden: 1,
+				default: "records",
+				description: __("Select Records: Choose individual records to import. Import by Chapter: Import all members from a chapter and its subchapters."),
 			},
 		],
 		primary_action_label: __("Continue"),
 		primary_action: function (values) {
 			dialog.hide();
-
-			if (values.source === "Contact") {
-				show_contact_select_dialog(frm);
+			if (values.import_type === "chapter") {
+				show_chapter_import_dialog(frm);
 			} else {
-				if (!values.membership_types) {
-					frappe.msgprint(__("Please select a Membership Type"));
-					return;
-				}
-				show_member_select_dialog(frm, [values.membership_types]);
+				show_source_select_dialog(frm);
 			}
 		},
 	});
@@ -101,28 +85,96 @@ function show_recipient_dialog(frm) {
 	dialog.show();
 }
 
-function show_contact_select_dialog(frm) {
-	console.log("show_contact_select_dialog called");
-	const d = new frappe.ui.form.MultiSelectDialog({
-		doctype: "Contact",
-		setters: {
-			first_name: "",
-			email_id: "",
+function show_source_select_dialog(frm) {
+	const doctype_options = [
+		{ value: "Contact", label: __("Contact") },
+		{ value: "Member", label: __("Member") },
+		{ value: "Donor", label: __("Donor") },
+		{ value: "Lead", label: __("Lead") },
+	];
+
+	const dialog = new frappe.ui.Dialog({
+		title: __("Select Source"),
+		fields: [
+			{
+				fieldname: "source_doctype",
+				fieldtype: "Select",
+				label: __("Import From"),
+				options: doctype_options,
+				reqd: 1,
+			},
+		],
+		primary_action_label: __("Select Records"),
+		primary_action: function (values) {
+			dialog.hide();
+			show_multiselect_dialog(frm, values.source_doctype);
 		},
-		columns: ["name", "full_name", "email_id"],
+	});
+
+	dialog.show();
+}
+
+function show_chapter_import_dialog(frm) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Import Members by Chapter"),
+		fields: [
+			{
+				fieldname: "chapter",
+				fieldtype: "Link",
+				label: __("Chapter"),
+				options: "Chapter",
+				reqd: 1,
+				description: __("All members from this chapter and its subchapters will be imported as recipients."),
+			},
+		],
+		primary_action_label: __("Import"),
+		primary_action: function (values) {
+			frappe.call({
+				method: "non_profit.non_profit.doctype.letter_campaign.letter_campaign.add_recipients_by_chapter",
+				args: {
+					campaign_name: frm.doc.name,
+					chapter: values.chapter,
+				},
+				callback: function (r) {
+					if (r.message) {
+						var msg = "";
+						if (r.message.skipped > 0) {
+							msg = __("Added {0} recipients. {1} were skipped (no address found).").replace("{0}", r.message.added).replace("{1}", r.message.skipped);
+						} else {
+							msg = __("Added {0} recipients.").replace("{0}", r.message.added);
+						}
+						frappe.msgprint(msg);
+						frm.reload_doc();
+					} else {
+						frappe.msgprint(__("No new recipients were added."));
+					}
+				},
+			});
+			dialog.hide();
+		},
+	});
+
+	dialog.show();
+}
+
+function show_multiselect_dialog(frm, source_doctype) {
+	const setters = get_setters_for_doctype(source_doctype);
+	const columns = get_columns_for_doctype(source_doctype);
+
+	new frappe.ui.form.MultiSelectDialog({
+		doctype: source_doctype,
+		setters: setters,
+		columns: columns,
 		get_query: function () {
 			return {
-				filters: {
-					email_id: ["!=", ""],
-				},
+				filters: get_filters_for_doctype(source_doctype),
 			};
 		},
 		add_filters_group: true,
 		primary_action_label: __("Add Selected"),
-		action: function (selections, args) {
-			console.log("action called", selections, args);
-			if (!selections || selections.length === 0) {
-				frappe.msgprint(__("Please select at least one contact."));
+		action: function (selected_documents, args) {
+			if (!selected_documents || selected_documents.length === 0) {
+				frappe.msgprint(__("Please select at least one record to import."));
 				return;
 			}
 
@@ -130,15 +182,14 @@ function show_contact_select_dialog(frm) {
 				method: "non_profit.non_profit.doctype.letter_campaign.letter_campaign.add_recipients",
 				args: {
 					campaign_name: frm.doc.name,
-					source_doctype: "Contact",
-					selected_records: selections,
+					source_doctype: source_doctype,
+					selected_records: selected_documents,
 				},
 				callback: function (r) {
-					console.log("response", r);
 					if (r.message) {
 						var msg = "";
 						if (r.message.skipped > 0) {
-							msg = __("Added {0} recipients. {1} contacts were skipped (no address found).").replace("{0}", r.message.added).replace("{1}", r.message.skipped);
+							msg = __("Added {0} recipients. {1} were skipped (no address found).").replace("{0}", r.message.added).replace("{1}", r.message.skipped);
 						} else {
 							msg = __("Added {0} recipients.").replace("{0}", r.message.added);
 						}
@@ -149,108 +200,54 @@ function show_contact_select_dialog(frm) {
 			});
 		},
 	});
-	console.log("MultiSelectDialog created", d);
 }
 
-function show_member_select_dialog(frm, membership_types) {
-	frappe.call({
-		method: "non_profit.non_profit.doctype.letter_campaign.letter_campaign.get_members_by_membership_type",
-		args: {
-			membership_types: membership_types,
-		},
-		callback: function (r) {
-			if (!r.message || r.message.length === 0) {
-				frappe.msgprint(__("No members found with active memberships for the selected types."));
-				return;
-			}
+function get_setters_for_doctype(doctype) {
+	const setters_map = {
+		Contact: [
+			{ fieldname: "first_name", fieldtype: "Data", label: __("First Name") },
+			{ fieldname: "email_id", fieldtype: "Data", label: __("Email") },
+			{ fieldname: "status", fieldtype: "Select", label: __("Status"), options: "Passive\nOpen\nReplied" },
+		],
+		Member: [
+			{ fieldname: "member_name", fieldtype: "Data", label: __("Member Name") },
+			{ fieldname: "email_id", fieldtype: "Data", label: __("Email") },
+			{ fieldname: "primary_chapter", fieldtype: "Link", label: __("Chapter"), options: "Chapter" },
+			{ fieldname: "membership_type", fieldtype: "Link", label: __("Membership Type"), options: "Membership Type" },
+		],
+		Donor: [
+			{ fieldname: "donor_name", fieldtype: "Data", label: __("Donor Name") },
+			{ fieldname: "email", fieldtype: "Data", label: __("Email") },
+			{ fieldname: "donor_type", fieldtype: "Link", label: __("Donor Type"), options: "Donor Type" },
+		],
+		Lead: [
+			{ fieldname: "first_name", fieldtype: "Data", label: __("First Name") },
+			{ fieldname: "email_id", fieldtype: "Data", label: __("Email") },
+			{ fieldname: "status", fieldtype: "Select", label: __("Status") },
+		],
+	};
 
-			const members = r.message;
-			const dialog = new frappe.ui.Dialog({
-				title: __("Select Members"),
-				size: "large",
-				fields: [
-					{
-						fieldname: "members_html",
-						fieldtype: "HTML",
-						options: render_member_list(members),
-					},
-				],
-				primary_action_label: __("Add Selected"),
-				primary_action: function () {
-					const selected = [];
-					dialog.$wrapper.find(".member-checkbox:checked").each(function () {
-						selected.push($(this).data("name"));
-					});
-
-					if (selected.length === 0) {
-						frappe.msgprint(__("Please select at least one member."));
-						return;
-					}
-
-					frappe.call({
-						method: "non_profit.non_profit.doctype.letter_campaign.letter_campaign.add_recipients",
-						args: {
-							campaign_name: frm.doc.name,
-							source_doctype: "Member",
-							selected_records: selected,
-						},
-						callback: function (r) {
-							if (r.message) {
-								var msg = "";
-								if (r.message.skipped > 0) {
-									msg = __("Added {0} recipients. {1} members were skipped (no address found).").replace("{0}", r.message.added).replace("{1}", r.message.skipped);
-								} else {
-									msg = __("Added {0} recipients.").replace("{0}", r.message.added);
-								}
-								frappe.msgprint(msg);
-								dialog.hide();
-								frm.reload_doc();
-							}
-						},
-					});
-				},
-			});
-
-			dialog.show();
-
-			dialog.$wrapper.find("#select_all_members").on("change", function () {
-				const checked = $(this).prop("checked");
-				dialog.$wrapper.find(".member-checkbox").prop("checked", checked);
-			});
-		},
-	});
+	return setters_map[doctype] || [];
 }
 
-function render_member_list(members) {
-	let html =
-		'<div style="max-height: 400px; overflow-y: auto;">' +
-		'<table class="table table-bordered table-hover">' +
-		"<thead><tr>" +
-		'<th style="width: 30px;"><input type="checkbox" id="select_all_members"></th>' +
-		"<th>" +
-		__("Member Name") +
-		"</th>" +
-		"<th>" +
-		__("Email") +
-		"</th>" +
-		"</tr></thead><tbody>";
+function get_columns_for_doctype(doctype) {
+	const columns_map = {
+		Contact: ["name", "full_name", "email_id"],
+		Member: ["name", "member_name", "email_id", "primary_chapter"],
+		Donor: ["name", "donor_name", "email", "donor_type"],
+		Lead: ["name", "first_name", "last_name", "email_id", "status"],
+	};
 
-	members.forEach(function (member) {
-		html +=
-			"<tr>" +
-			'<td><input type="checkbox" class="member-checkbox" data-name="' +
-			member.name +
-			'"></td>' +
-			"<td>" +
-			(member.member_name || member.name) +
-			"</td>" +
-			"<td>" +
-			(member.email_id || "") +
-			"</td>" +
-			"</tr>";
-	});
+	return columns_map[doctype] || ["name"];
+}
 
-	html += "</tbody></table></div>";
+function get_filters_for_doctype(doctype) {
+	const filters_map = {
+		Contact: { email_id: ["!=", ""] },
+		Member: { email_id: ["!=", ""] },
+		Donor: { email: ["!=", ""] },
+		Lead: { email_id: ["!=", ""] },
+	};
 
-	return html;
+	return filters_map[doctype] || {};
 }

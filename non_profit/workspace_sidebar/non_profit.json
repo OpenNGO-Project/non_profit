@@ -247,8 +247,8 @@
    "icon": "trending-up",
    "indent": 0,
    "keep_closed": 0,
-   "label": "Expiring Memberships",
-   "link_to": "Expiring Memberships",
+   "label": "Open Membership Invoices",
+   "link_to": "Open Membership Invoices Query",
    "link_type": "Report",
    "show_arrow": 0,
    "type": "Link"
@@ -277,7 +277,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-02-19 14:59:39.492263",
+ "modified": "2026-02-20 08:43:37.212262",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Non Profit",

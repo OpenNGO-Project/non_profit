@@ -131,15 +131,10 @@ def add_recipients(campaign_name, source_doctype, selected_records):
     campaign = frappe.get_doc("Letter Campaign", campaign_name)
     added_count = 0
     skipped_count = 0
-    existing_contacts = {r.contact for r in campaign.recipients}
+    existing_contacts = {r.contact for r in campaign.recipients if r.contact}
 
     for record_name in selected_records:
-        if source_doctype == "Member":
-            contact_name = get_contact_from_member(record_name)
-            member_name = record_name
-        else:
-            contact_name = record_name
-            member_name = get_member_from_contact(contact_name)
+        contact_name, member_name = get_contact_and_member(source_doctype, record_name)
 
         if not contact_name:
             skipped_count += 1
@@ -184,6 +179,171 @@ def add_recipients(campaign_name, source_doctype, selected_records):
         "skipped": skipped_count,
         "total": len(campaign.recipients),
     }
+
+
+def get_contact_and_member(source_doctype, record_name):
+    """Get contact and member for a record based on source doctype.
+
+    Returns:
+        Tuple of (contact_name, member_name)
+    """
+    if source_doctype == "Contact":
+        contact_name = record_name
+        member_name = get_member_from_contact(contact_name)
+        return contact_name, member_name
+
+    if source_doctype == "Member":
+        contact_name = get_contact_from_member(record_name)
+        member_name = record_name
+        return contact_name, member_name
+
+    if source_doctype == "Donor":
+        contact_name = get_contact_from_donor(record_name)
+        return contact_name, None
+
+    if source_doctype == "Lead":
+        contact_name = get_or_create_contact_from_lead(record_name)
+        return contact_name, None
+
+    return None, None
+
+
+@frappe.whitelist()
+def add_recipients_by_chapter(campaign_name, chapter):
+    """Add recipients from all members in a chapter (including subchapters)."""
+    if not chapter:
+        return {"added": 0, "skipped": 0, "total": 0}
+
+    chapters = get_chapter_and_descendants(chapter)
+    if not chapters:
+        return {"added": 0, "skipped": 0, "total": 0}
+
+    chapter_list = "', '".join([c.replace("'", "''") for c in chapters])
+
+    members = frappe.db.sql(
+        f"""
+        SELECT DISTINCT m.name, m.email_id, m.customer
+        FROM `tabMember` m
+        WHERE (
+            m.primary_chapter IN ('{chapter_list}')
+            OR EXISTS (
+                SELECT 1 FROM `tabChapter Member Role` cr
+                WHERE cr.parent = m.name
+                AND cr.chapter IN ('{chapter_list}')
+                AND cr.is_active = 1
+            )
+        )
+        AND m.email_id IS NOT NULL
+        AND m.email_id != ''
+    """,
+        as_dict=True,
+    )
+
+    if not members:
+        return {"added": 0, "skipped": 0, "total": 0}
+
+    selected_records = [m.name for m in members]
+    return add_recipients(campaign_name, "Member", selected_records)
+
+
+def get_chapter_and_descendants(chapter_name):
+    """Get a chapter and all its descendant chapters using NestedSet."""
+    chapter = frappe.db.get_value("Chapter", chapter_name, ["lft", "rgt"], as_dict=True)
+    if not chapter:
+        return [chapter_name]
+
+    descendants = frappe.db.sql_list(
+        "SELECT name FROM `tabChapter` WHERE lft >= %s AND rgt <= %s",
+        (chapter.lft, chapter.rgt),
+    )
+
+    return descendants
+
+
+def get_contact_from_donor(donor_name):
+    """Get contact linked to a donor via Customer."""
+    donor = frappe.db.get_value(
+        "Donor", donor_name, ["customer", "email"], as_dict=True
+    )
+    if not donor:
+        return None
+
+    if donor.customer:
+        contact = get_contact_for_customer(donor.customer)
+        if contact:
+            return contact.name
+
+    if donor.email:
+        contact = frappe.db.get_value("Contact", {"email_id": donor.email}, "name")
+        if contact:
+            return contact
+
+    return None
+
+
+def get_or_create_contact_from_lead(lead_name):
+    """Get or create a contact from a lead."""
+    lead = frappe.db.get_value(
+        "Lead",
+        lead_name,
+        ["first_name", "last_name", "email_id", "phone", "mobile_no"],
+        as_dict=True,
+    )
+    if not lead or not lead.email_id:
+        return None
+
+    existing = frappe.db.get_value("Contact", {"email_id": lead.email_id}, "name")
+    if existing:
+        return existing
+
+    contact = frappe.new_doc("Contact")
+    contact.first_name = lead.first_name or "Unknown"
+    contact.last_name = lead.last_name or ""
+    contact.email_id = lead.email_id
+    if lead.phone:
+        contact.phone = lead.phone
+    elif lead.mobile_no:
+        contact.phone = lead.mobile_no
+    contact.insert(ignore_permissions=True)
+
+    return contact.name
+
+
+def get_contact_for_customer(customer):
+    """Get the primary contact for a customer."""
+    if not customer:
+        return None
+
+    contact_names = frappe.get_all(
+        "Dynamic Link",
+        filters={
+            "link_doctype": "Customer",
+            "link_name": customer,
+            "parenttype": "Contact",
+        },
+        fields=["parent"],
+        pluck="parent",
+    )
+
+    if not contact_names:
+        return None
+
+    primary_contact = frappe.db.get_value(
+        "Contact",
+        {"name": ["in", contact_names], "is_primary_contact": 1},
+        ["name", "first_name", "last_name"],
+        as_dict=True,
+    )
+
+    if primary_contact:
+        return primary_contact
+
+    return frappe.db.get_value(
+        "Contact",
+        {"name": ["in", contact_names]},
+        ["name", "first_name", "last_name"],
+        as_dict=True,
+    )
 
 
 def get_contact_from_member(member_name):

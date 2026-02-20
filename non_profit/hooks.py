@@ -118,9 +118,6 @@ override_doctype_class = {
 # Hook on document methods and events
 
 doc_events = {
-    "Email Group Member": {
-        "before_save": "non_profit.non_profit.custom_doctype.email_group.set_full_name"
-    },
     "User Permission": {
         "on_trash": "non_profit.non_profit.permissions.clear_user_chapter_cache",
         "on_update": "non_profit.non_profit.permissions.clear_user_chapter_cache",

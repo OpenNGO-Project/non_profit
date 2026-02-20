@@ -34,6 +34,39 @@ frappe.ui.form.on("Email Group", {
 });
 
 function show_import_dialog(frm) {
+	const import_options = [
+		{ value: "records", label: __("Select Records") },
+		{ value: "chapter", label: __("Import by Chapter") },
+	];
+
+	const dialog = new frappe.ui.Dialog({
+		title: __("Import Subscribers"),
+		fields: [
+			{
+				fieldname: "import_type",
+				fieldtype: "Select",
+				label: __("Import Method"),
+				options: import_options,
+				reqd: 1,
+				default: "records",
+				description: __("Select Records: Choose individual records to import. Import by Chapter: Import all members from a chapter and its subchapters."),
+			},
+		],
+		primary_action_label: __("Continue"),
+		primary_action: function (values) {
+			dialog.hide();
+			if (values.import_type === "chapter") {
+				show_chapter_import_dialog(frm);
+			} else {
+				show_source_select_dialog(frm);
+			}
+		},
+	});
+
+	dialog.show();
+}
+
+function show_source_select_dialog(frm) {
 	const doctype_options = [
 		{ value: "Contact", label: __("Contact") },
 		{ value: "Member", label: __("Member") },
@@ -56,6 +89,43 @@ function show_import_dialog(frm) {
 		primary_action: function (values) {
 			dialog.hide();
 			show_multiselect_dialog(frm, values.source_doctype);
+		},
+	});
+
+	dialog.show();
+}
+
+function show_chapter_import_dialog(frm) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Import Members by Chapter"),
+		fields: [
+			{
+				fieldname: "chapter",
+				fieldtype: "Link",
+				label: __("Chapter"),
+				options: "Chapter",
+				reqd: 1,
+				description: __("All members from this chapter and its subchapters will be imported."),
+			},
+		],
+		primary_action_label: __("Import"),
+		primary_action: function (values) {
+			frappe.call({
+				method: "non_profit.non_profit.custom_doctype.email_group.import_members_by_chapter",
+				args: {
+					email_group: frm.doc.name,
+					chapter: values.chapter,
+				},
+				callback: function (r) {
+					if (r.message) {
+						frappe.msgprint(__("{0} subscribers imported successfully.", [r.message]));
+						frm.reload_doc();
+					} else {
+						frappe.msgprint(__("No new subscribers were imported."));
+					}
+				},
+			});
+			dialog.hide();
 		},
 	});
 
@@ -93,8 +163,7 @@ function show_multiselect_dialog(frm, source_doctype) {
 				callback: function (r) {
 					if (r.message) {
 						frappe.msgprint(__("{0} subscribers imported successfully.", [r.message]));
-						frm.set_value("total_subscribers", frm.doc.total_subscribers + r.message);
-						frm.refresh();
+						frm.reload_doc();
 					}
 				},
 			});
@@ -112,6 +181,7 @@ function get_setters_for_doctype(doctype) {
 		Member: [
 			{ fieldname: "member_name", fieldtype: "Data", label: __("Member Name") },
 			{ fieldname: "email_id", fieldtype: "Data", label: __("Email") },
+			{ fieldname: "primary_chapter", fieldtype: "Link", label: __("Chapter"), options: "Chapter" },
 			{ fieldname: "membership_type", fieldtype: "Link", label: __("Membership Type"), options: "Membership Type" },
 		],
 		Donor: [
@@ -132,7 +202,7 @@ function get_setters_for_doctype(doctype) {
 function get_columns_for_doctype(doctype) {
 	const columns_map = {
 		Contact: ["name", "first_name", "last_name", "email_id"],
-		Member: ["name", "member_name", "email_id", "membership_type"],
+		Member: ["name", "member_name", "email_id", "primary_chapter"],
 		Donor: ["name", "donor_name", "email", "donor_type"],
 		Lead: ["name", "first_name", "last_name", "email_id", "status"],
 	};

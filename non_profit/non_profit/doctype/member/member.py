@@ -25,6 +25,7 @@ class Member(Document):
             if contact:
                 self.first_name = contact.first_name or ""
                 self.last_name = contact.last_name or ""
+                self.contact = contact.name
 
     def get_primary_contact_for_customer(self):
         """Get the primary contact for the linked customer."""
@@ -64,16 +65,22 @@ class Member(Document):
     def get_contact_details(self):
         """API method to fetch contact details from customer (called from JS)."""
         if not self.customer:
-            return {"first_name": "", "last_name": "", "has_contact": False}
+            return {
+                "first_name": "",
+                "last_name": "",
+                "contact": "",
+                "has_contact": False,
+            }
 
         contact = self.get_primary_contact_for_customer()
         if contact:
             return {
+                "contact": contact.name,
                 "first_name": contact.first_name or "",
                 "last_name": contact.last_name or "",
                 "has_contact": True,
             }
-        return {"first_name": "", "last_name": "", "has_contact": False}
+        return {"first_name": "", "last_name": "", "contact": "", "has_contact": False}
 
     @frappe.whitelist()
     def get_active_memberships(self) -> list[dict]:

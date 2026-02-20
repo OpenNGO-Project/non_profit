@@ -33,6 +33,7 @@ frappe.ui.form.on('Member', {
             frm.call("get_contact_details").then(r => {
                 if (r.message) {
                     if (r.message.has_contact) {
+                        frm.set_value("contact", r.message.contact);
                         frm.set_value("first_name", r.message.first_name);
                         frm.set_value("last_name", r.message.last_name);
                     } else {
@@ -41,12 +42,14 @@ frappe.ui.form.on('Member', {
                             message: __("Customer {0} does not have a Contact record. Please create a Contact first.").replace("{0}", frm.doc.customer),
                             indicator: "orange"
                         });
+                        frm.set_value("contact", "");
                         frm.set_value("first_name", "");
                         frm.set_value("last_name", "");
                     }
                 }
             });
         } else {
+            frm.set_value("contact", "");
             frm.set_value("first_name", "");
             frm.set_value("last_name", "");
         }

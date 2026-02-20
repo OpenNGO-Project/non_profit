@@ -18,6 +18,7 @@
   "chapter_roles",
   "customer_section",
   "customer",
+  "contact",
   "first_name",
   "column_break_customer",
   "last_name",
@@ -87,16 +88,23 @@
    "fieldtype": "Section Break",
    "label": "Customer"
   },
-  {
-   "fieldname": "customer",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Customer",
-   "options": "Customer",
-   "reqd": 1
-  },
-  {
+   {
+    "fieldname": "customer",
+    "fieldtype": "Link",
+    "in_list_view": 1,
+    "in_standard_filter": 1,
+    "label": "Customer",
+    "options": "Customer",
+    "reqd": 1
+   },
+   {
+    "fieldname": "contact",
+    "fieldtype": "Link",
+    "label": "Contact",
+    "options": "Contact",
+    "read_only": 1
+   },
+   {
    "fieldname": "first_name",
    "fieldtype": "Data",
    "label": "First Name",
