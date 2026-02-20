@@ -36,6 +36,7 @@ frappe.ui.form.on('Member', {
                         frm.set_value("contact", r.message.contact);
                         frm.set_value("first_name", r.message.first_name);
                         frm.set_value("last_name", r.message.last_name);
+                        frm.set_value("email_id", r.message.email_id);
                     } else {
                         frappe.msgprint({
                             title: __("No Contact Found"),
@@ -45,6 +46,7 @@ frappe.ui.form.on('Member', {
                         frm.set_value("contact", "");
                         frm.set_value("first_name", "");
                         frm.set_value("last_name", "");
+                        frm.set_value("email_id", "");
                     }
                 }
             });
@@ -52,6 +54,7 @@ frappe.ui.form.on('Member', {
             frm.set_value("contact", "");
             frm.set_value("first_name", "");
             frm.set_value("last_name", "");
+            frm.set_value("email_id", "");
         }
     }
 });

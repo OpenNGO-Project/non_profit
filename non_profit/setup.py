@@ -77,14 +77,6 @@ def get_custom_fields():
                 insert_after="with_effect_from",
             ),
         ],
-        "Member": [
-            {
-                "fieldname": "pan_number",
-                "label": "PAN Details",
-                "fieldtype": "Data",
-                "insert_after": "email_id",
-            },
-        ],
         "Donor": [
             {
                 "fieldname": "pan_number",

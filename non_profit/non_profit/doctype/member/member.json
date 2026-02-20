@@ -44,12 +44,14 @@
    "fieldname": "column_break_5",
    "fieldtype": "Column Break"
   },
-  {
-   "fieldname": "email_id",
-   "fieldtype": "Data",
-   "label": "Email Address",
-   "options": "Email"
-  },
+   {
+    "fetch_from": "contact.email_id",
+    "fieldname": "email_id",
+    "fieldtype": "Data",
+    "label": "Email Address",
+    "options": "Email",
+    "read_only": 1
+   },
   {
    "fieldname": "image",
    "fieldtype": "Attach Image",

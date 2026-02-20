@@ -137,6 +137,10 @@ def add_recipients(campaign_name, source_doctype, selected_records):
         contact_name, member_name = get_contact_and_member(source_doctype, record_name)
 
         if not contact_name:
+            frappe.log_error(
+                f"No contact found for {source_doctype}: {record_name}",
+                "Letter Campaign Debug",
+            )
             skipped_count += 1
             continue
 
@@ -144,9 +148,13 @@ def add_recipients(campaign_name, source_doctype, selected_records):
             continue
 
         contact = frappe.get_doc("Contact", contact_name)
-        address = get_primary_address(contact)
+        address = get_primary_address(contact, member_name)
 
         if not address:
+            frappe.log_error(
+                f"No address found for contact {contact_name}, member {member_name}, customer {frappe.db.get_value('Member', member_name, 'customer') if member_name else 'N/A'}",
+                "Letter Campaign Debug",
+            )
             skipped_count += 1
             continue
 
@@ -349,17 +357,39 @@ def get_contact_for_customer(customer):
 def get_contact_from_member(member_name):
     contact = frappe.db.sql(
         """
-		SELECT c.name
-		FROM `tabContact` c
-		INNER JOIN `tabDynamic Link` dl ON dl.parent = c.name
-		WHERE dl.link_doctype = 'Member'
-		AND dl.link_name = %s
-		AND dl.parenttype = 'Contact'
-		LIMIT 1
-	""",
+        SELECT c.name
+        FROM `tabContact` c
+        INNER JOIN `tabDynamic Link` dl ON dl.parent = c.name
+        WHERE dl.link_doctype = 'Member'
+        AND dl.link_name = %s
+        AND dl.parenttype = 'Contact'
+        LIMIT 1
+    """,
         member_name,
         as_dict=True,
     )
+
+    if contact:
+        return contact[0].name
+
+    customer = frappe.db.get_value("Member", member_name, "customer")
+    if customer:
+        customer_contact = frappe.db.sql(
+            """
+            SELECT c.name
+            FROM `tabContact` c
+            INNER JOIN `tabDynamic Link` dl ON dl.parent = c.name
+            WHERE dl.link_doctype = 'Customer'
+            AND dl.link_name = %s
+            AND dl.parenttype = 'Contact'
+            ORDER BY c.is_primary_contact DESC
+            LIMIT 1
+        """,
+            customer,
+            as_dict=True,
+        )
+        if customer_contact:
+            return customer_contact[0].name
 
     return contact[0].name if contact else None
 
@@ -381,7 +411,7 @@ def get_member_from_contact(contact_name):
     return member[0].link_name if member else None
 
 
-def get_primary_address(contact):
+def get_primary_address(contact, member_name=None):
     addresses = frappe.db.sql(
         """
         SELECT a.name, a.address_line1, a.address_line2, a.city, a.state, a.pincode, a.country
@@ -418,6 +448,26 @@ def get_primary_address(contact):
 
     if linked_entity_addresses:
         return linked_entity_addresses[0]
+
+    if member_name:
+        customer = frappe.db.get_value("Member", member_name, "customer")
+        if customer:
+            customer_addresses = frappe.db.sql(
+                """
+                SELECT a.name, a.address_line1, a.address_line2, a.city, a.state, a.pincode, a.country
+                FROM `tabAddress` a
+                INNER JOIN `tabDynamic Link` dl ON dl.parent = a.name
+                WHERE dl.link_doctype = 'Customer'
+                AND dl.link_name = %s
+                AND dl.parenttype = 'Address'
+                ORDER BY a.is_primary_address DESC
+                LIMIT 1
+            """,
+                customer,
+                as_dict=True,
+            )
+            if customer_addresses:
+                return customer_addresses[0]
 
     return addresses[0] if addresses else None
 

@@ -3,6 +3,27 @@ from frappe import _
 from frappe.model.document import Document
 
 
+def get_contact_email(contact_name: str) -> str | None:
+    """Get the primary email for a contact."""
+    if not contact_name:
+        return None
+
+    email = frappe.db.get_value(
+        "Contact Email",
+        {"parent": contact_name, "is_primary": 1},
+        "email_id",
+    )
+
+    if not email:
+        email = frappe.db.get_value(
+            "Contact Email",
+            {"parent": contact_name},
+            "email_id",
+        )
+
+    return email
+
+
 class Member(Document):
     def validate(self):
         if not self.customer:
@@ -19,13 +40,14 @@ class Member(Document):
         validate_email_address(email.strip(), True)
 
     def fetch_contact_details(self):
-        """Fetch first_name and last_name from Contact linked to Customer."""
+        """Fetch first_name, last_name and email_id from Contact linked to Customer."""
         if self.customer and not self.first_name:
             contact = self.get_primary_contact_for_customer()
             if contact:
                 self.first_name = contact.first_name or ""
                 self.last_name = contact.last_name or ""
                 self.contact = contact.name
+                self.email_id = contact.email_id or ""
 
     def get_primary_contact_for_customer(self):
         """Get the primary contact for the linked customer."""
@@ -51,6 +73,7 @@ class Member(Document):
         )
 
         if primary_contact:
+            primary_contact.email_id = get_contact_email(primary_contact.name)
             return primary_contact
 
         first_contact = frappe.db.get_value(
@@ -59,6 +82,8 @@ class Member(Document):
             ["name", "first_name", "last_name"],
             as_dict=True,
         )
+        if first_contact:
+            first_contact.email_id = get_contact_email(first_contact.name)
         return first_contact
 
     @frappe.whitelist()
@@ -68,6 +93,7 @@ class Member(Document):
             return {
                 "first_name": "",
                 "last_name": "",
+                "email_id": "",
                 "contact": "",
                 "has_contact": False,
             }
@@ -78,9 +104,16 @@ class Member(Document):
                 "contact": contact.name,
                 "first_name": contact.first_name or "",
                 "last_name": contact.last_name or "",
+                "email_id": contact.email_id or "",
                 "has_contact": True,
             }
-        return {"first_name": "", "last_name": "", "contact": "", "has_contact": False}
+        return {
+            "first_name": "",
+            "last_name": "",
+            "email_id": "",
+            "contact": "",
+            "has_contact": False,
+        }
 
     @frappe.whitelist()
     def get_active_memberships(self) -> list[dict]:

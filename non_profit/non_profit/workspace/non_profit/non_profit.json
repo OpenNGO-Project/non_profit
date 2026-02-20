@@ -1,7 +1,7 @@
 {
 	"app": "non_profit",
 	"charts": [],
-	"content": "[{\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Overview</b></span>\",\"col\":12}},{\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Members\",\"col\":3}},{\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Active Memberships\",\"col\":3}},{\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Donations This Year\",\"col\":3}},{\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Expiring Soon\",\"col\":3}},{\"type\":\"spacer\",\"data\":{\"col\":12}},{\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Shortcuts</b></span>\",\"col\":12}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Member\",\"col\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Membership\",\"col\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Donation\",\"col\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Newsletter\",\"col\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Expiring Memberships\",\"col\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Non Profit Settings\",\"col\":3}},{\"type\":\"spacer\",\"data\":{\"col\":12}},{\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Masters & Reports</b></span>\",\"col\":12}},{\"type\":\"card\",\"data\":{\"card_name\":\"Membership\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Donor Management\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Communication\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Chapters\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Volunteering\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Certification\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Grants\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Settings\",\"col\":4}}]",
+	"content": "[{\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Overview</b></span>\",\"col\":12}},{\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Members\",\"col\":3}},{\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Active Memberships\",\"col\":3}},{\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Total Donations This Year\",\"col\":3}},{\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Expiring Soon\",\"col\":3}},{\"type\":\"spacer\",\"data\":{\"col\":12}},{\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Shortcuts</b></span>\",\"col\":12}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Member\",\"col\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Membership\",\"col\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Donation\",\"col\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Newsletter\",\"col\":3}},{\"type\":\"spacer\",\"data\":{\"col\":12}},{\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Masters</b></span>\",\"col\":12}},{\"type\":\"card\",\"data\":{\"card_name\":\"Membership\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Donor Management\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Communication\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Chapters\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Volunteering\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Certification\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Grants\",\"col\":4}}]",
 	"creation": "2020-03-02 17:23:47.811421",
 	"docstatus": 0,
 	"doctype": "Workspace",
@@ -27,8 +27,6 @@
 		{"hidden": 0, "is_query_report": 0, "label": "Chapters", "link_count": 0, "onboard": 0, "type": "Card Break"},
 		{"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Chapter", "link_count": 0, "link_to": "Chapter", "link_type": "DocType", "onboard": 1, "type": "Link"},
 		{"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Chapter Type", "link_count": 0, "link_to": "Chapter Type", "link_type": "DocType", "onboard": 0, "type": "Link"},
-		{"hidden": 0, "is_query_report": 0, "label": "Reports", "link_count": 0, "onboard": 0, "type": "Card Break"},
-		{"dependencies": "", "hidden": 0, "is_query_report": 1, "label": "Expiring Memberships", "link_count": 0, "link_to": "Expiring Memberships", "link_type": "Report", "onboard": 0, "type": "Link"},
 		{"hidden": 0, "is_query_report": 0, "label": "Volunteering", "link_count": 0, "onboard": 0, "type": "Card Break"},
 		{"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Volunteer", "link_count": 0, "link_to": "Volunteer", "link_type": "DocType", "onboard": 1, "type": "Link"},
 		{"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Volunteer Type", "link_count": 0, "link_to": "Volunteer Type", "link_type": "DocType", "onboard": 0, "type": "Link"},
@@ -36,27 +34,23 @@
 		{"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Certified Consultant", "link_count": 0, "link_to": "Certified Consultant", "link_type": "DocType", "onboard": 0, "type": "Link"},
 		{"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Certification Application", "link_count": 0, "link_to": "Certification Application", "link_type": "DocType", "onboard": 0, "type": "Link"},
 		{"hidden": 0, "is_query_report": 0, "label": "Grants", "link_count": 0, "onboard": 0, "type": "Card Break"},
-		{"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Grant Application", "link_count": 0, "link_to": "Grant Application", "link_type": "DocType", "onboard": 0, "type": "Link"},
-		{"hidden": 0, "is_query_report": 0, "label": "Settings", "link_count": 0, "onboard": 0, "type": "Card Break"},
-		{"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Non Profit Settings", "link_count": 0, "link_to": "Non Profit Settings", "link_type": "DocType", "onboard": 0, "type": "Link"}
+		{"dependencies": "", "hidden": 0, "is_query_report": 0, "label": "Grant Application", "link_count": 0, "link_to": "Grant Application", "link_type": "DocType", "onboard": 0, "type": "Link"}
 	],
-	"modified": "2026-02-19 00:00:00.000000",
+	"modified": "2026-02-20 00:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Non Profit",
 	"name": "Non Profit",
 	"owner": "Administrator",
 	"parent_page": "",
 	"public": 1,
-	"restrict_to_domain": "Non Profit",
+	"restrict_to_domain": "",
 	"roles": [],
 	"sequence_id": 18.0,
 	"shortcuts": [
 		{"color": "#e03c31", "format": "{}", "label": "New Member", "link_to": "Member", "type": "DocType"},
 		{"color": "#4cd137", "format": "{}", "label": "New Membership", "link_to": "Membership", "type": "DocType"},
 		{"color": "#e03c31", "format": "{}", "label": "New Donation", "link_to": "Donation", "type": "DocType"},
-		{"color": "#1289A7", "format": "{}", "label": "New Newsletter", "link_to": "Newsletter", "type": "DocType"},
-		{"color": "#f39c12", "format": "{}", "label": "Expiring Memberships", "link_to": "Expiring Memberships", "type": "Report"},
-		{"color": "#95a5a6", "format": "{}", "label": "Non Profit Settings", "link_to": "Non Profit Settings", "type": "DocType"}
+		{"color": "#1289A7", "format": "{}", "label": "New Newsletter", "link_to": "Newsletter", "type": "DocType"}
 	],
 	"title": "Non Profit"
 }

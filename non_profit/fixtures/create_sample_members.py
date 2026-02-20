@@ -56,68 +56,60 @@ def create_sample_members():
 def create_member_for_chapter(chapter, index, company, membership_type):
     """Create a member, customer, address, and membership for a chapter."""
 
-    # Clean chapter name for email (replace special chars)
     chapter_slug = chapter.name.lower()
     chapter_slug = chapter_slug.replace(" ", ".").replace("-", ".")
     chapter_slug = chapter_slug.replace("(", "").replace(")", "")
-    # Replace German umlauts
     chapter_slug = chapter_slug.replace("ö", "oe").replace("ü", "ue").replace("ä", "ae")
     chapter_slug = chapter_slug.replace("ß", "ss").replace(".", ".")
-    # Remove any remaining non-ASCII chars
     chapter_slug = "".join(c for c in chapter_slug if ord(c) < 128 or c == ".")
-    # Clean up multiple dots
     while ".." in chapter_slug:
         chapter_slug = chapter_slug.replace("..", ".")
 
     email = f"mitglied.{chapter_slug}@oedp-test.de"
 
-    # Check if member already exists
-    existing = frappe.db.exists("Member", {"email_id": email})
-    if existing:
+    if frappe.db.exists("Member", {"email_id": email}):
         return None
 
     member_name = f"Mitglied {chapter.name}"
 
-    # Create Member (without membership_type - that's on Membership now)
+    customer = create_customer_for_member_name(member_name)
+
     member = frappe.new_doc("Member")
     member.update(
         {
             "member_name": member_name,
             "email_id": email,
             "primary_chapter": chapter.name,
+            "customer": customer.name,
         }
     )
     member.insert()
 
-    # Create Customer
-    customer = create_customer_for_member(member)
-
-    # Create Address
     create_address_for_customer(customer, member_name, index)
 
-    # Create Membership
-    membership = frappe.new_doc("Membership")
-    membership.update(
-        {
-            "member": member.name,
-            "membership_type": membership_type,
-            "company": company,
-            "member_since_date": getdate(),
-            "auto_renew": 1,
-        }
-    )
-    membership.insert()
-    membership.submit()
+    if membership_type:
+        membership = frappe.new_doc("Membership")
+        membership.update(
+            {
+                "member": member.name,
+                "membership_type": membership_type,
+                "company": company,
+                "member_since_date": getdate(),
+                "auto_renew": 1,
+            }
+        )
+        membership.insert()
+        membership.submit()
 
     return member
 
 
-def create_customer_for_member(member):
-    """Create a customer linked to a member."""
+def create_customer_for_member_name(member_name):
+    """Create a customer for a member."""
     customer = frappe.new_doc("Customer")
     customer.update(
         {
-            "customer_name": member.member_name,
+            "customer_name": member_name,
             "customer_type": "Individual",
             "customer_group": get_customer_group(),
             "territory": get_territory(),
@@ -125,9 +117,6 @@ def create_customer_for_member(member):
     )
     customer.flags.ignore_mandatory = True
     customer.insert()
-
-    # Link customer to member
-    member.db_set("customer", customer.name)
 
     return customer
 

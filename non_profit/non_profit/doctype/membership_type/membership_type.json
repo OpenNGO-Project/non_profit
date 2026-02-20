@@ -8,6 +8,7 @@
  "field_order": [
   "membership_type",
   "amount",
+  "schatzmeister",
   "column_break_4",
   "linked_item",
   "razorpay_plan_id",
@@ -75,10 +76,16 @@
    "fieldname": "auto_create_subscription_plan",
    "fieldtype": "Check",
    "label": "Auto Create Subscription Plan"
+  },
+  {
+   "default": "0",
+   "fieldname": "schatzmeister",
+   "fieldtype": "Check",
+   "label": "Schatzmeister"
   }
  ],
  "links": [],
- "modified": "2025-02-18 12:00:00.000000",
+ "modified": "2026-02-20 14:10:19.470194",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Membership Type",
@@ -99,7 +106,9 @@
  ],
  "quick_entry": 1,
  "restrict_to_domain": "Non Profit",
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
  "track_changes": 1
 }
