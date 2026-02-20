@@ -7,6 +7,7 @@ def make_custom_records():
     records = [
         {"doctype": "Party Type", "party_type": "Member", "account_type": "Receivable"},
         {"doctype": "Party Type", "party_type": "Donor", "account_type": "Receivable"},
+        {"doctype": "Domain", "domain": "Non Profit"},
     ]
     make_records(records)
 
@@ -77,18 +78,6 @@ def get_custom_fields():
             ),
         ],
         "Member": [
-            {
-                "fieldname": "first_name",
-                "label": "First Name",
-                "fieldtype": "Data",
-                "insert_after": "naming_series",
-            },
-            {
-                "fieldname": "last_name",
-                "label": "Last Name",
-                "fieldtype": "Data",
-                "insert_after": "first_name",
-            },
             {
                 "fieldname": "pan_number",
                 "label": "PAN Details",
