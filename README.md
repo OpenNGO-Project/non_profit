@@ -1,5 +1,7 @@
 ## Non Profit
 
+⚠️ Important notice: We are upgrading the Non-Profit app. At the moment this is still early development. Not to be used in production. If you want to help create a Open Source Non-Profit Solution based on Frappe: Contact us!
+
 A Non profit app built on top of Frappe framework & ERPNext.
 
 
@@ -13,7 +15,7 @@ Using bench, [install ERPNext](https://github.com/frappe/bench#installation) as 
 Once ERPNext is installed, add non_profit app to your bench by running
 
 ```sh
-$ bench get-app non_profit
+$ bench get-app https://github.com/OpenNGO-Project/non_profit.git
 ```
 
 After that, you can install non_profit app on required site by running
