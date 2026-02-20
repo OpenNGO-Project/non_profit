@@ -24,6 +24,24 @@ class Membership(Document):
         if not self.member_since_date:
             self.member_since_date = getdate()
 
+        self.validate_duplicate_membership()
+
+    def validate_duplicate_membership(self):
+        """Check for duplicate active membership of same type."""
+        if self.is_new() or not self.name:
+            filters = {
+                "member": self.member,
+                "membership_type": self.membership_type,
+                "docstatus": 1,
+            }
+            existing = frappe.db.exists("Membership", filters)
+            if existing:
+                frappe.throw(
+                    _("Member already has an active membership of type {0}").format(
+                        self.membership_type
+                    )
+                )
+
     def on_submit(self):
         if self.auto_renew:
             self.create_subscription()
@@ -53,15 +71,12 @@ class Membership(Document):
             )
             return
 
-        existing_subscription = frappe.db.get_value(
-            "Member", self.member, "subscription"
-        )
-
-        if existing_subscription:
+        if self.subscription:
             frappe.msgprint(
-                _("Member already has subscription {0}").format(existing_subscription)
+                _("This membership already has subscription {0}").format(
+                    self.subscription
+                )
             )
-            self.db_set("subscription", existing_subscription)
             return
 
         company = self.company or frappe.db.get_single_value(
@@ -98,7 +113,6 @@ class Membership(Document):
             )
             frappe.log_error(str(e), "Subscription Invoice Creation")
 
-        frappe.db.set_value("Member", self.member, "subscription", sub.name)
         self.db_set("subscription", sub.name)
 
     def cancel_subscription(self):

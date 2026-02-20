@@ -115,7 +115,7 @@
   {
    "child": 1,
    "collapsible": 1,
-   "icon": "money",
+   "icon": "piggy-bank",
    "indent": 0,
    "keep_closed": 0,
    "label": "Donation",
@@ -277,7 +277,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-02-19 07:30:07.199680",
+ "modified": "2026-02-19 14:59:39.492263",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Non Profit",

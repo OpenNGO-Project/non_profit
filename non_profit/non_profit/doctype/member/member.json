@@ -9,9 +9,7 @@
  "field_order": [
   "naming_series",
   "member_name",
-  "membership_expiry_date",
   "column_break_5",
-  "membership_type",
   "email_id",
   "image",
   "chapter_section",
@@ -23,21 +21,8 @@
   "first_name",
   "column_break_customer",
   "last_name",
-  "customer_name",
-  "create_customer_btn",
-  "subscription_section",
-  "subscription",
-  "subscription_status_label",
-  "column_break_subscription",
-  "auto_renew_membership",
   "supplier_section",
-  "supplier",
-  "razorpay_details_section",
-  "subscription_id",
-  "customer_id",
-  "column_break_21",
-  "subscription_start",
-  "subscription_end"
+  "supplier"
  ],
  "fields": [
   {
@@ -55,21 +40,8 @@
    "reqd": 1
   },
   {
-   "fieldname": "membership_expiry_date",
-   "fieldtype": "Date",
-   "label": "Membership Expiry Date"
-  },
-  {
    "fieldname": "column_break_5",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "membership_type",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Membership Type",
-   "options": "Membership Type",
-   "reqd": 1
   },
   {
    "fieldname": "email_id",
@@ -141,52 +113,6 @@
    "read_only": 1
   },
   {
-   "fetch_from": "customer.customer_name",
-   "fieldname": "customer_name",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Customer Name",
-   "read_only": 1
-  },
-  {
-   "fieldname": "create_customer_btn",
-   "fieldtype": "Button",
-   "label": "Create Customer",
-   "options": "create_customer"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "subscription_section",
-   "fieldtype": "Section Break",
-   "label": "Subscription"
-  },
-  {
-   "fieldname": "subscription",
-   "fieldtype": "Link",
-   "in_standard_filter": 1,
-   "label": "Subscription",
-   "options": "Subscription",
-   "read_only": 1
-  },
-  {
-   "fetch_from": "subscription.status",
-   "fieldname": "subscription_status_label",
-   "fieldtype": "Data",
-   "label": "Status",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_subscription",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "1",
-   "description": "Automatically renew membership via subscription billing",
-   "fieldname": "auto_renew_membership",
-   "fieldtype": "Check",
-   "label": "Auto Renew Membership"
-  },
-  {
    "collapsible": 1,
    "fieldname": "supplier_section",
    "fieldtype": "Section Break",
@@ -197,40 +123,6 @@
    "fieldtype": "Link",
    "label": "Supplier",
    "options": "Supplier"
-  },
-  {
-   "fieldname": "subscription_id",
-   "fieldtype": "Data",
-   "label": "Razorpay Subscription ID",
-   "read_only": 1
-  },
-  {
-   "fieldname": "customer_id",
-   "fieldtype": "Data",
-   "label": "Razorpay Customer ID",
-   "read_only": 1
-  },
-  {
-   "fieldname": "razorpay_details_section",
-   "fieldtype": "Section Break",
-   "hidden": 1,
-   "label": "Razorpay Details"
-  },
-  {
-   "fieldname": "column_break_21",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "subscription_start",
-   "fieldtype": "Date",
-   "label": "Subscription Start",
-   "read_only": 1
-  },
-  {
-   "fieldname": "subscription_end",
-   "fieldtype": "Date",
-   "label": "Subscription End",
-   "read_only": 1
   }
  ],
  "image_field": "image",
@@ -241,7 +133,7 @@
    "link_fieldname": "member"
   }
  ],
- "modified": "2025-02-19 12:00:00.000000",
+ "modified": "2025-02-20 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Member",

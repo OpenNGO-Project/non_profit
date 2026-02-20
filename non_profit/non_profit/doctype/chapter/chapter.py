@@ -114,3 +114,40 @@ def get_chapter_tree(chapter=None):
             order_by="lft",
         )
     return chapters
+
+
+@frappe.whitelist()
+def get_children(doctype, parent=None, is_root=False):
+    fields = ["name as value", "chapter_type as title", "name"]
+
+    if not parent or parent == "All Chapters":
+        filters = {"parent_chapter": ["in", ("", None)]}
+    else:
+        filters = {"parent_chapter": parent}
+
+    chapters = frappe.get_all(
+        "Chapter",
+        fields=fields,
+        filters=filters,
+        order_by="name",
+    )
+
+    for chapter in chapters:
+        has_children = frappe.db.exists("Chapter", {"parent_chapter": chapter.name})
+        chapter["expandable"] = 1 if has_children else 0
+        chapter["title"] = chapter.get("title") or chapter.get("value")
+
+    return chapters
+
+
+@frappe.whitelist()
+def add_node():
+    from frappe.desk.treeview import make_tree_args
+
+    args = frappe.form_dict
+    args = make_tree_args(**args)
+
+    if args.parent_chapter == "All Chapters":
+        args.parent_chapter = None
+
+    frappe.get_doc(args).insert()

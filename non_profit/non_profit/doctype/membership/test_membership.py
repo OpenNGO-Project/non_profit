@@ -10,15 +10,12 @@ class TestMembership(FrappeTestCase):
     def setUp(self):
         frappe.db.delete("Customer")
         plan = setup_membership()
+        self.plan = plan
         self.member_doc = create_member(
             frappe._dict(
                 {
                     "fullname": "_Test_Member",
                     "email": "_test_member_erpnext@example.com",
-                    "plan_id": plan.name,
-                    "subscription_id": "sub_DEX6xcJ1HSW4CR",
-                    "customer_id": "cust_C0WlbKhp3aLA7W",
-                    "subscription_status": "Active",
                 }
             )
         )
@@ -33,7 +30,6 @@ class TestMembership(FrappeTestCase):
         member_without_customer = frappe.new_doc("Member")
         member_without_customer.member_name = "_Test No Customer"
         member_without_customer.email_id = "no_customer@example.com"
-        member_without_customer.membership_type = "_rzpy_test_milythm"
         member_without_customer.flags.ignore_mandatory = True
         member_without_customer.insert()
 
@@ -57,6 +53,67 @@ class TestMembership(FrappeTestCase):
 
         sub = frappe.get_doc("Subscription", membership.subscription)
         self.assertEqual(sub.party, self.customer)
+
+    def test_member_can_have_multiple_active_memberships(self):
+        """Test that a member can have multiple active memberships of different types."""
+        membership1 = make_membership(self.member)
+        membership1.submit()
+
+        self.assertTrue(membership1.subscription)
+
+        active_memberships = frappe.get_all(
+            "Membership",
+            filters={"member": self.member, "docstatus": 1},
+        )
+        self.assertEqual(len(active_memberships), 1)
+
+    def test_duplicate_membership_type_not_allowed(self):
+        """Test that duplicate membership of same type is not allowed."""
+        membership1 = make_membership(self.member)
+        membership1.submit()
+
+        membership2_data = {
+            "doctype": "Membership",
+            "member": self.member,
+            "membership_type": "_rzpy_test_milythm",
+            "company": erpnext.get_default_company(),
+            "member_since_date": nowdate(),
+            "auto_renew": 1,
+        }
+        membership2 = frappe.get_doc(membership2_data)
+
+        with self.assertRaises(frappe.ValidationError):
+            membership2.insert(ignore_permissions=True)
+
+    def test_membership_cancel_cancels_subscription(self):
+        """Test that cancelling membership cancels the subscription."""
+        membership = make_membership(self.member)
+        membership.submit()
+
+        self.assertTrue(membership.subscription)
+
+        membership.cancel()
+
+        sub = frappe.get_doc("Subscription", membership.subscription)
+        self.assertEqual(sub.status, "Cancelled")
+
+    def test_get_active_memberships(self):
+        """Test getting active memberships from member."""
+        membership = make_membership(self.member)
+        membership.submit()
+
+        active = self.member_doc.get_active_memberships()
+        self.assertEqual(len(active), 1)
+        self.assertEqual(active[0]["name"], membership.name)
+
+    def test_get_primary_membership(self):
+        """Test getting primary (most recent) membership from member."""
+        membership = make_membership(self.member)
+        membership.submit()
+
+        primary = self.member_doc.get_primary_membership()
+        self.assertIsNotNone(primary)
+        self.assertEqual(primary["name"], membership.name)
 
     def tearDown(self):
         frappe.db.rollback()

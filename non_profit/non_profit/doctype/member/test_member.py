@@ -10,7 +10,6 @@ class TestMember(FrappeTestCase):
         member = frappe.new_doc("Member")
         member.member_name = "_Test Member No Customer"
         member.email_id = "test_no_customer@example.com"
-        member.membership_type = self.get_or_create_membership_type()
         member.flags.ignore_mandatory = True
 
         with self.assertRaises(frappe.ValidationError):
@@ -23,7 +22,6 @@ class TestMember(FrappeTestCase):
         member = frappe.new_doc("Member")
         member.member_name = "_Test Member With Contact"
         member.email_id = "test_with_contact@example.com"
-        member.membership_type = self.get_or_create_membership_type()
         member.customer = customer.name
         member.insert()
 
@@ -36,7 +34,6 @@ class TestMember(FrappeTestCase):
         member = frappe.new_doc("Member")
         member.member_name = "_Test Member No Contact"
         member.email_id = "test_no_contact@example.com"
-        member.membership_type = self.get_or_create_membership_type()
         member.customer = customer.name
         member.insert()
 
@@ -50,7 +47,6 @@ class TestMember(FrappeTestCase):
         member = frappe.new_doc("Member")
         member.member_name = "_Test Member API"
         member.email_id = "test_api@example.com"
-        member.membership_type = self.get_or_create_membership_type()
         member.customer = customer.name
         member.insert()
 
@@ -59,6 +55,31 @@ class TestMember(FrappeTestCase):
         self.assertEqual(result["first_name"], "Jane")
         self.assertEqual(result["last_name"], "Smith")
         self.assertTrue(result["has_contact"])
+
+    def test_get_active_memberships(self):
+        customer = self.create_test_customer()
+        membership_type = self.get_or_create_membership_type()
+
+        member = frappe.new_doc("Member")
+        member.member_name = "_Test Member Memberships"
+        member.email_id = "test_memberships@example.com"
+        member.customer = customer.name
+        member.insert()
+
+        memberships = member.get_active_memberships()
+        self.assertEqual(len(memberships), 0)
+
+    def test_get_primary_membership(self):
+        customer = self.create_test_customer()
+
+        member = frappe.new_doc("Member")
+        member.member_name = "_Test Member Primary"
+        member.email_id = "test_primary@example.com"
+        member.customer = customer.name
+        member.insert()
+
+        primary = member.get_primary_membership()
+        self.assertIsNone(primary)
 
     def create_test_customer(self):
         customer = frappe.new_doc("Customer")

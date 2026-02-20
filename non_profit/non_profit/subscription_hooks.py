@@ -17,29 +17,12 @@ def sync_membership_status_from_subscription(subscription, method):
 
     Called via doc_events on Subscription.
     """
-    memberships = []
-
-    # Find memberships directly linked to this subscription
-    direct_memberships = frappe.db.sql_list(
+    memberships = frappe.db.sql_list(
         "SELECT name FROM `tabMembership` WHERE subscription = %s AND docstatus = 1",
         subscription.name,
     )
-    memberships.extend(direct_memberships)
 
-    # Also find memberships via customer (for backwards compatibility)
-    if subscription.party_type == "Customer":
-        member = frappe.db.get_value("Member", {"customer": subscription.party}, "name")
-        if member:
-            customer_memberships = frappe.db.sql_list(
-                """
-                SELECT name FROM `tabMembership`
-                WHERE member = %s AND docstatus = 1 AND (subscription IS NULL OR subscription = %s)
-                """,
-                (member, subscription.name),
-            )
-            memberships.extend(customer_memberships)
-
-    for membership_name in set(memberships):
+    for membership_name in memberships:
         frappe.db.set_value(
             "Membership", membership_name, "subscription_status", subscription.status
         )
@@ -49,7 +32,7 @@ def ensure_subscriptions_for_members():
     """
     Scheduled task to ensure active members have subscriptions.
 
-    Checks for members with auto_renew enabled but no subscription.
+    Checks for memberships with auto_renew enabled but no subscription.
     """
     memberships_without_subscription = frappe.db.sql(
         """
@@ -83,13 +66,9 @@ def cancel_membership_on_subscription_cancel(subscription, method):
     if subscription.party_type != "Customer":
         return
 
-    member = frappe.db.get_value("Member", {"customer": subscription.party}, "name")
-    if not member:
-        return
-
     membership = frappe.db.get_value(
         "Membership",
-        {"member": member, "subscription": subscription.name, "docstatus": 1},
+        {"subscription": subscription.name, "docstatus": 1},
         "name",
     )
 

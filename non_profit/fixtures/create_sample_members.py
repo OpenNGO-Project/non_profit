@@ -1,5 +1,5 @@
 """
-Create sample members and test users for ÖDP membership system.
+Create sample members and test users for membership system.
 
 This script creates:
 - 35 members (one per chapter)
@@ -18,7 +18,7 @@ from frappe.utils import getdate
 
 def execute():
     """Main function to create all sample data."""
-    print("Creating sample data for ÖDP membership system...")
+    print("Creating sample data for membership system...")
 
     create_sample_members()
     create_test_users()
@@ -36,7 +36,7 @@ def create_sample_members():
     )
 
     company = get_default_company()
-    membership_type = "ÖDP Mitglied"
+    membership_type = get_default_membership_type()
 
     created = 0
     for idx, chapter in enumerate(chapters, 1):
@@ -78,13 +78,12 @@ def create_member_for_chapter(chapter, index, company, membership_type):
 
     member_name = f"Mitglied {chapter.name}"
 
-    # Create Member
+    # Create Member (without membership_type - that's on Membership now)
     member = frappe.new_doc("Member")
     member.update(
         {
             "member_name": member_name,
             "email_id": email,
-            "membership_type": membership_type,
             "primary_chapter": chapter.name,
         }
     )
@@ -295,6 +294,20 @@ def get_default_company():
         if companies:
             company = companies[0].name
     return company
+
+
+def get_default_membership_type():
+    """Get default membership type."""
+    membership_type = frappe.db.exists("Membership Type", "ÖDP Mitglied")
+    if membership_type:
+        return membership_type
+
+    # Get first membership type
+    types = frappe.get_all("Membership Type", limit=1)
+    if types:
+        return types[0].name
+
+    return None
 
 
 def get_customer_group():

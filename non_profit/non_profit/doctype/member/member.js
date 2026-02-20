@@ -1,12 +1,4 @@
 frappe.ui.form.on('Member', {
-    setup: function(frm) {
-        frappe.db.get_single_value('Non Profit Settings', 'enable_razorpay_for_memberships').then(val => {
-            if (val && (frm.doc.subscription_id || frm.doc.customer_id)) {
-                frm.set_df_property('razorpay_details_section', 'hidden', false);
-            }
-        })
-    },
-
     refresh: function(frm) {
         if(!frm.doc.__islocal) {
             frm.add_custom_button(__('Accounting Ledger'), function() {
@@ -20,26 +12,20 @@ frappe.ui.form.on('Member', {
             if (typeof erpnext !== 'undefined' && erpnext.utils && erpnext.utils.set_party_dashboard_indicators) {
                 erpnext.utils.set_party_dashboard_indicators(frm);
             }
-        }
 
-        if (frm.doc.subscription) {
-            frappe.db.get_value('Subscription', frm.doc.subscription, 'status').then(r => {
-                if (r.message) {
-                    let status = r.message.status;
-                    let indicator = '';
-                    if (status === 'Active') {
-                        indicator = {text: __('Active'), color: 'green'};
-                    } else if (status === 'Cancelled') {
-                        indicator = {text: __('Cancelled'), color: 'red'};
-                    } else if (status === 'Unpaid' || status === 'Grace Period') {
-                        indicator = {text: __('Payment Due'), color: 'orange'};
-                    }
-                    if (indicator) {
-                        frm.dashboard.set_headline(indicator.text, indicator.color);
-                    }
-                }
-            });
+            frm.trigger('show_membership_status');
         }
+    },
+
+    show_membership_status: function(frm) {
+        frm.call('get_active_memberships').then(r => {
+            if (r.message && r.message.length > 0) {
+                let primary = r.message[0];
+                let status = primary.subscription_status || 'Active';
+                let indicator = membership_get_status_indicator(status);
+                frm.dashboard.set_headline(indicator.text, indicator.color);
+            }
+        });
     },
 
     customer: function(frm) {
@@ -66,3 +52,15 @@ frappe.ui.form.on('Member', {
         }
     }
 });
+
+function membership_get_status_indicator(status) {
+    const status_map = {
+        'Active': {text: __('Active'), color: 'green'},
+        'Trialing': {text: __('New'), color: 'blue'},
+        'Grace Period': {text: __('Pending'), color: 'orange'},
+        'Unpaid': {text: __('Expired'), color: 'red'},
+        'Cancelled': {text: __('Cancelled'), color: 'red'},
+        'Completed': {text: __('Expired'), color: 'grey'},
+    };
+    return status_map[status] || {text: status || __('Unknown'), color: 'grey'};
+}
