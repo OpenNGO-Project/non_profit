@@ -686,26 +686,7 @@ for recipient in recipients:
 
 ---
 
-## 16. Fixing Broken Imports in Existing Apps
-
-When an existing app has broken imports:
-```python
-# Original broken import in donation.py
-from non_profit.non_profit.doctype.membership.membership import verify_signature
-
-# If verify_signature doesn't exist in membership.py, either:
-# 1. Add the function to membership.py, or
-# 2. Add the function locally to the file that needs it
-
-def verify_signature(body, endpoint='Donation'):
-	"""Verify Razorpay webhook signature."""
-	signature = frappe.get_request_header('X-Razorpay-Signature')
-	# ... implementation
-```
-
----
-
-## 17. Cache Clearing for UI Changes
+## 16. Cache Clearing for UI Changes
 
 When workspace/sidebar changes don't appear:
 ```bash
@@ -720,7 +701,7 @@ bench --site [site] execute "frappe.cache_manager.clear_user_cache('user@example
 
 ---
 
-## 18. Permission System
+## 17. Permission System
 
 ### Permission Query Conditions (`hooks.py`)
 
@@ -728,35 +709,29 @@ Custom permission filtering via SQL WHERE clauses:
 
 ```python
 permission_query_conditions = {
-    "Member": "non_profit.non_profit.permissions.get_member_query_condition",
-    "Chapter": "non_profit.non_profit.permissions.get_chapter_query_condition",
-    "Membership": "non_profit.non_profit.permissions.get_membership_query_condition",
-    "Subscription": "non_profit.non_profit.permissions.get_subscription_query_condition",
-    "Sales Invoice": "non_profit.non_profit.permissions.get_sales_invoice_query_condition",
-    "Contact": "non_profit.non_profit.permissions.get_contact_query_condition",
-    "Address": "non_profit.non_profit.permissions.get_address_query_condition",
+    "MyDocType": "my_app.permissions.get_my_doctype_query_condition",
 }
 ```
 
 **Implementation pattern:**
 
 ```python
-def get_member_query_condition(user: str) -> str:
+def get_my_doctype_query_condition(user: str) -> str:
     # Always check for full access users first
     if user == "Administrator":
         return ""
     
-    if "Non Profit Manager" in frappe.get_roles(user):
+    if "My Role" in frappe.get_roles(user):
         return ""
     
-    # No accessible chapters = no access
-    accessible_chapters = get_user_accessible_chapters(user)
-    if not accessible_chapters:
+    # No accessible records = no access
+    accessible_records = get_user_accessible_records(user)
+    if not accessible_records:
         return "1=0"
     
     # Return SQL WHERE clause
-    chapter_list = "', '".join([c.replace("'", "''") for c in accessible_chapters])
-    return f"`tabMember`.`primary_chapter` IN ('{chapter_list}')"
+    record_list = "', '".join([r.replace("'", "''") for r in accessible_records])
+    return f"`tabMyDocType`.`field` IN ('{record_list}')"
 ```
 
 **Returns:**
@@ -771,97 +746,39 @@ def get_member_query_condition(user: str) -> str:
 - **Native Frappe behavior**: Only restricts Link fields pointing to the `allow` DocType
 - **Does NOT cascade** to related doctypes automatically - requires custom `permission_query_conditions`
 
-### Extended Permission Queries for Related DocTypes
-
-When a user has Chapter permissions, extend access to related doctypes via `permission_query_conditions`:
-
-**Subscription permission must check multiple paths:**
-1. Via Customer: `Subscription.party` (Customer) -> `Member.customer`
-2. Via Membership: `Membership.subscription` -> `Membership.member` -> `Member.chapter`
-
-```python
-def get_subscription_query_condition(user: str) -> str:
-    # ... base checks ...
-    return f"""
-        (`tabSubscription`.`party_type` != 'Customer'
-        OR EXISTS (SELECT 1 FROM `tabMember` m WHERE m.customer = `tabSubscription`.`party` AND ...)
-        OR EXISTS (SELECT 1 FROM `tabMembership` ms JOIN `tabMember` m ON m.name = ms.member 
-                   WHERE ms.subscription = `tabSubscription`.`name` AND ...))
-    """
-```
-
 ---
 
-## 19. NestedSet for Hierarchies
+## 18. NestedSet for Hierarchies
 
-Chapters use `lft`/`rgt` for tree structure:
+Tree structures use `lft`/`rgt` for hierarchical queries:
 
 ```python
 # Get descendants
 frappe.db.sql_list(
-    "SELECT name FROM `tabChapter` WHERE lft > %s AND rgt < %s",
-    (chapter.lft, chapter.rgt),
+    "SELECT name FROM `tabMyTree` WHERE lft > %s AND rgt < %s",
+    (node.lft, node.rgt),
 )
 
 # Get ancestors (ordered from immediate parent to root)
 frappe.db.sql_list(
-    "SELECT name FROM `tabChapter` WHERE lft < %s AND rgt > %s ORDER BY lft DESC",
-    (chapter.lft, chapter.rgt),
+    "SELECT name FROM `tabMyTree` WHERE lft < %s AND rgt > %s ORDER BY lft DESC",
+    (node.lft, node.rgt),
 )
 ```
 
 ---
 
-## 20. Dynamic Links (Contact/Address)
+## 19. Dynamic Links (Contact/Address)
 
 Contacts and Addresses use `tabDynamic Link` table for polymorphic relationships:
 
 - Fields: `parent`, `parenttype`, `link_doctype`, `link_name`
 - **Native Frappe permission only checks**: Customer, Supplier, Company, Sales Partner
-- To restrict by Member or other doctypes, must add custom `permission_query_conditions`
-
-### Fetching Primary Contact for Customer
-
-```python
-def get_primary_contact_for_customer(customer: str):
-    """Get the primary contact for a customer."""
-    contact_names = frappe.get_all(
-        "Dynamic Link",
-        filters={
-            "link_doctype": "Customer",
-            "link_name": customer,
-            "parenttype": "Contact",
-        },
-        fields=["parent"],
-        pluck="parent",
-    )
-
-    if not contact_names:
-        return None
-
-    # Check for primary contact
-    primary_contact = frappe.db.get_value(
-        "Contact",
-        {"name": ["in", contact_names], "is_primary_contact": 1},
-        ["name", "first_name", "last_name"],
-        as_dict=True,
-    )
-
-    if primary_contact:
-        return primary_contact
-
-    # Fall back to first contact
-    return frappe.db.get_value(
-        "Contact",
-        {"name": ["in", contact_names]},
-        ["name", "first_name", "last_name"],
-        as_dict=True,
-    )
-```
+- To restrict by custom doctypes, must add custom `permission_query_conditions`
 
 ---
 
-## 21. Translations
+## 20. Translations
 
 ### File Location
 
@@ -889,7 +806,7 @@ Create records in `Translation` DocType:
 
 ---
 
-## 22. Form UI Patterns (JavaScript)
+## 21. Form UI Patterns (JavaScript)
 
 ### Form Indicators
 
@@ -904,118 +821,35 @@ frm.dashboard.set_headline('Payment Due', 'orange');
 ### List View Indicators
 
 ```javascript
-frappe.listview_settings['Membership'] = {
+frappe.listview_settings['MyDocType'] = {
     get_indicator: function(doc) {
-        if (doc.subscription_status === 'Active') {
-            return [__('Active'), 'green', 'subscription_status,=,Active'];
+        if (doc.status === 'Active') {
+            return [__('Active'), 'green', 'status,=,Active'];
         }
         // ...
     }
 };
 ```
 
-### Syncing Data on Form Load
-
-```python
-class Membership(Document):
-    def onload(self):
-        """Sync subscription status on load."""
-        self.sync_status_from_subscription()
-
-    def sync_status_from_subscription(self):
-        if self.subscription:
-            status = frappe.db.get_value("Subscription", self.subscription, "status")
-            if status and status != self.subscription_status:
-                self.subscription_status = status
-                self.db_set("subscription_status", status)
-```
-
 ---
 
-## 23. Caching Patterns
-
-### Basic Caching
+## 22. Caching Patterns
 
 ```python
-def get_user_accessible_chapters(user: str) -> list[str]:
-    cache_key = f"accessible_chapters:{user}"
+def get_expensive_data(key: str):
+    cache_key = f"my_cache:{key}"
     cached = frappe.cache.get_value(cache_key)
     if cached is not None:
         return cached
     
-    # ... compute result ...
-    
+    result = compute_something(key)
     frappe.cache.set_value(cache_key, result, expires_in_sec=300)
     return result
 ```
 
-### Cache Clearing on Related Changes
-
-```python
-def clear_user_chapter_cache(doc, method=None):
-    if doc.allow != "Chapter":
-        return
-    cache_key = f"accessible_chapters:{doc.user}"
-    frappe.cache.delete_value(cache_key)
-```
-
-Hook in `hooks.py`:
-```python
-doc_events = {
-    "User Permission": {
-        "on_trash": "non_profit.non_profit.permissions.clear_user_chapter_cache",
-        "on_update": "non_profit.non_profit.permissions.clear_user_chapter_cache",
-    },
-}
-```
-
 ---
 
-## 24. Subscription and Membership Patterns
-
-### Relationship Flow
-
-```
-Member (customer) -> Customer
-     |
-     v
-Membership (member) -> Member
-     |
-     v
-Subscription (party=customer) -> Customer
-     |
-     v
-Sales Invoice (customer) -> Customer
-```
-
-### Use db_set() for Linked Fields
-
-Update linked fields without triggering hooks:
-
-```python
-member.db_set("subscription", sub.name)
-self.db_set("subscription", sub.name)
-```
-
-### Membership Status Sync Pattern
-
-```python
-class Membership(Document):
-    def onload(self):
-        """Sync subscription status on load."""
-        self.sync_status_from_subscription()
-
-    def sync_status_from_subscription(self):
-        if self.subscription:
-            status = frappe.db.get_value("Subscription", self.subscription, "status")
-            if status and status != self.subscription_status:
-                self.subscription_status = status
-                self.db_set("subscription_status", status)
-```
-
----
-
-## 25. Known Gotchas
+## 23. Known Gotchas
 
 ### "Administrator" is Hardcoded
 
@@ -1042,7 +876,7 @@ Never set text values to Date fields via JavaScript:
 
 ```javascript
 // WRONG - causes "Invalid date format" error
-frm.set_value('membership_expiry_date', 'Active');
+frm.set_value('expiry_date', 'Active');
 
 // CORRECT - use dashboard headline or indicator instead
 frm.dashboard.set_headline('Active', 'green');
@@ -1057,87 +891,38 @@ JSON field definitions with `fetch_from` only populate when the form loads and t
 Always escape user input in raw SQL:
 
 ```python
-chapter_list = "', '".join([c.replace("'", "''") for c in accessible_chapters])
-return f"`tabChapter`.`name` IN ('{chapter_list}')"
+safe_list = "', '".join([item.replace("'", "''") for item in user_input])
+return f"`tabMyDocType`.`field` IN ('{safe_list}')"
 ```
 
 ---
 
-## 26. Non Profit App: Member and Membership Structure
+## 24. Environment Setup
 
-### Entity Relationships
+### Required Versions
+- **Node.js:** 24 (via nvm)
+- **Python:** 3.14.0 (via pyenv)
+- **Yarn:** 1.22.22 (via corepack)
 
+### Setup Commands
+```bash
+# Node.js
+nvm use 24
+
+# Python
+pyenv global 3.14.0
+
+# Yarn
+corepack enable
+corepack prepare yarn@1.22.22 --activate
+
+# Start development server
+bench start
 ```
-CUSTOMER (existing)
-    |
-    | (select existing)
-    v
-MEMBER
-    - customer (mandatory)
-    - first_name (fetched from Contact)
-    - last_name (fetched from Contact)
-    - subscription
-    |
-    | (required)
-    v
-MEMBERSHIP
-    - member (mandatory)
-    - membership_type
-    - subscription (auto-created if auto_renew)
-    |
-    | (creates on submit)
-    v
-SUBSCRIPTION
-    - party_type = "Customer"
-    - party = (from Member.customer)
-    |
-    | (generates)
-    v
-SALES INVOICE
-    - customer = (from Member.customer)
-```
-
-### Member Validation
-
-```python
-class Member(Document):
-    def validate(self):
-        if not self.customer:
-            frappe.throw(_("Customer is required"))
-
-        if self.email_id:
-            self.validate_email_type(self.email_id)
-
-        self.fetch_contact_details()
-```
-
-### Membership Validation
-
-```python
-class Membership(Document):
-    def validate(self):
-        if not self.member:
-            frappe.throw(_("Member is required"))
-
-        customer = frappe.db.get_value("Member", self.member, "customer")
-        if not customer:
-            frappe.throw(
-                _("Member {0} does not have a Customer linked.").format(self.member)
-            )
-```
-
-### Data Flow
-
-1. User creates/selects **Customer** (must have Contact with first_name/last_name)
-2. User creates **Member** with customer selected
-3. Member auto-fetches first_name/last_name from Contact linked to Customer
-4. User creates **Membership** linked to Member
-5. On submit (if auto_renew), Membership creates **Subscription** with party=Member.customer
-6. Subscription generates **Sales Invoices** automatically
 
 ---
 
-## 27. Useful Commands
+## 25. Useful Commands
 
 ```bash
 # Restart bench after code changes
@@ -1160,4 +945,4 @@ bench --site [site] console
 
 # Reload doctype from JSON
 bench --site [site] reload-doctype "DocType Name" --app my_app
-``` 
+```

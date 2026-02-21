@@ -1,4 +1,8 @@
-"""Populate addresses for all customers with sample German addresses."""
+"""
+Populate addresses for all customers with sample addresses.
+
+Run: bench --site <site> execute non_profit.fixtures.create_addresses.execute
+"""
 
 import frappe
 import random
@@ -7,62 +11,28 @@ import random
 def execute():
     """Create addresses for all customers that don't have one."""
     cities = [
-        ("10115", "Berlin", "Mitte"),
-        ("80331", "München", "Altstadt"),
-        ("50667", "Köln", "Innenstadt"),
-        ("60311", "Frankfurt", "Altstadt"),
-        ("70173", "Stuttgart", "Mitte"),
-        ("20095", "Hamburg", "Altstadt"),
-        ("30159", "Hannover", "Mitte"),
-        ("40210", "Düsseldorf", "Stadtmitte"),
-        ("80339", "München", "Westend"),
-        ("81667", "München", "Haidhausen"),
-        ("85354", "Freising", "Stadt"),
-        ("82205", "Gilching", "Stadt"),
-        ("82319", "Starnberg", "Stadt"),
-        ("82131", "Gauting", "Stadt"),
-        ("82049", "Pullach", "Stadt"),
-        ("82234", "Wessling", "Stadt"),
-        ("80939", "München", "Schwabing"),
-        ("80686", "München", "Sendling"),
-        ("82008", "Unterhaching", "Stadt"),
-        ("85579", "Neubiberg", "Stadt"),
-        ("80335", "München", "Maxvorstadt"),
-        ("80469", "München", "Glockenbach"),
-        ("80796", "München", "Schwabing-West"),
-        ("81541", "München", "Giesing"),
-        ("81373", "München", "Sendling-Westpark"),
+        ("10001", "City A"),
+        ("20002", "City B"),
+        ("30003", "City C"),
+        ("40004", "City D"),
+        ("50005", "City E"),
+        ("60006", "City F"),
+        ("70007", "City G"),
+        ("80008", "City H"),
     ]
 
     streets = [
-        "Hauptstraße",
-        "Bahnhofstraße",
-        "Schulstraße",
-        "Kirchstraße",
-        "Gartenstraße",
-        "Lindenstraße",
-        "Bachstraße",
-        "Parkstraße",
-        "Mühlstraße",
-        "Marktstraße",
-        "Rathausstraße",
-        "Dorfstraße",
-        "Waldstraße",
-        "Bergstraße",
-        "Brunnenstraße",
-        "Friedhofstraße",
-        "Mühldorfer Straße",
-        "Münchner Straße",
-        "Weißenseestraße",
-        "Wolfratshauser Straße",
-        "Isartalstraße",
-        "Sauerbruchstraße",
-        "Herzogstraße",
-        "Prinzregentenstraße",
-        "Leopoldstraße",
-        "Sendlinger Straße",
-        "Tal",
+        "Main Street",
+        "Park Avenue",
+        "Oak Street",
+        "Maple Drive",
+        "Cedar Lane",
+        "Pine Road",
+        "Elm Street",
+        "Washington Street",
     ]
+
+    countries = ["United States", "Canada", "United Kingdom", "Germany", "Australia"]
 
     customers = frappe.get_all("Customer", fields=["name", "customer_name"])
     print(f"Creating addresses for {len(customers)} customers...")
@@ -83,14 +53,15 @@ def execute():
         city_data = cities[idx % len(cities)]
         street = streets[idx % len(streets)]
         house_num = random.randint(1, 150)
+        country = countries[idx % len(countries)]
 
         address = frappe.new_doc("Address")
         address.address_title = customer.customer_name
         address.address_type = "Billing"
         address.address_line1 = f"{street} {house_num}"
-        address.pincode = city_data[0]
         address.city = city_data[1]
-        address.country = "Germany"
+        address.pincode = city_data[0]
+        address.country = country
         address.insert(ignore_permissions=True)
 
         address.append(

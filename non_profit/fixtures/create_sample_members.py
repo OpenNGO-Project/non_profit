@@ -2,11 +2,11 @@
 Create sample members and test users for membership system.
 
 This script creates:
-- 35 members (one per chapter)
-- 35 customers linked to members
-- 35 addresses linked to customers
-- 35 memberships (submitted, with subscriptions)
-- 7 test users with chapter permissions for testing
+- Members (one per chapter)
+- Customers linked to members
+- Addresses linked to customers
+- Memberships (submitted, with subscriptions)
+- Test users with chapter permissions
 
 Run: bench --site <site> execute non_profit.fixtures.create_sample_members.execute
 """
@@ -14,6 +14,13 @@ Run: bench --site <site> execute non_profit.fixtures.create_sample_members.execu
 import frappe
 from frappe import _
 from frappe.utils import getdate
+
+from non_profit.non_profit.utils import (
+    get_customer_group,
+    get_default_company,
+    get_default_membership_type,
+    get_territory,
+)
 
 
 def execute():
@@ -28,7 +35,7 @@ def execute():
 
 
 def create_sample_members():
-    """Create 35 sample members, one per chapter."""
+    """Create sample members, one per chapter."""
     print("\n=== Creating Sample Members ===")
 
     chapters = frappe.get_all(
@@ -56,21 +63,13 @@ def create_sample_members():
 def create_member_for_chapter(chapter, index, company, membership_type):
     """Create a member, customer, address, and membership for a chapter."""
 
-    chapter_slug = chapter.name.lower()
-    chapter_slug = chapter_slug.replace(" ", ".").replace("-", ".")
-    chapter_slug = chapter_slug.replace("(", "").replace(")", "")
-    chapter_slug = chapter_slug.replace("ö", "oe").replace("ü", "ue").replace("ä", "ae")
-    chapter_slug = chapter_slug.replace("ß", "ss").replace(".", ".")
-    chapter_slug = "".join(c for c in chapter_slug if ord(c) < 128 or c == ".")
-    while ".." in chapter_slug:
-        chapter_slug = chapter_slug.replace("..", ".")
-
-    email = f"mitglied.{chapter_slug}@oedp-test.de"
+    slug = make_slug(chapter.name)
+    email = f"member.{slug}@example.com"
 
     if frappe.db.exists("Member", {"email_id": email}):
         return None
 
-    member_name = f"Mitglied {chapter.name}"
+    member_name = f"Member {chapter.name}"
 
     customer = create_customer_for_member_name(member_name)
 
@@ -104,6 +103,17 @@ def create_member_for_chapter(chapter, index, company, membership_type):
     return member
 
 
+def make_slug(name):
+    """Convert a name to a URL-safe slug."""
+    slug = name.lower()
+    slug = slug.replace(" ", ".").replace("-", ".")
+    slug = slug.replace("(", "").replace(")", "")
+    slug = "".join(c for c in slug if c.isalnum() or c == ".")
+    while ".." in slug:
+        slug = slug.replace("..", ".")
+    return slug
+
+
 def create_customer_for_member_name(member_name):
     """Create a customer for a member."""
     customer = frappe.new_doc("Customer")
@@ -128,15 +138,14 @@ def create_address_for_customer(customer, member_name, index):
         {
             "address_title": member_name,
             "address_type": "Billing",
-            "address_line1": f"Hauptstraße {index}",
-            "city": "Berlin",
-            "pincode": "10115",
-            "country": "Germany",
+            "address_line1": f"Main Street {index}",
+            "city": "City",
+            "pincode": "10000",
+            "country": "Country",
         }
     )
     address.insert()
 
-    # Link address to customer
     address.append(
         "links",
         {
@@ -150,62 +159,55 @@ def create_address_for_customer(customer, member_name, index):
 
 
 def create_test_users():
-    """Create 7 test users with chapter permissions."""
+    """Create test users with chapter permissions."""
     print("\n=== Creating Test Users ===")
+
+    chapters = frappe.get_all("Chapter", fields=["name"], order_by="lft", limit=6)
 
     test_users = [
         {
-            "email": "test-admin@oedp-test.de",
+            "email": "admin@example.com",
             "name": "Test Admin",
             "chapter": None,
             "role": "Non Profit Manager",
             "description": "Can see all members (manager role)",
         },
-        {
-            "email": "test-bundesverband@oedp-test.de",
-            "name": "Test Bundesverband",
-            "chapter": "Bundesverband",
-            "access_level": "Full Access",
-            "description": "Can see all members (top level)",
-        },
-        {
-            "email": "test-bayern@oedp-test.de",
-            "name": "Test Bayern",
-            "chapter": "Landesverband Bayern",
-            "access_level": "Full Access",
-            "description": "Can see Bavaria members",
-        },
-        {
-            "email": "test-oberbayern@oedp-test.de",
-            "name": "Test Oberbayern",
-            "chapter": "Bezirksverband Oberbayern",
-            "access_level": "Full Access",
-            "description": "Can see Oberbayern members",
-        },
-        {
-            "email": "test-muenchen-land@oedp-test.de",
-            "name": "Test München-Land",
-            "chapter": "Kreisverband München-Land",
-            "access_level": "Full Access",
-            "description": "Can see München-Land members",
-        },
-        {
-            "email": "test-pullach@oedp-test.de",
-            "name": "Test Pullach",
-            "chapter": "Ortsverband Pullach",
-            "access_level": "Full Access",
-            "description": "Can see only Pullach member",
-        },
-        {
-            "email": "test-thueringen@oedp-test.de",
-            "name": "Test Thüringen",
-            "chapter": "Landesverband Thüringen",
-            "access_level": "Full Access",
-            "description": "Can see Thuringia members",
-        },
     ]
 
-    password = "OedpTest123!"
+    if chapters:
+        test_users.append(
+            {
+                "email": "top-level@example.com",
+                "name": "Test Top Level",
+                "chapter": chapters[0].name,
+                "access_level": "Full Access",
+                "description": f"Can see all members (top level: {chapters[0].name})",
+            }
+        )
+
+        if len(chapters) > 2:
+            test_users.append(
+                {
+                    "email": "mid-level@example.com",
+                    "name": "Test Mid Level",
+                    "chapter": chapters[1].name,
+                    "access_level": "Full Access",
+                    "description": f"Can see {chapters[1].name} members",
+                }
+            )
+
+        if len(chapters) > 5:
+            test_users.append(
+                {
+                    "email": "low-level@example.com",
+                    "name": "Test Low Level",
+                    "chapter": chapters[-1].name,
+                    "access_level": "Full Access",
+                    "description": f"Can see only {chapters[-1].name}",
+                }
+            )
+
+    password = "Test123456!"
 
     created = 0
     for user_data in test_users:
@@ -224,7 +226,6 @@ def create_test_users():
 def create_test_user(user_data, password):
     """Create a test user with chapter permissions."""
 
-    # Check if user exists
     existing = frappe.db.exists("User", user_data["email"])
     if existing:
         user = frappe.get_doc("User", existing)
@@ -240,20 +241,17 @@ def create_test_user(user_data, password):
         )
         user.insert()
 
-    # Add role
     if user_data.get("role"):
         if not frappe.db.exists(
             "Has Role", {"parent": user.name, "role": user_data["role"]}
         ):
             user.add_roles(user_data["role"])
     else:
-        # Default role for chapter users
         if not frappe.db.exists(
             "Has Role", {"parent": user.name, "role": "Non Profit Member"}
         ):
             user.add_roles("Non Profit Member")
 
-    # Create chapter permission
     if user_data.get("chapter"):
         existing_perm = frappe.db.exists(
             "User Permission",
@@ -275,56 +273,6 @@ def create_test_user(user_data, password):
     return user
 
 
-def get_default_company():
-    """Get default company from settings or first company."""
-    company = frappe.db.get_single_value("Non Profit Settings", "company")
-    if not company:
-        companies = frappe.get_all("Company", limit=1)
-        if companies:
-            company = companies[0].name
-    return company
-
-
-def get_default_membership_type():
-    """Get default membership type."""
-    membership_type = frappe.db.exists("Membership Type", "ÖDP Mitglied")
-    if membership_type:
-        return membership_type
-
-    # Get first membership type
-    types = frappe.get_all("Membership Type", limit=1)
-    if types:
-        return types[0].name
-
-    return None
-
-
-def get_customer_group():
-    """Get or create customer group for members."""
-    group = frappe.db.exists("Customer Group", "Members")
-    if group:
-        return group
-
-    root = frappe.db.get_value("Customer Group", {"is_group": 1}, "name")
-
-    customer_group = frappe.new_doc("Customer Group")
-    customer_group.update(
-        {
-            "customer_group_name": "Members",
-            "parent_customer_group": root or "All Customer Groups",
-        }
-    )
-    customer_group.insert()
-
-    return customer_group.name
-
-
-def get_territory():
-    """Get default territory."""
-    territory = frappe.db.get_value("Territory", {"is_group": 1}, "name")
-    return territory or "All Territories"
-
-
 def print_summary():
     """Print summary of created data."""
     print("\n=== Summary ===")
@@ -333,26 +281,21 @@ def print_summary():
     memberships = frappe.db.count("Membership", {"docstatus": 1})
     customers = frappe.db.count("Customer")
     subscriptions = frappe.db.count("Subscription")
-    invoices = frappe.db.count("Sales Invoice")
 
     print(f"Total Members: {members}")
     print(f"Submitted Memberships: {memberships}")
     print(f"Customers: {customers}")
     print(f"Subscriptions: {subscriptions}")
-    print(f"Sales Invoices: {invoices}")
 
     print("\n=== Test Users ===")
-    print("Email                          | Role                | Chapter")
-    print("-" * 80)
+    print("Email                    | Role                | Chapter")
+    print("-" * 60)
 
     test_emails = [
-        "test-admin@oedp-test.de",
-        "test-bundesverband@oedp-test.de",
-        "test-bayern@oedp-test.de",
-        "test-oberbayern@oedp-test.de",
-        "test-muenchen-land@oedp-test.de",
-        "test-pullach@oedp-test.de",
-        "test-thueringen@oedp-test.de",
+        "admin@example.com",
+        "top-level@example.com",
+        "mid-level@example.com",
+        "low-level@example.com",
     ]
 
     for email in test_emails:
@@ -371,26 +314,6 @@ def print_summary():
             )
             chapter = perm.for_value if perm else "All (manager)"
 
-            print(f"{email:30} | {role:19} | {chapter}")
+            print(f"{email:24} | {role:19} | {chapter}")
 
-    print(f"\nAll test users password: OedpTest123!")
-
-
-def verify_permissions():
-    """Verify that permissions work correctly for test users."""
-    print("\n=== Verifying Permissions ===")
-
-    test_cases = [
-        ("test-bundesverband@oedp-test.de", 35, "Should see all 35 members"),
-        ("test-bayern@oedp-test.de", 26, "Should see Bavaria members (~26)"),
-        ("test-pullach@oedp-test.de", 1, "Should see only 1 member (Pullach)"),
-    ]
-
-    for email, expected_count, description in test_cases:
-        frappe.set_user(email)
-        visible = frappe.get_all("Member", fields=["name"])
-        count = len(visible)
-        status = "✓" if count >= expected_count else "✗"
-        print(f"  {status} {email}: {count} members ({description})")
-
-    frappe.set_user("Administrator")
+    print(f"\nAll test users password: Test123456!")
