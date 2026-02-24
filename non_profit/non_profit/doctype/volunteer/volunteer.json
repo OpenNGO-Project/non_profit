@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:email",
+ "autoname": "field:volunteer_name",
  "creation": "2017-09-19 16:16:45.676019",
  "doctype": "DocType",
  "editable_grid": 1,
@@ -10,12 +10,11 @@
   "volunteer_name",
   "column_break_5",
   "volunteer_type",
+  "contact_section",
+  "contact",
   "email",
+  "column_break_contact",
   "image",
-  "address_contacts",
-  "address_html",
-  "column_break_9",
-  "contact_html",
   "volunteer_availability_and_skills_details",
   "availability",
   "availability_timeslot",
@@ -45,12 +44,30 @@
    "reqd": 1
   },
   {
+   "fieldname": "contact_section",
+   "fieldtype": "Section Break",
+   "label": "Contact"
+  },
+  {
+   "fieldname": "contact",
+   "fieldtype": "Link",
+   "label": "Contact",
+   "options": "Contact",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "contact.email_id",
    "fieldname": "email",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Email",
-   "reqd": 1,
+   "options": "Email",
+   "read_only": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "column_break_contact",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "image",
@@ -59,27 +76,6 @@
    "label": "Image",
    "no_copy": 1,
    "print_hide": 1
-  },
-  {
-   "depends_on": "eval:!doc.__islocal;",
-   "fieldname": "address_contacts",
-   "fieldtype": "Section Break",
-   "label": "Address and Contact",
-   "options": "fa fa-map-marker"
-  },
-  {
-   "fieldname": "address_html",
-   "fieldtype": "HTML",
-   "label": "Address HTML"
-  },
-  {
-   "fieldname": "column_break_9",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "contact_html",
-   "fieldtype": "HTML",
-   "label": "Contact HTML"
   },
   {
    "fieldname": "volunteer_availability_and_skills_details",
@@ -120,7 +116,7 @@
  ],
  "image_field": "image",
  "links": [],
- "modified": "2020-09-16 23:45:15.595952",
+ "modified": "2026-02-23 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Volunteer",

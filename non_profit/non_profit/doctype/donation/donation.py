@@ -195,33 +195,34 @@ def create_razorpay_donation(donor, payment):
 
 
 def get_donor(email):
-    donors = frappe.get_all("Donor", filters={"email": email}, order_by="creation desc")
+    from non_profit.non_profit.doctype.donor.donor import get_or_create_donor
 
     try:
-        return frappe.get_doc("Donor", donors[0]["name"])
+        return get_or_create_donor(email)
     except Exception:
         return None
 
 
 @frappe.whitelist()
 def create_donor(payment):
+    from non_profit.non_profit.doctype.donor.donor import (
+        create_donor_with_contact_and_customer,
+    )
+
     donor_details = frappe._dict(payment)
     donor_type = frappe.db.get_single_value("Non Profit Settings", "default_donor_type")
 
-    donor = frappe.new_doc("Donor")
-    donor.update(
-        {
-            "donor_name": donor_details.email,
-            "donor_type": donor_type,
-            "email": donor_details.email,
-            "contact": donor_details.contact,
-        }
+    donor_name = donor_details.get("name") or donor_details.email.split("@")[0]
+
+    donor = create_donor_with_contact_and_customer(
+        email=donor_details.email,
+        donor_type=donor_type,
+        donor_name=donor_name,
     )
 
     if donor_details.get("notes"):
         donor = get_additional_notes(donor, donor_details)
 
-    donor.insert(ignore_mandatory=True)
     return donor
 
 

@@ -3,15 +3,19 @@
 
 frappe.ui.form.on('Volunteer', {
 	refresh: function(frm) {
+		// No more Dynamic Link pattern
+	},
 
-		frappe.dynamic_link = {doc: frm.doc, fieldname: 'name', doctype: 'Volunteer'};
-
-		frm.toggle_display(['address_html','contact_html'], !frm.doc.__islocal);
-
-		if(!frm.doc.__islocal) {
-			frappe.contacts.render_address_and_contact(frm);
+	contact: function(frm) {
+		if (frm.doc.contact) {
+			frappe.db.get_value("Contact", frm.doc.contact, ["email_id"])
+				.then(r => {
+					if (r.message) {
+						frm.set_value("email", r.message.email_id);
+					}
+				});
 		} else {
-			frappe.contacts.clear_address_and_contact(frm);
+			frm.set_value("email", "");
 		}
 	}
 });
