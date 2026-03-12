@@ -4,6 +4,12 @@ import frappe
 from frappe import _
 from frappe.utils import parse_addr, validate_email_address
 
+from non_profit.non_profit.doctype.member.member import (
+    get_customer_primary_contact,
+    get_member_contact,
+    get_member_email,
+)
+
 
 @frappe.whitelist()
 def import_selected_subscribers(email_group, source_doctype, selected_records):
@@ -76,7 +82,7 @@ def import_members_by_chapter(email_group, chapter):
 
     members = frappe.db.sql(
         f"""
-        SELECT DISTINCT m.name, m.email_id, m.customer
+        SELECT DISTINCT m.name
         FROM `tabMember` m
         WHERE (
             m.primary_chapter IN ('{chapter_list}')
@@ -87,22 +93,18 @@ def import_members_by_chapter(email_group, chapter):
                 AND cr.is_active = 1
             )
         )
-        AND m.email_id IS NOT NULL
-        AND m.email_id != ''
     """,
         as_dict=True,
     )
 
     added = 0
     for member in members:
-        if not member.email_id:
-            continue
-
-        email = parse_addr(member.email_id)[1] if member.email_id else None
+        email = get_member_email(member.name)
         if not email:
             continue
 
-        contact = get_contact_for_customer(member.customer)
+        email = parse_addr(email)[1]
+        contact = get_member_contact(member.name)
 
         with contextlib.suppress(
             frappe.UniqueValidationError, frappe.InvalidEmailAddressError
@@ -145,14 +147,12 @@ def get_email_and_contact(
         return None, None
 
     if doctype == "Member":
-        record = frappe.db.get_value(
-            "Member", record_name, ["email_id", "customer"], as_dict=True
-        )
-        if not record or not record.email_id:
+        email = get_member_email(record_name)
+        if not email:
             return None, None
 
-        email = parse_addr(record.email_id)[1]
-        contact = get_contact_for_customer(record.customer)
+        email = parse_addr(email)[1]
+        contact = get_member_contact(record_name)
         return email, contact.name if contact else None
 
     if doctype == "Donor":
@@ -188,39 +188,7 @@ def get_chapter_and_descendants(chapter_name: str) -> list[str]:
 
 def get_contact_for_customer(customer: str) -> dict | None:
     """Get the primary contact for a customer."""
-    if not customer:
-        return None
-
-    contact_names = frappe.get_all(
-        "Dynamic Link",
-        filters={
-            "link_doctype": "Customer",
-            "link_name": customer,
-            "parenttype": "Contact",
-        },
-        fields=["parent"],
-        pluck="parent",
-    )
-
-    if not contact_names:
-        return None
-
-    primary_contact = frappe.db.get_value(
-        "Contact",
-        {"name": ["in", contact_names], "is_primary_contact": 1},
-        ["name", "first_name", "last_name"],
-        as_dict=True,
-    )
-
-    if primary_contact:
-        return primary_contact
-
-    return frappe.db.get_value(
-        "Contact",
-        {"name": ["in", contact_names]},
-        ["name", "first_name", "last_name"],
-        as_dict=True,
-    )
+    return get_customer_primary_contact(customer)
 
 
 def update_total_subscribers(email_group):

@@ -180,9 +180,9 @@ function get_setters_for_doctype(doctype) {
 		],
 		Member: [
 			{ fieldname: "member_name", fieldtype: "Data", label: __("Member Name") },
-			{ fieldname: "email_id", fieldtype: "Data", label: __("Email") },
+			{ fieldname: "customer", fieldtype: "Link", label: __("Customer"), options: "Customer" },
 			{ fieldname: "primary_chapter", fieldtype: "Link", label: __("Chapter"), options: "Chapter" },
-			{ fieldname: "membership_type", fieldtype: "Link", label: __("Membership Type"), options: "Membership Type" },
+			{ fieldname: "designated_representative", fieldtype: "Link", label: __("Designated Representative"), options: "Contact" },
 		],
 		Donor: [
 			{ fieldname: "donor_name", fieldtype: "Data", label: __("Donor Name") },
@@ -202,7 +202,7 @@ function get_setters_for_doctype(doctype) {
 function get_columns_for_doctype(doctype) {
 	const columns_map = {
 		Contact: ["name", "first_name", "last_name", "email_id"],
-		Member: ["name", "member_name", "email_id", "primary_chapter"],
+		Member: ["name", "member_name", "customer", "primary_chapter"],
 		Donor: ["name", "donor_name", "email", "donor_type"],
 		Lead: ["name", "first_name", "last_name", "email_id", "status"],
 	};
@@ -213,7 +213,7 @@ function get_columns_for_doctype(doctype) {
 function get_filters_for_doctype(doctype) {
 	const filters_map = {
 		Contact: { email_id: ["!=", ""] },
-		Member: { email_id: ["!=", ""] },
+		Member: { customer: ["!=", ""] },
 		Donor: { email: ["!=", ""] },
 		Lead: { email_id: ["!=", ""] },
 	};

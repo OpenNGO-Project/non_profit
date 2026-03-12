@@ -1,57 +1,58 @@
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 
-class TestNewsletter(FrappeTestCase):
+class TestNewsletter(IntegrationTestCase):
     def setUp(self):
         frappe.set_user("Administrator")
 
-    def tearDown(self):
-        frappe.db.rollback()
-
     def test_newsletter_creation(self):
+        suffix = frappe.generate_hash(length=8)
         email_group = frappe.get_doc(
             {
                 "doctype": "Email Group",
-                "title": "_Test Newsletter Group",
+                "title": f"_Test Newsletter Group {suffix}",
             }
-        ).insert(ignore_if_duplicate=1)
+        ).insert()
 
         newsletter = frappe.get_doc(
             {
                 "doctype": "Newsletter",
-                "subject": "_Test Newsletter Subject",
-                "email_group": email_group.name,
+                "subject": f"_Test Newsletter Subject {suffix}",
                 "content": "<p>Test content</p>",
             }
-        ).insert()
+        )
+        newsletter.append("email_groups", {"email_group": email_group.name})
+        newsletter.insert()
 
-        self.assertEqual(newsletter.subject, "_Test Newsletter Subject")
+        self.assertEqual(newsletter.subject, f"_Test Newsletter Subject {suffix}")
         self.assertEqual(newsletter.status, "Draft")
 
     def test_recipient_count(self):
+        suffix = frappe.generate_hash(length=8)
         email_group = frappe.get_doc(
             {
                 "doctype": "Email Group",
-                "title": "_Test Recipient Count Group",
+                "title": f"_Test Recipient Count Group {suffix}",
             }
-        ).insert(ignore_if_duplicate=1)
+        ).insert()
 
-        member = frappe.get_doc(
+        frappe.get_doc(
             {
                 "doctype": "Email Group Member",
                 "email_group": email_group.name,
-                "email": "test@example.com",
+                "email": f"test-{suffix}@example.com",
             }
-        ).insert(ignore_if_duplicate=1)
+        ).insert()
 
         newsletter = frappe.get_doc(
             {
                 "doctype": "Newsletter",
-                "subject": "_Test Recipient Count",
-                "email_group": email_group.name,
+                "subject": f"_Test Recipient Count {suffix}",
                 "content": "<p>Test</p>",
             }
-        ).insert()
+        )
+        newsletter.append("email_groups", {"email_group": email_group.name})
+        newsletter.insert()
 
         self.assertGreaterEqual(newsletter.total_recipients, 1)

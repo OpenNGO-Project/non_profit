@@ -49,9 +49,9 @@ def create_donor_type():
 
 
 def create_donor():
-    donor = frappe.db.exists("Donor", "donor@test.com")
+    donor = frappe.db.get_value("Donor", {"email": "donor@test.com"}, "name")
     if donor:
-        return frappe.get_doc("Donor", "donor@test.com")
+        return frappe.get_doc("Donor", donor)
 
     from non_profit.non_profit.doctype.donor.donor import (
         create_donor_with_contact_and_customer,

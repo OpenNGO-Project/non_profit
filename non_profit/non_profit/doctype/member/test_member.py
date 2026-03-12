@@ -1,124 +1,139 @@
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 
-class TestMember(FrappeTestCase):
-    def setUp(self):
-        frappe.set_user("Administrator")
-
+class TestMember(IntegrationTestCase):
     def test_member_requires_customer(self):
-        member = frappe.new_doc("Member")
-        member.member_name = "_Test Member No Customer"
-        member.email_id = "test_no_customer@example.com"
-        member.flags.ignore_mandatory = True
+        with self.assertRaises(frappe.ValidationError):
+            frappe.get_doc({"doctype": "Member"}).insert()
+
+    def test_company_customer_uses_organization_name(self):
+        customer = self.create_customer("Company")
+        self.create_contact(
+            customer.name, "Alex", "Representative", is_primary_contact=1
+        )
+
+        member = frappe.get_doc(
+            {"doctype": "Member", "customer": customer.name}
+        ).insert()
+
+        self.assertEqual(member.member_name, customer.customer_name)
+
+    def test_individual_customer_uses_designated_representative_name(self):
+        customer = self.create_customer("Individual")
+        self.create_contact(customer.name, "Primary", "Person", is_primary_contact=1)
+        representative = self.create_contact(customer.name, "Chosen", "Representative")
+
+        member = frappe.get_doc(
+            {
+                "doctype": "Member",
+                "customer": customer.name,
+                "designated_representative": representative.name,
+            }
+        ).insert()
+
+        self.assertEqual(member.member_name, "Chosen Representative")
+
+    def test_individual_customer_falls_back_to_primary_contact(self):
+        customer = self.create_customer("Individual")
+        self.create_contact(customer.name, "Jane", "Smith", is_primary_contact=1)
+
+        member = frappe.get_doc(
+            {"doctype": "Member", "customer": customer.name}
+        ).insert()
+
+        self.assertEqual(member.member_name, "Jane Smith")
+
+    def test_individual_customer_falls_back_to_customer_name_without_contact(self):
+        customer = self.create_customer("Individual")
+
+        member = frappe.get_doc(
+            {"doctype": "Member", "customer": customer.name}
+        ).insert()
+
+        self.assertEqual(member.member_name, customer.customer_name)
+
+    def test_designated_representative_must_belong_to_same_customer(self):
+        customer = self.create_customer("Individual")
+        other_customer = self.create_customer("Individual")
+        other_contact = self.create_contact(other_customer.name, "Other", "Customer")
 
         with self.assertRaises(frappe.ValidationError):
-            member.save()
+            frappe.get_doc(
+                {
+                    "doctype": "Member",
+                    "customer": customer.name,
+                    "designated_representative": other_contact.name,
+                }
+            ).insert()
 
-    def test_member_fetches_contact_details(self):
-        customer = self.create_test_customer()
-        contact = self.create_test_contact(customer, "John", "Doe")
+    def test_duplicate_member_for_same_customer_is_rejected(self):
+        customer = self.create_customer("Individual")
 
-        member = frappe.new_doc("Member")
-        member.member_name = "_Test Member With Contact"
-        member.email_id = "test_with_contact@example.com"
-        member.customer = customer.name
-        member.insert()
+        frappe.get_doc({"doctype": "Member", "customer": customer.name}).insert()
 
-        self.assertEqual(member.first_name, "John")
-        self.assertEqual(member.last_name, "Doe")
+        with self.assertRaises(frappe.ValidationError):
+            frappe.get_doc({"doctype": "Member", "customer": customer.name}).insert()
 
-    def test_member_without_contact(self):
-        customer = self.create_test_customer()
+    def test_get_contact_details_returns_resolved_contact(self):
+        customer = self.create_customer("Individual")
+        representative = self.create_contact(
+            customer.name, "Jane", "Doe", is_primary_contact=1
+        )
+        member = frappe.get_doc(
+            {
+                "doctype": "Member",
+                "customer": customer.name,
+                "designated_representative": representative.name,
+            }
+        ).insert()
 
-        member = frappe.new_doc("Member")
-        member.member_name = "_Test Member No Contact"
-        member.email_id = "test_no_contact@example.com"
-        member.customer = customer.name
-        member.insert()
+        details = member.get_contact_details()
 
-        self.assertEqual(member.first_name, "")
-        self.assertEqual(member.last_name, "")
+        self.assertEqual(details["resolved_contact"], representative.name)
+        self.assertEqual(details["member_name"], "Jane Doe")
+        self.assertTrue(details["has_contact"])
 
-    def test_get_contact_details_api(self):
-        customer = self.create_test_customer()
-        contact = self.create_test_contact(customer, "Jane", "Smith")
-
-        member = frappe.new_doc("Member")
-        member.member_name = "_Test Member API"
-        member.email_id = "test_api@example.com"
-        member.customer = customer.name
-        member.insert()
-
-        result = member.get_contact_details()
-
-        self.assertEqual(result["first_name"], "Jane")
-        self.assertEqual(result["last_name"], "Smith")
-        self.assertTrue(result["has_contact"])
-
-    def test_get_active_memberships(self):
-        customer = self.create_test_customer()
-        membership_type = self.get_or_create_membership_type()
-
-        member = frappe.new_doc("Member")
-        member.member_name = "_Test Member Memberships"
-        member.email_id = "test_memberships@example.com"
-        member.customer = customer.name
-        member.insert()
-
-        memberships = member.get_active_memberships()
-        self.assertEqual(len(memberships), 0)
-
-    def test_get_primary_membership(self):
-        customer = self.create_test_customer()
-
-        member = frappe.new_doc("Member")
-        member.member_name = "_Test Member Primary"
-        member.email_id = "test_primary@example.com"
-        member.customer = customer.name
-        member.insert()
-
-        primary = member.get_primary_membership()
-        self.assertIsNone(primary)
-
-    def create_test_customer(self):
-        customer = frappe.new_doc("Customer")
-        customer.customer_name = frappe.generate_hash("_Test Customer", 10)
-        customer.customer_type = "Individual"
-        customer.insert()
+    def create_customer(self, customer_type):
+        customer = frappe.get_doc(
+            {
+                "doctype": "Customer",
+                "customer_name": f"_Test Member {customer_type} {frappe.generate_hash(length=8)}",
+                "customer_type": customer_type,
+                "customer_group": frappe.db.get_single_value(
+                    "Selling Settings", "customer_group"
+                ),
+                "territory": frappe.db.get_single_value(
+                    "Selling Settings", "territory"
+                ),
+            }
+        ).insert()
         return customer
 
-    def create_test_contact(self, customer, first_name, last_name):
-        contact = frappe.new_doc("Contact")
-        contact.first_name = first_name
-        contact.last_name = last_name
-        contact.is_primary_contact = 1
-        contact.insert()
-        contact.append(
-            "links", {"link_doctype": "Customer", "link_name": customer.name}
-        )
-        contact.save()
+    def create_contact(
+        self, customer_name, first_name, last_name, is_primary_contact=0, email=None
+    ):
+        contact = frappe.get_doc(
+            {
+                "doctype": "Contact",
+                "first_name": first_name,
+                "last_name": last_name,
+                "is_primary_contact": is_primary_contact,
+                "email_ids": [
+                    {
+                        "doctype": "Contact Email",
+                        "email_id": email
+                        or f"{frappe.generate_hash(length=8)}@example.com",
+                        "is_primary": 1,
+                    }
+                ],
+                "links": [
+                    {
+                        "doctype": "Dynamic Link",
+                        "link_doctype": "Customer",
+                        "link_name": customer_name,
+                    }
+                ],
+            }
+        ).insert()
         return contact
-
-    def get_or_create_membership_type(self):
-        membership_type_name = "_Test Member MType"
-        if not frappe.db.exists("Membership Type", membership_type_name):
-            if not frappe.db.exists("Item", "_Test Member Item"):
-                item = frappe.new_doc("Item")
-                item.item_code = "_Test Member Item"
-                item.item_name = "_Test Member Item"
-                item.stock_uom = "Nos"
-                item.item_group = "All Item Groups"
-                item.is_stock_item = 0
-                item.insert()
-
-            mtype = frappe.new_doc("Membership Type")
-            mtype.membership_type = membership_type_name
-            mtype.amount = 100
-            mtype.linked_item = "_Test Member Item"
-            mtype.insert()
-
-        return membership_type_name
-
-    def tearDown(self):
-        frappe.db.rollback()

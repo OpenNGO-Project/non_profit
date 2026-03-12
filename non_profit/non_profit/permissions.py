@@ -9,6 +9,8 @@ Access automatically cascades to all descendant chapters via NestedSet hierarchy
 import frappe
 from frappe import _
 
+from non_profit.non_profit.doctype.member.member import get_member_email
+
 
 def get_member_query_condition(user: str) -> str:
     """
@@ -143,8 +145,8 @@ def get_subscription_query_condition(user: str) -> str:
 
     A user can access a subscription if:
     1. party_type is not 'Customer' (other party types pass through)
-    2. party (Customer) is linked to a member in an accessible chapter
-    3. subscription is linked to a Membership whose member is in an accessible chapter
+    2. the billing customer belongs to a membership whose member is in an accessible chapter
+    3. the subscription is linked to a membership whose member is in an accessible chapter
     """
     chapter_list, empty_condition = _get_base_conditions(user)
 
@@ -161,8 +163,9 @@ def get_subscription_query_condition(user: str) -> str:
     return f"""
         (`tabSubscription`.`party_type` != 'Customer'
         OR EXISTS (
-            SELECT 1 FROM `tabMember` m
-            WHERE m.customer = `tabSubscription`.`party`
+            SELECT 1 FROM `tabMembership` ms
+            JOIN `tabMember` m ON m.name = ms.member
+            WHERE ms.customer = `tabSubscription`.`party`
             AND {member_condition}
         )
         OR EXISTS (
@@ -178,8 +181,8 @@ def get_sales_invoice_query_condition(user: str) -> str:
     """
     Return SQL condition to filter Sales Invoices based on user's chapter access.
 
-    A user can access a sales invoice if the customer is linked to a member
-    in one of their accessible chapters.
+    A user can access a sales invoice if it belongs to a membership whose member
+    is in one of their accessible chapters.
     """
     chapter_list, empty_condition = _get_base_conditions(user)
 
@@ -195,8 +198,15 @@ def get_sales_invoice_query_condition(user: str) -> str:
 
     return f"""
         EXISTS (
-            SELECT 1 FROM `tabMember` m
-            WHERE m.customer = `tabSales Invoice`.`customer`
+            SELECT 1 FROM `tabMembership` ms
+            JOIN `tabMember` m ON m.name = ms.member
+            WHERE (
+                ms.subscription = `tabSales Invoice`.`subscription`
+                OR (
+                    ifnull(ms.subscription, '') = ''
+                    AND ms.customer = `tabSales Invoice`.`customer`
+                )
+            )
             AND {member_condition}
         )
     """
@@ -206,9 +216,8 @@ def get_contact_query_condition(user: str) -> str:
     """
     Return SQL condition to filter Contacts based on user's chapter access.
 
-    A user can access a contact if:
-    1. The contact is directly linked to a member in an accessible chapter, OR
-    2. The contact is linked to a customer that belongs to a member in an accessible chapter
+    A user can access a contact if it is linked to a customer that belongs to a member
+    in an accessible chapter.
     """
     chapter_list, empty_condition = _get_base_conditions(user)
 
@@ -223,23 +232,13 @@ def get_contact_query_condition(user: str) -> str:
     )
 
     return f"""
-        (
-            EXISTS (
-                SELECT 1 FROM `tabDynamic Link` dl
-                JOIN `tabMember` m ON m.name = dl.link_name
-                WHERE dl.parent = `tabContact`.`name`
-                AND dl.parenttype = 'Contact'
-                AND dl.link_doctype = 'Member'
-                AND {member_condition}
-            )
-            OR EXISTS (
-                SELECT 1 FROM `tabDynamic Link` dl
-                JOIN `tabMember` m ON m.customer = dl.link_name
-                WHERE dl.parent = `tabContact`.`name`
-                AND dl.parenttype = 'Contact'
-                AND dl.link_doctype = 'Customer'
-                AND {member_condition}
-            )
+        EXISTS (
+            SELECT 1 FROM `tabDynamic Link` dl
+            JOIN `tabMember` m ON m.customer = dl.link_name
+            WHERE dl.parent = `tabContact`.`name`
+            AND dl.parenttype = 'Contact'
+            AND dl.link_doctype = 'Customer'
+            AND {member_condition}
         )
     """
 
@@ -506,9 +505,9 @@ def get_members_for_chapter(chapter: str, include_descendants: bool = False):
 
     chapter_list = "', '".join([c.replace("'", "''") for c in chapters])
 
-    return frappe.db.sql(
+    members = frappe.db.sql(
         f"""
-        SELECT DISTINCT m.name, m.member_name, m.email_id, m.primary_chapter
+        SELECT DISTINCT m.name, m.member_name, m.primary_chapter
         FROM `tabMember` m
         WHERE m.primary_chapter IN ('{chapter_list}')
         OR EXISTS (
@@ -521,6 +520,11 @@ def get_members_for_chapter(chapter: str, include_descendants: bool = False):
     """,
         as_dict=True,
     )
+
+    for member in members:
+        member.email = get_member_email(member.name) or ""
+
+    return members
 
 
 @frappe.whitelist()

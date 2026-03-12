@@ -230,7 +230,6 @@
   },
   {
    "depends_on": "eval:doc.recipient === \"Member\";",
-   "fetch_from": "member.email_id",
    "fieldname": "member_email",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -239,7 +238,6 @@
   },
   {
    "depends_on": "eval:doc.recipient === \"Member\";",
-   "fetch_from": "member.pan_number",
    "fieldname": "member_pan_number",
    "fieldtype": "Data",
    "label": "PAN Details",

@@ -1,5 +1,7 @@
 frappe.ui.form.on('Membership', {
 	setup: function(frm) {
+		frm.trigger('set_contact_query');
+
 		frappe.db.get_single_value("Non Profit Settings", "enable_razorpay_for_memberships").then(val => {
 			if (val) frm.set_df_property("razorpay_details_section", "hidden", false);
 		})
@@ -32,6 +34,58 @@ frappe.ui.form.on('Membership', {
 		})
 
 		frm.trigger('set_indicator');
+	},
+
+	member: function(frm) {
+		if (!frm.doc.member) {
+			return;
+		}
+
+		frm.call('get_billing_details').then(r => {
+			if (!r.message) {
+				return;
+			}
+
+			if (!frm.doc.customer && r.message.customer) {
+				frm.set_value('customer', r.message.customer);
+			}
+
+			if (!frm.doc.contact && r.message.contact) {
+				frm.set_value('contact', r.message.contact);
+			}
+		});
+	},
+
+	customer: function(frm) {
+		frm.trigger('set_contact_query');
+
+		if (!frm.doc.customer) {
+			frm.set_value('contact', '');
+			return;
+		}
+
+		frm.set_value('contact', '');
+		frm.call('get_billing_details').then(r => {
+			if (r.message && r.message.contact) {
+				frm.set_value('contact', r.message.contact);
+			}
+		});
+	},
+
+	set_contact_query: function(frm) {
+		frm.set_query('contact', function() {
+			if (!frm.doc.customer) {
+				return { filters: { name: '' } };
+			}
+
+			return {
+				query: 'frappe.contacts.doctype.contact.contact.contact_query',
+				filters: {
+					link_doctype: 'Customer',
+					link_name: frm.doc.customer,
+				},
+			};
+		});
 	},
 
 	set_indicator: function(frm) {

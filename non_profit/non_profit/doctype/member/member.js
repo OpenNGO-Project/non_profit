@@ -1,5 +1,7 @@
 frappe.ui.form.on('Member', {
     refresh: function(frm) {
+        frm.trigger('set_designated_representative_query');
+
         if(!frm.doc.__islocal) {
             frm.add_custom_button(__('Accounting Ledger'), function() {
                 frappe.set_route('query-report', 'General Ledger', {party_type: 'Customer', party: frm.doc.customer});
@@ -17,6 +19,22 @@ frappe.ui.form.on('Member', {
         }
     },
 
+    set_designated_representative_query: function(frm) {
+        frm.set_query('designated_representative', function() {
+            if (!frm.doc.customer) {
+                return { filters: { name: '' } };
+            }
+
+            return {
+                query: 'frappe.contacts.doctype.contact.contact.contact_query',
+                filters: {
+                    link_doctype: 'Customer',
+                    link_name: frm.doc.customer,
+                },
+            };
+        });
+    },
+
     show_membership_status: function(frm) {
         frm.call('get_active_memberships').then(r => {
             if (r.message && r.message.length > 0) {
@@ -29,32 +47,28 @@ frappe.ui.form.on('Member', {
     },
 
     customer: function(frm) {
+        frm.trigger('set_designated_representative_query');
+
+        if (frm.doc.designated_representative) {
+            frm.set_value('designated_representative', '');
+        }
+
+        frm.trigger('refresh_member_name');
+    },
+
+    designated_representative: function(frm) {
+        frm.trigger('refresh_member_name');
+    },
+
+    refresh_member_name: function(frm) {
         if (frm.doc.customer) {
             frm.call("get_contact_details").then(r => {
                 if (r.message) {
-                    if (r.message.has_contact) {
-                        frm.set_value("contact", r.message.contact);
-                        frm.set_value("first_name", r.message.first_name);
-                        frm.set_value("last_name", r.message.last_name);
-                        frm.set_value("email_id", r.message.email_id);
-                    } else {
-                        frappe.msgprint({
-                            title: __("No Contact Found"),
-                            message: __("Customer {0} does not have a Contact record. Please create a Contact first.").replace("{0}", frm.doc.customer),
-                            indicator: "orange"
-                        });
-                        frm.set_value("contact", "");
-                        frm.set_value("first_name", "");
-                        frm.set_value("last_name", "");
-                        frm.set_value("email_id", "");
-                    }
+                    frm.set_value('member_name', r.message.member_name || '');
                 }
             });
         } else {
-            frm.set_value("contact", "");
-            frm.set_value("first_name", "");
-            frm.set_value("last_name", "");
-            frm.set_value("email_id", "");
+            frm.set_value('member_name', '');
         }
     }
 });

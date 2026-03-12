@@ -100,8 +100,11 @@ def get_data(filters):
             m.primary_chapter,
             ms.membership_type
         FROM `tabSales Invoice` si
-        INNER JOIN `tabMember` m ON m.customer = si.customer
-        INNER JOIN `tabMembership` ms ON ms.member = m.name
+        INNER JOIN `tabMembership` ms ON (
+            ms.subscription = si.subscription
+            OR (ifnull(ms.subscription, '') = '' AND ms.customer = si.customer)
+        )
+        INNER JOIN `tabMember` m ON m.name = ms.member
         WHERE {conditions}
         AND ms.docstatus = 1
         ORDER BY si.due_date ASC

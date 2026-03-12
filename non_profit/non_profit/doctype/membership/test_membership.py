@@ -1,21 +1,24 @@
 import frappe
+from frappe.tests import IntegrationTestCase
 from frappe.utils import nowdate
-from frappe.tests.utils import FrappeTestCase
 
 import erpnext
-from non_profit.non_profit.doctype.member.member import create_member
+from non_profit.non_profit.doctype.member.member import (
+    create_member,
+    get_member_contact,
+)
 
 
-class TestMembership(FrappeTestCase):
+class TestMembership(IntegrationTestCase):
     def setUp(self):
-        frappe.db.delete("Customer")
         plan = setup_membership()
         self.plan = plan
+        unique = frappe.generate_hash(length=8)
         self.member_doc = create_member(
             frappe._dict(
                 {
-                    "fullname": "_Test_Member",
-                    "email": "_test_member_erpnext@example.com",
+                    "fullname": f"_Test_Member_{unique}",
+                    "email": f"_test_member_{unique}@example.com",
                 }
             )
         )
@@ -25,25 +28,15 @@ class TestMembership(FrappeTestCase):
     def test_create_membership(self):
         membership = make_membership(self.member)
         self.assertTrue(membership.name)
+        self.assertEqual(membership.customer, self.customer)
+        self.assertEqual(membership.contact, get_member_contact(self.member).name)
 
-    def test_membership_requires_member_with_customer(self):
-        member_without_customer = frappe.new_doc("Member")
-        member_without_customer.member_name = "_Test No Customer"
-        member_without_customer.email_id = "no_customer@example.com"
-        member_without_customer.flags.ignore_mandatory = True
-        member_without_customer.insert()
+    def test_membership_uses_member_customer_for_subscription_party(self):
+        membership = make_membership(self.member)
+        membership.submit()
 
-        membership_data = {
-            "doctype": "Membership",
-            "member": member_without_customer.name,
-            "membership_type": "_rzpy_test_milythm",
-            "company": erpnext.get_default_company(),
-            "member_since_date": nowdate(),
-        }
-        membership = frappe.get_doc(membership_data)
-
-        with self.assertRaises(frappe.ValidationError):
-            membership.insert(ignore_permissions=True)
+        subscription = frappe.get_doc("Subscription", membership.subscription)
+        self.assertEqual(subscription.party, self.customer)
 
     def test_membership_creates_subscription(self):
         membership = make_membership(self.member)
@@ -53,6 +46,36 @@ class TestMembership(FrappeTestCase):
 
         sub = frappe.get_doc("Subscription", membership.subscription)
         self.assertEqual(sub.party, self.customer)
+
+    def test_gift_membership_can_use_different_billing_customer_and_contact(self):
+        billing_customer = create_customer_with_contact()
+
+        membership = make_membership(
+            self.member,
+            {
+                "customer": billing_customer["customer"].name,
+                "contact": billing_customer["contact"].name,
+            },
+        )
+        membership.submit()
+
+        sub = frappe.get_doc("Subscription", membership.subscription)
+        self.assertEqual(membership.customer, billing_customer["customer"].name)
+        self.assertEqual(membership.contact, billing_customer["contact"].name)
+        self.assertEqual(sub.party, billing_customer["customer"].name)
+
+    def test_billing_contact_must_match_billing_customer(self):
+        billing_customer = create_customer_with_contact()
+        other_billing_customer = create_customer_with_contact()
+
+        with self.assertRaises(frappe.ValidationError):
+            make_membership(
+                self.member,
+                {
+                    "customer": billing_customer["customer"].name,
+                    "contact": other_billing_customer["contact"].name,
+                },
+            )
 
     def test_member_can_have_multiple_active_memberships(self):
         """Test that a member can have multiple active memberships of different types."""
@@ -115,9 +138,6 @@ class TestMembership(FrappeTestCase):
         self.assertIsNotNone(primary)
         self.assertEqual(primary["name"], membership.name)
 
-    def tearDown(self):
-        frappe.db.rollback()
-
 
 def make_membership(member, payload={}):
     data = {
@@ -168,3 +188,42 @@ def setup_membership():
         plan = frappe.get_doc("Membership Type", "_rzpy_test_milythm")
 
     return plan
+
+
+def create_customer_with_contact():
+    customer = frappe.get_doc(
+        {
+            "doctype": "Customer",
+            "customer_name": f"_Test Billing {frappe.generate_hash(length=8)}",
+            "customer_type": "Individual",
+            "customer_group": frappe.db.get_single_value(
+                "Selling Settings", "customer_group"
+            ),
+            "territory": frappe.db.get_single_value("Selling Settings", "territory"),
+        }
+    ).insert()
+
+    contact = frappe.get_doc(
+        {
+            "doctype": "Contact",
+            "first_name": "Billing",
+            "last_name": frappe.generate_hash(length=6),
+            "is_primary_contact": 1,
+            "email_ids": [
+                {
+                    "doctype": "Contact Email",
+                    "email_id": f"{frappe.generate_hash(length=8)}@example.com",
+                    "is_primary": 1,
+                }
+            ],
+            "links": [
+                {
+                    "doctype": "Dynamic Link",
+                    "link_doctype": "Customer",
+                    "link_name": customer.name,
+                }
+            ],
+        }
+    ).insert()
+
+    return {"customer": customer, "contact": contact}

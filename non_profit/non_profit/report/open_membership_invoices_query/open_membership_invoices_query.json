@@ -16,7 +16,7 @@
  "name": "Open Membership Invoices Query",
  "owner": "Administrator",
  "prepared_report": 0,
- "query": "\nSELECT\n    si.name AS \"Invoice:Link/Sales Invoice:120\",\n    si.posting_date AS \"Posting Date:Date:100\",\n    si.due_date AS \"Due Date:Date:100\",\n    si.grand_total AS \"Amount:Currency:120\",\n    si.outstanding_amount AS \"Outstanding:Currency:120\",\n    m.name AS \"Member:Link/Member:120\",\n    m.member_name AS \"Member Name:Data:150\",\n    m.primary_chapter AS \"Chapter:Link/Chapter:150\",\n    ms.membership_type AS \"Membership Type:Link/Membership Type:120\"\nFROM `tabSales Invoice` si\nINNER JOIN `tabMember` m ON m.customer = si.customer\nINNER JOIN `tabMembership` ms ON ms.member = m.name\nWHERE si.docstatus = 1\nAND si.outstanding_amount > 0\nAND ms.docstatus = 1\nORDER BY si.due_date ASC\n",
+  "query": "\nSELECT\n    si.name AS \"Invoice:Link/Sales Invoice:120\",\n    si.posting_date AS \"Posting Date:Date:100\",\n    si.due_date AS \"Due Date:Date:100\",\n    si.grand_total AS \"Amount:Currency:120\",\n    si.outstanding_amount AS \"Outstanding:Currency:120\",\n    m.name AS \"Member:Link/Member:120\",\n    m.member_name AS \"Member Name:Data:150\",\n    m.primary_chapter AS \"Chapter:Link/Chapter:150\",\n    ms.membership_type AS \"Membership Type:Link/Membership Type:120\"\nFROM `tabSales Invoice` si\nINNER JOIN `tabMembership` ms ON (\n    ms.subscription = si.subscription\n    OR (ifnull(ms.subscription, '') = '' AND ms.customer = si.customer)\n)\nINNER JOIN `tabMember` m ON m.name = ms.member\nWHERE si.docstatus = 1\nAND si.outstanding_amount > 0\nAND ms.docstatus = 1\nORDER BY si.due_date ASC\n",
  "ref_doctype": "Sales Invoice",
  "report_name": "Open Membership Invoices Query",
  "report_type": "Query Report",

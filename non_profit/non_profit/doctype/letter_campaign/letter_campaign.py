@@ -7,6 +7,12 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils.print_utils import get_print
 
+from non_profit.non_profit.doctype.member.member import (
+    get_customer_primary_contact,
+    get_member_contact,
+    get_member_email,
+)
+
 
 class LetterCampaign(Document):
     def validate(self):
@@ -230,7 +236,7 @@ def add_recipients_by_chapter(campaign_name, chapter):
 
     members = frappe.db.sql(
         f"""
-        SELECT DISTINCT m.name, m.email_id, m.customer
+        SELECT DISTINCT m.name
         FROM `tabMember` m
         WHERE (
             m.primary_chapter IN ('{chapter_list}')
@@ -241,8 +247,6 @@ def add_recipients_by_chapter(campaign_name, chapter):
                 AND cr.is_active = 1
             )
         )
-        AND m.email_id IS NOT NULL
-        AND m.email_id != ''
     """,
         as_dict=True,
     )
@@ -319,96 +323,29 @@ def get_or_create_contact_from_lead(lead_name):
 
 def get_contact_for_customer(customer):
     """Get the primary contact for a customer."""
-    if not customer:
-        return None
-
-    contact_names = frappe.get_all(
-        "Dynamic Link",
-        filters={
-            "link_doctype": "Customer",
-            "link_name": customer,
-            "parenttype": "Contact",
-        },
-        fields=["parent"],
-        pluck="parent",
-    )
-
-    if not contact_names:
-        return None
-
-    primary_contact = frappe.db.get_value(
-        "Contact",
-        {"name": ["in", contact_names], "is_primary_contact": 1},
-        ["name", "first_name", "last_name"],
-        as_dict=True,
-    )
-
-    if primary_contact:
-        return primary_contact
-
-    return frappe.db.get_value(
-        "Contact",
-        {"name": ["in", contact_names]},
-        ["name", "first_name", "last_name"],
-        as_dict=True,
-    )
+    return get_customer_primary_contact(customer)
 
 
 def get_contact_from_member(member_name):
-    contact = frappe.db.sql(
-        """
-        SELECT c.name
-        FROM `tabContact` c
-        INNER JOIN `tabDynamic Link` dl ON dl.parent = c.name
-        WHERE dl.link_doctype = 'Member'
-        AND dl.link_name = %s
-        AND dl.parenttype = 'Contact'
-        LIMIT 1
-    """,
-        member_name,
-        as_dict=True,
-    )
-
-    if contact:
-        return contact[0].name
-
-    customer = frappe.db.get_value("Member", member_name, "customer")
-    if customer:
-        customer_contact = frappe.db.sql(
-            """
-            SELECT c.name
-            FROM `tabContact` c
-            INNER JOIN `tabDynamic Link` dl ON dl.parent = c.name
-            WHERE dl.link_doctype = 'Customer'
-            AND dl.link_name = %s
-            AND dl.parenttype = 'Contact'
-            ORDER BY c.is_primary_contact DESC
-            LIMIT 1
-        """,
-            customer,
-            as_dict=True,
-        )
-        if customer_contact:
-            return customer_contact[0].name
-
-    return contact[0].name if contact else None
+    contact = get_member_contact(member_name)
+    return contact.name if contact else None
 
 
 def get_member_from_contact(contact_name):
-    member = frappe.db.sql(
-        """
-		SELECT dl.link_name
-		FROM `tabDynamic Link` dl
-		WHERE dl.parent = %s
-		AND dl.link_doctype = 'Member'
-		AND dl.parenttype = 'Contact'
-		LIMIT 1
-	""",
-        contact_name,
-        as_dict=True,
+    customer = frappe.db.get_value(
+        "Dynamic Link",
+        {
+            "parent": contact_name,
+            "parenttype": "Contact",
+            "link_doctype": "Customer",
+        },
+        "link_name",
     )
 
-    return member[0].link_name if member else None
+    if not customer:
+        return None
+
+    return frappe.db.get_value("Member", {"customer": customer}, "name")
 
 
 def get_primary_address(contact, member_name=None):
@@ -531,7 +468,7 @@ def get_members_by_membership_type(membership_types):
 
     members = frappe.db.sql(
         """
-		SELECT DISTINCT m.name, m.member_name, m.email_id
+		SELECT DISTINCT m.name, m.member_name
 		FROM `tabMember` m
 		INNER JOIN `tabMembership` ms ON ms.member = m.name
 		WHERE ms.docstatus = 1
@@ -543,6 +480,9 @@ def get_members_by_membership_type(membership_types):
         (tuple(membership_types), today(), today()),
         as_dict=True,
     )
+
+    for member in members:
+        member.email = get_member_email(member.name) or ""
 
     return members
 
