@@ -16,13 +16,13 @@ from non_profit.non_profit.doctype.member.member import create_member
 
 class Membership(Document):
 	def validate(self):
+		# Allow either a Member link (person-centric) or a direct Customer link (org-centric).
 		if not self.member or not frappe.db.exists("Member", self.member):
-			# for web forms
 			user_type = frappe.db.get_value("User", frappe.session.user, "user_type")
 			if user_type == "Website User":
 				self.create_member_from_website_user()
-			else:
-				frappe.throw(_("Please select a Member"))
+			elif not self.get("customer"):
+				frappe.throw(_("Please select a Member or Customer"))
 
 		self.validate_membership_period()
 
@@ -43,21 +43,20 @@ class Membership(Document):
 			self.member = member_name
 
 	def validate_membership_period(self):
-		# get last membership (if active)
 		last_membership = get_last_membership(self.member)
 
-		# if person applied for offline membership
-		if last_membership and last_membership.name != self.name and not frappe.session.user == "Administrator":
-			# if last membership does not expire in 30 days, then do not allow to renew
-			if getdate(add_days(last_membership.to_date, -30)) > getdate(nowdate()) :
+		if last_membership and last_membership.name != self.name and frappe.session.user != "Administrator":
+			if getdate(add_days(last_membership.to_date, -30)) > getdate(nowdate()):
 				frappe.throw(_("You can only renew if your membership expires within 30 days"))
 
 			self.from_date = add_days(last_membership.to_date, 1)
 
-		if frappe.db.get_single_value("Non Profit Settings", "billing_cycle") == "Yearly":
+		billing_cycle = frappe.db.get_single_value("Non Profit Settings", "billing_cycle")
+		if billing_cycle == "Yearly":
 			self.to_date = add_years(self.from_date, 1)
-		else:
+		elif billing_cycle == "Monthly":
 			self.to_date = add_months(self.from_date, 1)
+		# "Custom" or empty: trust whatever to_date was provided (app-specific flows).
 
 	def on_payment_authorized(self, status_changed_to=None):
 		if status_changed_to not in ("Completed", "Authorized"):
@@ -402,19 +401,28 @@ def get_plan_from_razorpay_id(plan_id):
 
 
 def set_expired_status():
-	frappe.db.sql("""
+	frappe.db.sql(
+		"""
 		UPDATE
-			`tabMembership` SET `status` = 'Expired'
+			`tabMembership` SET `membership_status` = 'Expired'
 		WHERE
-			`status` not in ('Cancelled') AND `to_date` < %s
-		""", (nowdate()))
+			`membership_status` not in ('Cancelled', 'Expired') AND `to_date` < %s
+		""",
+		(nowdate(),),
+	)
 
 
 def get_last_membership(member):
-	print(member)
-	'''Returns last membership if exists'''
-	last_membership = frappe.get_all('Membership', 'name,to_date,membership_type',
-		dict(member=member, paid=1), order_by='to_date desc', limit=1)
+	"""Returns last membership if exists"""
+	if not member:
+		return None
+	last_membership = frappe.get_all(
+		"Membership",
+		"name,to_date,membership_type",
+		dict(member=member, paid=1),
+		order_by="to_date desc",
+		limit=1,
+	)
 
 	if last_membership:
 		return last_membership[0]

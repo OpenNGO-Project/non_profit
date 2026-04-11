@@ -8,7 +8,10 @@ from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.model.document import Document
 from frappe.utils import cint, get_link_to_form
 
-from payments.utils import get_payment_gateway_controller
+try:
+	from payments.utils import get_payment_gateway_controller
+except ImportError:
+	get_payment_gateway_controller = None
 
 from non_profit.non_profit.doctype.membership_type.membership_type import get_membership_type
 

@@ -6,7 +6,10 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from payments.utils import get_payment_gateway_controller
+try:
+	from payments.utils import get_payment_gateway_controller
+except ImportError:
+	get_payment_gateway_controller = None
 
 class NonProfitSettings(Document):
 	@frappe.whitelist()

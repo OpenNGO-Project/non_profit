@@ -8,6 +8,8 @@
  "field_order": [
   "member",
   "member_name",
+  "customer",
+  "customer_name",
   "membership_type",
   "column_break_3",
   "company",
@@ -34,6 +36,20 @@
    "fieldtype": "Link",
    "label": "Member",
    "options": "Member"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "description": "Direct Customer link for organization-centric memberships. Alternative to Member."
+  },
+  {
+   "fetch_from": "customer.customer_name",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name",
+   "read_only": 1
   },
   {
    "fieldname": "membership_type",

@@ -39,7 +39,7 @@
    "fieldname": "billing_cycle",
    "fieldtype": "Select",
    "label": "Billing Cycle",
-   "options": "Monthly\nYearly"
+   "options": "\nMonthly\nYearly\nCustom"
   },
   {
    "depends_on": "eval:doc.enable_razorpay_for_memberships",
