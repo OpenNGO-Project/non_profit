@@ -1,0 +1,34 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ _("Spendenbestätigung") }}{% endblock %}
+
+{% block page_content %}
+<div class="container" style="max-width: 560px; margin: 2em auto;">
+	{% if not donation %}
+		<div class="alert alert-danger">{{ _("Spende nicht gefunden.") }}</div>
+	{% elif donation.paid %}
+		<div class="alert alert-success" data-testid="payment-success">
+			<h3>{{ _("Vielen Dank!") }}</h3>
+			<p>{{ _("Ihre Spende ist eingegangen.") }}</p>
+			<p><strong>{{ _("Betrag:") }}</strong> {{ frappe.utils.fmt_money(donation.amount, currency="EUR") }}</p>
+			<p><strong>{{ _("Referenz:") }}</strong> {{ donation.name }}</p>
+			<p class="text-muted">{{ _("Eine Bestätigung wurde an Ihre E-Mail-Adresse gesendet.") }}</p>
+		</div>
+	{% else %}
+		<h2>{{ _("Zahlung abschließen") }}</h2>
+		<p class="text-muted">{{ _("Simuliertes Zahlungssystem (Payrexx-Mock)") }}</p>
+		<div class="card" style="margin-top: 1em; padding: 1em; border: 1px solid #ddd; border-radius: 6px;">
+			<table class="table" style="margin: 0;">
+				<tr><td>{{ _("Betrag") }}</td><td><strong data-testid="confirm-amount">{{ frappe.utils.fmt_money(donation.amount, currency="EUR") }}</strong></td></tr>
+				<tr><td>{{ _("Referenz") }}</td><td data-testid="confirm-ref">{{ donation.name }}</td></tr>
+				<tr><td>{{ _("Name") }}</td><td>{{ donation.donor_name }}</td></tr>
+			</table>
+		</div>
+		<form method="POST" style="margin-top: 1em;">
+			<input type="hidden" name="csrf_token" value="{{ frappe.session.csrf_token }}">
+			<input type="hidden" name="donation" value="{{ donation.name }}">
+			<button type="submit" class="btn btn-primary btn-lg" data-testid="mock-pay-btn">{{ _("Jetzt bezahlen (Mock)") }}</button>
+		</form>
+	{% endif %}
+</div>
+{% endblock %}

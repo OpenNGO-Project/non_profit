@@ -1,0 +1,200 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2026-04-15 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "campaign_name",
+  "campaign_code",
+  "status",
+  "column_break_1",
+  "start_date",
+  "end_date",
+  "goal_amount",
+  "currency",
+  "section_totals",
+  "total_raised",
+  "donor_count",
+  "column_break_totals",
+  "progress_percent",
+  "section_details",
+  "description",
+  "column_break_details",
+  "image",
+  "cost_center",
+  "landing_page"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "NPO-CAMP-.YYYY.-",
+   "reqd": 1
+  },
+  {
+   "fieldname": "campaign_name",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Campaign Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "campaign_code",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Campaign Code",
+   "unique": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nActive\nClosed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Start Date"
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "End Date"
+  },
+  {
+   "fieldname": "goal_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Goal Amount",
+   "options": "currency"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency"
+  },
+  {
+   "fieldname": "section_totals",
+   "fieldtype": "Section Break",
+   "label": "Totals"
+  },
+  {
+   "fieldname": "total_raised",
+   "fieldtype": "Currency",
+   "label": "Total Raised",
+   "no_copy": 1,
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "donor_count",
+   "fieldtype": "Int",
+   "label": "Donor Count",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_totals",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "progress_percent",
+   "fieldtype": "Percent",
+   "label": "Progress",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_details",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "Description"
+  },
+  {
+   "fieldname": "column_break_details",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Image"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
+   "fieldname": "landing_page",
+   "fieldtype": "Data",
+   "label": "Landing Page URL"
+  }
+ ],
+ "image_field": "image",
+ "index_web_pages_for_search": 1,
+ "links": [
+  {
+   "link_doctype": "Donation",
+   "link_fieldname": "campaign"
+  }
+ ],
+ "modified": "2026-04-15 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Non Profit",
+ "name": "Donation Campaign",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Non Profit Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "campaign_name,campaign_code",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "campaign_name",
+ "track_changes": 1
+}

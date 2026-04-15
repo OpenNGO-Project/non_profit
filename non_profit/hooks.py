@@ -62,17 +62,18 @@ doctype_js = {
 # Jinja
 # ----------
 
-# add methods and filters to jinja environment
-# jinja = {
-# 	"methods": "non_profit.utils.jinja_methods",
-# 	"filters": "non_profit.utils.jinja_filters"
-# }
+jinja = {
+	"methods": [
+		"non_profit.non_profit.swiss_qrbill.swiss_qrbill_svg",
+	]
+}
 
 # Installation
 # ------------
 
 # before_install = "non_profit.install.before_install"
 after_install = "non_profit.setup.setup_non_profit"
+after_migrate = "non_profit.non_profit.fundraising_setup.ensure_fundraising_fixtures"
 
 # Uninstallation
 # ------------
@@ -124,6 +125,7 @@ override_doctype_class = {
 scheduler_events = {
 	"daily": [
 		"non_profit.non_profit.doctype.membership.membership.set_expired_status",
+		"non_profit.non_profit.doctype.recurring_donation.recurring_donation.process_recurring_donations",
 	],
 }
 

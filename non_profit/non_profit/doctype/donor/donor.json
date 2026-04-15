@@ -11,6 +11,8 @@
   "column_break_5",
   "donor_type",
   "email",
+  "preferred_language",
+  "receipt_delivery",
   "image",
   "address_contacts",
   "address_html",
@@ -44,6 +46,20 @@
    "label": "Email",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "default": "de",
+   "fieldname": "preferred_language",
+   "fieldtype": "Select",
+   "label": "Preferred Language",
+   "options": "de\nen\nfr\nit"
+  },
+  {
+   "default": "Email",
+   "fieldname": "receipt_delivery",
+   "fieldtype": "Select",
+   "label": "Receipt Delivery",
+   "options": "Email\nPost\nBoth"
   },
   {
    "fieldname": "image",

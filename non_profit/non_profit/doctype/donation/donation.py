@@ -43,6 +43,30 @@ class Donation(Document):
 		self.db_set("paid", 1)
 		self.load_from_db()
 		self.create_payment_entry()
+		try:
+			self.send_thank_you()
+		except Exception:
+			frappe.log_error(title=f"Thank-you dispatch failed for {self.name}")
+
+	def send_thank_you(self):
+		settings = frappe.get_single("Non Profit Settings")
+		template_name = settings.default_thank_you_template
+		if not template_name or not self.email:
+			return
+		template = frappe.get_doc("Email Template", template_name)
+		context = {"doc": self.as_dict()}
+		subject = frappe.render_template(template.subject, context)
+		body = template.response or template.response_html or ""
+		message = frappe.render_template(body, context)
+		# Queue the email; the scheduler sends it. Avoid now=True since that
+		# runs SMTP synchronously on commit and can break the payment flow.
+		frappe.sendmail(
+			recipients=[self.email],
+			subject=subject,
+			message=message,
+			reference_doctype=self.doctype,
+			reference_name=self.name,
+		)
 
 	def create_payment_entry(self, date=None):
 		settings = frappe.get_doc('Non Profit Settings')
@@ -79,6 +103,23 @@ class Donation(Document):
 			"Unreconcile Payment",
 			"Unreconcile Payment Entries",
 		)
+
+
+@frappe.whitelist(allow_guest=True)
+def mock_pay(donation):
+	"""Mock payment gateway endpoint. Marks the donation as paid and fires thank-you.
+
+	This stands in for Payrexx / Stripe / etc. during development and for the
+	pitch demo. Swapping in a real gateway means replacing this function body
+	with a webhook handler that verifies signatures before flipping `paid`.
+	"""
+	doc = frappe.get_doc("Donation", donation)
+	if doc.paid:
+		return {"status": "already_paid", "donation": doc.name}
+	doc.flags.ignore_permissions = True
+	doc.run_method("on_payment_authorized")
+	frappe.db.commit()
+	return {"status": "success", "donation": doc.name}
 
 
 @frappe.whitelist(allow_guest=True)
