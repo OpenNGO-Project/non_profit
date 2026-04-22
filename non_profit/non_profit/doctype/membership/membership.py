@@ -16,13 +16,15 @@ from non_profit.non_profit.doctype.member.member import create_member
 
 class Membership(Document):
 	def validate(self):
-		# Allow either a Member link (person-centric) or a direct Customer link (org-centric).
+		# Member is the canonical identity for a Membership. For B2B flows,
+		# create the Member up front (pointing at the Customer) before binding
+		# a Membership to it.
 		if not self.member or not frappe.db.exists("Member", self.member):
 			user_type = frappe.db.get_value("User", frappe.session.user, "user_type")
 			if user_type == "Website User":
 				self.create_member_from_website_user()
-			elif not self.get("customer"):
-				frappe.throw(_("Please select a Member or Customer"))
+			else:
+				frappe.throw(_("Please select a Member"))
 
 		self.validate_membership_period()
 
@@ -45,18 +47,25 @@ class Membership(Document):
 	def validate_membership_period(self):
 		last_membership = get_last_membership(self.member)
 
-		if last_membership and last_membership.name != self.name and frappe.session.user != "Administrator":
+		if (
+			last_membership
+			and last_membership.name != self.name
+			and frappe.session.user != "Administrator"
+			and last_membership.to_date
+		):
 			if getdate(add_days(last_membership.to_date, -30)) > getdate(nowdate()):
 				frappe.throw(_("You can only renew if your membership expires within 30 days"))
 
 			self.from_date = add_days(last_membership.to_date, 1)
 
-		billing_cycle = frappe.db.get_single_value("Non Profit Settings", "billing_cycle")
-		if billing_cycle == "Yearly":
-			self.to_date = add_years(self.from_date, 1)
-		elif billing_cycle == "Monthly":
-			self.to_date = add_months(self.from_date, 1)
-		# "Custom" or empty: trust whatever to_date was provided (app-specific flows).
+		# Only auto-fill to_date if the caller hasn't explicitly left it blank
+		# (blank = perpetual/non-expiring membership).
+		if self.to_date:
+			billing_cycle = frappe.db.get_single_value("Non Profit Settings", "billing_cycle")
+			if billing_cycle == "Yearly":
+				self.to_date = add_years(self.from_date, 1)
+			elif billing_cycle == "Monthly":
+				self.to_date = add_months(self.from_date, 1)
 
 	def on_payment_authorized(self, status_changed_to=None):
 		if status_changed_to not in ("Completed", "Authorized"):

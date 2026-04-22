@@ -8,8 +8,6 @@
  "field_order": [
   "member",
   "member_name",
-  "customer",
-  "customer_name",
   "membership_type",
   "column_break_3",
   "company",
@@ -20,35 +18,24 @@
   "column_break_8",
   "member_since_date",
   "payment_details",
-  "paid",
+  "subscription",
+  "column_break_pay",
   "currency",
-  "amount",
-  "column_break_16",
-  "invoice",
-  "razorpay_details_section",
-  "subscription_id",
-  "column_break_19",
-  "payment_id"
+  "amount"
  ],
  "fields": [
   {
    "fieldname": "member",
    "fieldtype": "Link",
    "label": "Member",
-   "options": "Member"
+   "options": "Member",
+   "reqd": 1
   },
   {
-   "fieldname": "customer",
-   "fieldtype": "Link",
-   "label": "Customer",
-   "options": "Customer",
-   "description": "Direct Customer link for organization-centric memberships. Alternative to Member."
-  },
-  {
-   "fetch_from": "customer.customer_name",
-   "fieldname": "customer_name",
+   "fetch_from": "member.member_name",
+   "fieldname": "member_name",
    "fieldtype": "Data",
-   "label": "Customer Name",
+   "label": "Member Name",
    "read_only": 1
   },
   {
@@ -72,6 +59,13 @@
    "options": "New\nCurrent\nExpired\nPending\nCancelled"
   },
   {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
    "fieldname": "membership_validity_section",
    "fieldtype": "Section Break",
    "label": "Validity"
@@ -88,7 +82,7 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "To",
-   "reqd": 1
+   "description": "Leave empty for a perpetual (non-expiring) membership."
   },
   {
    "fieldname": "column_break_8",
@@ -105,10 +99,15 @@
    "label": "Payment Details"
   },
   {
-   "default": "0",
-   "fieldname": "paid",
-   "fieldtype": "Check",
-   "label": "Paid"
+   "fieldname": "subscription",
+   "fieldtype": "Link",
+   "label": "Subscription",
+   "options": "Subscription",
+   "description": "ERPNext Subscription that bills this membership."
+  },
+  {
+   "fieldname": "column_break_pay",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "currency",
@@ -120,54 +119,11 @@
    "fieldname": "amount",
    "fieldtype": "Float",
    "label": "Amount"
-  },
-  {
-   "fieldname": "razorpay_details_section",
-   "fieldtype": "Section Break",
-   "label": "Razorpay Details"
-  },
-  {
-   "fieldname": "subscription_id",
-   "fieldtype": "Data",
-   "label": "Subscription ID"
-  },
-  {
-   "fieldname": "payment_id",
-   "fieldtype": "Data",
-   "label": "Payment ID"
-  },
-  {
-   "fieldname": "invoice",
-   "fieldtype": "Link",
-   "label": "Invoice",
-   "options": "Sales Invoice"
-  },
-  {
-   "fetch_from": "member.member_name",
-   "fieldname": "member_name",
-   "fieldtype": "Data",
-   "label": "Member Name",
-   "read_only": 1
-  },
-  {
-   "fieldname": "company",
-   "fieldtype": "Link",
-   "label": "Company",
-   "options": "Company",
-   "reqd": 1
-  },
-  {
-    "fieldname": "column_break_19",
-    "fieldtype": "Column Break"
-  },
-  {
-    "fieldname": "column_break_16",
-    "fieldtype": "Column Break"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2022-03-16 17:37:28.672916",
+ "modified": "2026-04-20 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Membership",

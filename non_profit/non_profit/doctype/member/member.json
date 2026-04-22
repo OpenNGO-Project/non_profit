@@ -9,27 +9,16 @@
  "field_order": [
   "naming_series",
   "member_name",
-  "membership_expiry_date",
   "column_break_5",
   "membership_type",
-  "email_id",
   "image",
   "customer_section",
   "customer",
   "customer_name",
-  "supplier_section",
-  "supplier",
   "address_contacts",
   "address_html",
   "column_break_9",
-  "contact_html",
-  "razorpay_details_section",
-  "subscription_id",
-  "customer_id",
-  "subscription_status",
-  "column_break_21",
-  "subscription_start",
-  "subscription_end"
+  "contact_html"
  ],
  "fields": [
   {
@@ -45,11 +34,6 @@
    "in_list_view": 1,
    "label": "Member Name",
    "reqd": 1
-  },
-  {
-   "fieldname": "membership_expiry_date",
-   "fieldtype": "Date",
-   "label": "Membership Expiry Date"
   },
   {
    "fieldname": "column_break_5",
@@ -91,18 +75,6 @@
    "read_only": 1
   },
   {
-   "collapsible": 1,
-   "fieldname": "supplier_section",
-   "fieldtype": "Section Break",
-   "label": "Supplier"
-  },
-  {
-   "fieldname": "supplier",
-   "fieldtype": "Link",
-   "label": "Supplier",
-   "options": "Supplier"
-  },
-  {
    "depends_on": "eval:!doc.__islocal;",
    "fieldname": "address_contacts",
    "fieldtype": "Section Break",
@@ -126,51 +98,47 @@
   {
    "fieldname": "email_id",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Email Address",
    "options": "Email"
   },
   {
    "fieldname": "subscription_id",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Subscription ID",
    "read_only": 1
   },
   {
    "fieldname": "customer_id",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Customer ID",
    "read_only": 1
   },
   {
-   "fieldname": "razorpay_details_section",
-   "fieldtype": "Section Break",
-   "hidden": 1,
-   "label": "Razorpay Details"
-  },
-  {
-   "fieldname": "column_break_21",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "subscription_start",
    "fieldtype": "Date",
-   "label": "Subscription Start "
+   "hidden": 1,
+   "label": "Subscription Start"
   },
   {
    "fieldname": "subscription_end",
    "fieldtype": "Date",
+   "hidden": 1,
    "label": "Subscription End"
   },
   {
    "fieldname": "subscription_status",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Subscription Status",
    "options": "\nActive\nHalted"
   }
  ],
  "image_field": "image",
  "links": [],
- "modified": "2021-07-11 14:27:26.368039",
+ "modified": "2026-04-20 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Member",

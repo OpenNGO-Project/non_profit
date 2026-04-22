@@ -111,13 +111,11 @@ override_doctype_class = {
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-#	}
-# }
+doc_events = {
+	"Membership": {
+		"validate": "non_profit.non_profit.membership_sync.validate_no_overlap",
+	},
+}
 
 # Scheduled Tasks
 # ---------------
