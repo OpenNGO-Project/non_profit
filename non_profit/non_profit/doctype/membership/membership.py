@@ -58,9 +58,11 @@ class Membership(Document):
 
 			self.from_date = add_days(last_membership.to_date, 1)
 
-		# Only auto-fill to_date if the caller hasn't explicitly left it blank
-		# (blank = perpetual/non-expiring membership).
-		if self.to_date:
+		# Only auto-fill to_date if the caller hasn't already supplied one.
+		# A blank to_date AFTER this block means the caller explicitly wants
+		# a perpetual / non-expiring membership (we can't tell the two apart
+		# unless we auto-fill only the missing case).
+		if not self.to_date:
 			billing_cycle = frappe.db.get_single_value("Non Profit Settings", "billing_cycle")
 			if billing_cycle == "Yearly":
 				self.to_date = add_years(self.from_date, 1)

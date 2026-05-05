@@ -1,6 +1,8 @@
 # Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
+import unittest
+
 import frappe
 from frappe.utils import add_months, nowdate
 from frappe.tests.utils import FrappeTestCase
@@ -32,6 +34,12 @@ class TestMembership(FrappeTestCase):
         self.member_doc.make_customer_and_link()
         self.member = self.member_doc.name
 
+    @unittest.skip(
+        "Membership.invoice / paid fields dropped in the B2B/B2C refactor "
+        "(a58cc79). generate_invoice() no longer writes back to a Membership "
+        "field — payment lives on Sales Invoice. Test left in place as a "
+        "marker; rewrite or remove when the new invoicing path lands."
+    )
     def test_auto_generate_invoice_and_payment_entry(self):
         entry = make_membership(self.member)
 
