@@ -101,6 +101,13 @@ jobs:
           frappe.connect()
           from erpnext.setup.setup_wizard.setup_wizard import setup_complete
           setup_complete(frappe._dict({'country': 'Switzerland', 'currency': 'CHF', 'company_name': 'Test Company', 'company_abbr': 'TC', 'chart_of_accounts': 'Standard', 'fy_start_date': '2026-01-01', 'fy_end_date': '2026-12-31'}))
+          # Drop the Price Lists the setup wizard created — ERPNext's
+          # BootStrapTestData re-inserts them as test fixtures and currently
+          # uses .insert() (no ignore_if_duplicate), so leaving them around
+          # crashes the test bootstrap with DuplicateEntryError.
+          for name in ('Standard Buying', 'Standard Selling'):
+              if frappe.db.exists('Price List', name):
+                  frappe.delete_doc('Price List', name, force=True, ignore_permissions=True)
           frappe.db.commit()
           frappe.destroy()
           "
