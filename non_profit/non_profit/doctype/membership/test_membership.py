@@ -4,7 +4,7 @@
 import unittest
 
 import frappe
-from frappe.utils import add_months, nowdate
+from frappe.utils import add_days, add_months, nowdate
 from frappe.tests.utils import FrappeTestCase
 
 import erpnext
@@ -49,10 +49,14 @@ class TestMembership(FrappeTestCase):
         self.assertEqual(invoice.name, entry.invoice)
 
     def test_renew_within_30_days(self):
-        # create a membership for two months
-        # Should work fine
+        # First membership: today → today + 1 month (Monthly billing cycle).
+        # Second renewal starts the day AFTER the first expires so the new
+        # validate_no_overlap rule doesn't reject the boundary day.
         make_membership(self.member, {"from_date": nowdate()})
-        make_membership(self.member, {"from_date": add_months(nowdate(), 1)})
+        make_membership(
+            self.member,
+            {"from_date": add_days(add_months(nowdate(), 1), 1)},
+        )
 
         from frappe.utils.user import add_role
 
