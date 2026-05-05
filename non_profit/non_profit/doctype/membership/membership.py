@@ -71,7 +71,8 @@ class Membership(Document):
 		if status_changed_to not in ("Completed", "Authorized"):
 			return
 		self.load_from_db()
-		self.db_set("paid", 1)
+		# `paid` column was dropped in the B2B/B2C schema refactor (a58cc79);
+		# payment state lives on the linked Sales Invoice now.
 		settings = frappe.get_doc("Non Profit Settings")
 		if settings.allow_invoicing and settings.automate_membership_invoicing:
 			self.generate_invoice(with_payment_entry=settings.automate_membership_payment_entries, save=True)
@@ -79,7 +80,7 @@ class Membership(Document):
 
 	@frappe.whitelist()
 	def generate_invoice(self, save=True, with_payment_entry=False):
-		if not (self.paid or self.currency or self.amount):
+		if not (self.currency or self.amount):
 			frappe.throw(_("The payment for this membership is not paid. To generate invoice fill the payment details"))
 
 		if self.invoice:
@@ -264,7 +265,7 @@ def trigger_razorpay_subscription(*args, **kwargs):
 			"membership_status": "Current",
 			"membership_type": member.membership_type,
 			"currency": "INR",
-			"paid": 1,
+			# `paid` field dropped in B2B/B2C refactor (a58cc79).
 			"payment_id": payment.id,
 			"from_date": datetime.fromtimestamp(subscription.current_start),
 			"to_date": datetime.fromtimestamp(subscription.current_end),
@@ -425,10 +426,12 @@ def get_last_membership(member):
 	"""Returns last membership if exists"""
 	if not member:
 		return None
+	# `paid=1` filter dropped — column removed in B2B/B2C refactor (a58cc79);
+	# payment state lives on Sales Invoice.
 	last_membership = frappe.get_all(
 		"Membership",
 		"name,to_date,membership_type",
-		dict(member=member, paid=1),
+		dict(member=member),
 		order_by="to_date desc",
 		limit=1,
 	)

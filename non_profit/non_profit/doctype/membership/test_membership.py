@@ -111,7 +111,6 @@ def make_membership(member, payload={}):
         "membership_status": "Current",
         "membership_type": "_rzpy_test_milythm",
         "currency": currency,
-        "paid": 1,
         "from_date": nowdate(),
         "amount": 100,
     }
