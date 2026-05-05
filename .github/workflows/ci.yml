@@ -2,105 +2,108 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, miki-dev, dev_mikk]
   pull_request:
-    branches:
-      - develop
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  linters:
-    runs-on: ubuntu-latest
-    steps:
-
-      - name: Checkout Code Repository
-        uses: actions/checkout@v2
-
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
-
-      - name: Install and Run Pre-commit
-        uses: pre-commit/action@v2.0.0
-
   tests:
-    runs-on: ubuntu-18.04
-    timeout-minutes: 20
-
-    strategy:
-      fail-fast: false
-
     name: Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     services:
-      mysql:
-        image: mariadb:10.3
+      redis-cache:
+        image: redis:alpine
+        ports:
+          - 13000:6379
+      redis-queue:
+        image: redis:alpine
+        ports:
+          - 11000:6379
+      mariadb:
+        image: mariadb:11.8
         env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: YES
+          MYSQL_ROOT_PASSWORD: root
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=5s --health-timeout=2s --health-retries=3
+        options: --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
     steps:
       - name: Clone
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
 
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v6
         with:
-          python-version: 3.8
+          python-version: '3.14'
 
       - name: Setup Node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v6
         with:
-          node-version: 14
+          node-version: 24
           check-latest: true
 
-      - name: Add to Hosts
-        run: echo "127.0.0.1 test_site" | sudo tee -a /etc/hosts
-
       - name: Cache pip
-        uses: actions/cache@v2
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/*requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/setup.py') }}
           restore-keys: |
             ${{ runner.os }}-pip-
-            ${{ runner.os }}-
-      - name: Cache node modules
-        uses: actions/cache@v2
-        env:
-          cache-name: cache-node-modules
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-build-${{ env.cache-name }}-
-            ${{ runner.os }}-build-
-            ${{ runner.os }}-
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
-        run: echo "::set-output name=dir::$(yarn cache dir)"
+        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
 
-      - uses: actions/cache@v2
-        id: yarn-cache
+      - name: Cache yarn
+        uses: actions/cache@v5
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
           key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
             ${{ runner.os }}-yarn-
 
-      - name: Install
+      - name: Install MariaDB Client
         run: |
-          bash ${GITHUB_WORKSPACE}/.github/helper/install.sh
-          cd ~/frappe-bench/ && source env/bin/activate
-          cd apps/non_profit && pip install -r dev-requirements.txt
+          sudo apt update
+          sudo apt-get install mariadb-client
+
+      - name: Setup
+        run: |
+          pip install frappe-bench
+          bench init --skip-redis-config-generation --skip-assets --frappe-branch version-16 --python "$(which python)" ~/frappe-bench
+
+      - name: Install
+        working-directory: /home/runner/frappe-bench
+        run: |
+          bench get-app erpnext --branch version-16
+          bench get-app non_profit $GITHUB_WORKSPACE
+          bench setup requirements --dev
+          bench new-site --db-root-password root --admin-password admin test_site
+          bench --site test_site install-app erpnext
+          bench --site test_site install-app non_profit
+          bench build
         env:
-          TYPE: server
+          CI: 'Yes'
 
       - name: Run Tests
-        run: cd ~/frappe-bench/ && bench --site test_site run-tests --app non_profit
+        working-directory: /home/runner/frappe-bench
+        run: |
+          bench --site test_site set-config allow_tests true
+          mkdir -p ~/logs ~/frappe-bench/logs ~/frappe-bench/sites/test_site/logs
+          /home/runner/frappe-bench/env/bin/python -c "
+          import frappe
+          frappe.init('test_site', sites_path='/home/runner/frappe-bench/sites')
+          frappe.connect()
+          from erpnext.setup.setup_wizard.setup_wizard import setup_complete
+          setup_complete(frappe._dict({'country': 'Switzerland', 'currency': 'CHF', 'company_name': 'Test Company', 'company_abbr': 'TC', 'chart_of_accounts': 'Standard', 'fy_start_date': '2026-01-01', 'fy_end_date': '2026-12-31'}))
+          frappe.db.commit()
+          frappe.destroy()
+          "
+          bench --site test_site run-tests --app non_profit
         env:
           TYPE: server
