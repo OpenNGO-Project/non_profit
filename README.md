@@ -27,6 +27,12 @@ $ bench --site demo.com install-app non_profit
 
 Read documentation at https://docs.erpnext.com/docs/v14/user/manual/en/non_profit/introduction
 
+Bench-local docs:
+
+- `HOW_TO.md` - operator/admin workflows.
+- `DOCUMENTATION.md` - technical architecture and app contracts.
+- `AGENTS.md` - coding-agent rules and gotchas.
+
 
 ### License
 

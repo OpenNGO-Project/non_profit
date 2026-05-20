@@ -98,7 +98,6 @@ def ensure_fundraising_fixtures():
 	ensure_swiss_qrbill_print_format()
 	ensure_email_template()
 	ensure_settings_defaults()
-	frappe.db.commit()
 
 
 DONATION_SLIP_CH_HTML = """

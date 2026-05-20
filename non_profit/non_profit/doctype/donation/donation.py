@@ -42,7 +42,10 @@ class Donation(Document):
 	def on_payment_authorized(self, *args, **kwargs):
 		self.db_set("paid", 1)
 		self.load_from_db()
-		self.create_payment_entry()
+		try:
+			self.create_payment_entry()
+		except Exception:
+			frappe.log_error(title=f"Donation payment entry failed for {self.name}", message=frappe.get_traceback())
 		try:
 			self.send_thank_you()
 		except Exception:
@@ -67,6 +70,8 @@ class Donation(Document):
 			reference_doctype=self.doctype,
 			reference_name=self.name,
 		)
+		if self.meta.has_field("thank_you_sent") and not self.thank_you_sent:
+			self.db_set("thank_you_sent", 1, update_modified=False)
 
 	def create_payment_entry(self, date=None):
 		settings = frappe.get_doc('Non Profit Settings')
@@ -79,11 +84,16 @@ class Donation(Document):
 
 		from non_profit.non_profit.custom_doctype.payment_entry import get_donation_payment_entry
 
+		previous_ignore_account_permission = getattr(frappe.flags, "ignore_account_permission", False)
 		frappe.flags.ignore_account_permission = True
-		pe = get_donation_payment_entry(dt=self.doctype, dn=self.name)
-		frappe.flags.ignore_account_permission = False
-		pe.paid_from = settings.donation_debit_account
-		pe.paid_to = settings.donation_payment_account
+		try:
+			pe = get_donation_payment_entry(dt=self.doctype, dn=self.name)
+		finally:
+			frappe.flags.ignore_account_permission = previous_ignore_account_permission
+		if _account_belongs_to_company(settings.donation_debit_account, self.company):
+			pe.paid_from = settings.donation_debit_account
+		if _account_belongs_to_company(settings.donation_payment_account, self.company):
+			pe.paid_to = settings.donation_payment_account
 		pe.posting_date = date or getdate()
 		pe.reference_no = self.name
 		pe.reference_date = date or getdate()
@@ -103,6 +113,12 @@ class Donation(Document):
 			"Unreconcile Payment",
 			"Unreconcile Payment Entries",
 		)
+
+
+def _account_belongs_to_company(account: str | None, company: str | None) -> bool:
+	if not account or not company:
+		return False
+	return frappe.db.get_value("Account", account, "company") == company
 
 
 @frappe.whitelist(allow_guest=True)
@@ -231,7 +247,7 @@ def get_company_for_donations():
 
 
 def get_additional_notes(donor, donor_details):
-	if type(donor_details.notes) == dict:
+	if isinstance(donor_details.notes, dict):
 		for k, v in donor_details.notes.items():
 			notes = '\n'.join('{}: {}'.format(k, v))
 
@@ -249,7 +265,7 @@ def get_additional_notes(donor, donor_details):
 
 		donor.add_comment('Comment', notes)
 
-	elif type(donor_details.notes) == str:
+	elif isinstance(donor_details.notes, str):
 		donor.add_comment('Comment', donor_details.notes)
 
 	return donor

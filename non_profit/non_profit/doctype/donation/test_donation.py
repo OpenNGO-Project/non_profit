@@ -1,6 +1,7 @@
 # Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 import unittest
+from unittest.mock import patch
 
 import erpnext
 import frappe
@@ -47,6 +48,67 @@ class TestDonation(unittest.TestCase):
         self.assertTrue(
             frappe.db.exists("Payment Entry", {"reference_no": donation.name})
         )
+
+    def test_payment_authorization_keeps_paid_state_when_payment_entry_fails(self):
+        donor = create_donor()
+        donation = frappe.get_doc(
+            {
+                "doctype": "Donation",
+                "company": frappe.get_cached_value(
+                    "Non Profit Settings", None, "company"
+                ),
+                "donor": donor.name,
+                "donor_name": donor.donor_name,
+                "email": donor.email,
+                "date": get_active_fiscal_year_date(),
+                "amount": 25,
+            }
+        ).insert(ignore_permissions=True)
+        donation.submit()
+
+        with (
+            patch.object(
+                donation,
+                "create_payment_entry",
+                side_effect=RuntimeError("account mismatch"),
+            ),
+            patch("frappe.log_error") as log_error,
+        ):
+            donation.on_payment_authorized("Completed")
+
+        donation.reload()
+        self.assertEqual(donation.paid, 1)
+        log_error.assert_called()
+
+    def test_payment_entry_restores_account_permission_flag_on_failure(self):
+        donor = create_donor()
+        donation = frappe.get_doc(
+            {
+                "doctype": "Donation",
+                "company": frappe.get_cached_value(
+                    "Non Profit Settings", None, "company"
+                ),
+                "donor": donor.name,
+                "donor_name": donor.donor_name,
+                "email": donor.email,
+                "date": get_active_fiscal_year_date(),
+                "amount": 25,
+            }
+        ).insert(ignore_permissions=True)
+        donation.submit()
+
+        original_flag = getattr(frappe.flags, "ignore_account_permission", False)
+        frappe.flags.ignore_account_permission = False
+        try:
+            with patch(
+                "non_profit.non_profit.custom_doctype.payment_entry.get_donation_payment_entry",
+                side_effect=RuntimeError("boom"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    donation.create_payment_entry()
+            self.assertFalse(frappe.flags.ignore_account_permission)
+        finally:
+            frappe.flags.ignore_account_permission = original_flag
 
 
 def get_company_and_accounts():

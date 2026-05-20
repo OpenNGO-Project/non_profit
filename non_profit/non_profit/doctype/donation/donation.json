@@ -16,6 +16,7 @@
   "date",
   "payment_details_section",
   "paid",
+  "thank_you_sent",
   "amount",
   "mode_of_payment",
   "recurring_donation",
@@ -111,6 +112,14 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Paid"
+  },
+  {
+   "default": "0",
+   "description": "Set when a thank-you letter or email has been sent for this donation.",
+   "fieldname": "thank_you_sent",
+   "fieldtype": "Check",
+   "label": "Thank You Sent",
+   "no_copy": 1
   },
   {
    "fieldname": "company",
