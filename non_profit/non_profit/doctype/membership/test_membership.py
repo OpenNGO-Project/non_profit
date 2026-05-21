@@ -126,6 +126,55 @@ class TestMembership(FrappeTestCase):
         # belongs in a dedicated test if/when the bypass policy is settled.
         frappe.set_user("Administrator")
 
+    def test_membership_can_keep_to_date_open(self):
+        membership = frappe.get_doc(
+            {
+                "doctype": "Membership",
+                "member": self.member,
+                "membership_status": "Current",
+                "membership_type": "_rzpy_test_milythm",
+                "currency": frappe.db.get_value(
+                    "Company", erpnext.get_default_company(), "default_currency"
+                ),
+                "from_date": nowdate(),
+                "amount": 100,
+            }
+        )
+        membership.flags.keep_to_date_open = True
+        membership.insert(ignore_permissions=True)
+
+        self.assertFalse(membership.to_date)
+
+    def test_ensure_membership_subscription_creates_open_ended_subscription(self):
+        from non_profit.non_profit.membership_subscription import ensure_membership_subscription
+
+        membership = frappe.get_doc(
+            {
+                "doctype": "Membership",
+                "member": self.member,
+                "membership_status": "Current",
+                "membership_type": "_rzpy_test_milythm",
+                "currency": frappe.db.get_value(
+                    "Company", erpnext.get_default_company(), "default_currency"
+                ),
+                "from_date": nowdate(),
+                "amount": 100,
+            }
+        )
+        membership.flags.keep_to_date_open = True
+        membership.insert(ignore_permissions=True)
+
+        subscription = ensure_membership_subscription(membership)
+        membership.reload()
+        subscription_doc = frappe.get_doc("Subscription", subscription)
+
+        self.assertEqual(membership.subscription, subscription)
+        self.assertFalse(membership.to_date)
+        self.assertEqual(subscription_doc.party_type, "Customer")
+        self.assertEqual(subscription_doc.party, self.member_doc.customer)
+        self.assertEqual(subscription_doc.start_date, membership.from_date)
+        self.assertFalse(subscription_doc.end_date)
+
     def test_halted_memberships(self):
         make_membership(
             self.member,

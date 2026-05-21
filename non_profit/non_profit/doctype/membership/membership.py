@@ -58,11 +58,10 @@ class Membership(Document):
 
 			self.from_date = add_days(last_membership.to_date, 1)
 
-		# Only auto-fill to_date if the caller hasn't already supplied one.
-		# A blank to_date AFTER this block means the caller explicitly wants
-		# a perpetual / non-expiring membership (we can't tell the two apart
-		# unless we auto-fill only the missing case).
-		if not self.to_date:
+		# Public/client apps may explicitly request an open-ended membership.
+		# Keep that generic signal here so presentation apps do not need to
+		# fight the default billing-cycle date fill after insert.
+		if not self.to_date and not getattr(self.flags, "keep_to_date_open", False):
 			billing_cycle = frappe.db.get_single_value("Non Profit Settings", "billing_cycle")
 			if billing_cycle == "Yearly":
 				self.to_date = add_years(self.from_date, 1)

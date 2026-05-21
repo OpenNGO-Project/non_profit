@@ -57,6 +57,16 @@ Miki uses:
 
 If any of these contracts change, adjust `miki_app` and run its membership-related tests.
 
+Memberships can be open-ended: callers that intentionally want no expiry set
+`membership.flags.keep_to_date_open = True` before insert. This bypasses the
+default billing-cycle `to_date` fill in the Membership controller. The shared
+`non_profit.non_profit.membership_subscription.ensure_membership_subscription`
+helper creates or reuses an ERPNext **Subscription Plan**, creates an open-ended
+ERPNext **Subscription** for the linked Customer, writes
+`Membership.subscription`, and clears `Membership.to_date` when requested.
+Presentation apps such as `good_npo` should call this helper instead of
+creating Subscription rows locally.
+
 When `good_connector` is installed, legacy Member registration uses
 `good_connector.identity_matching` to create or reuse the linked Contact for the
 generated Customer/Member. Exact email/name matches are reused, ambiguous data

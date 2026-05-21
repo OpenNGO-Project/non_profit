@@ -43,6 +43,13 @@ Settings** are ignored when they belong to a different company.
 
 Use **Member** as the canonical identity and **Membership** for membership periods and billing. This fork supports both B2C membership via `Membership.member` and B2B workflows where a Member can be linked to a Customer.
 
+Leave **To** empty for a perpetual/open-ended membership. If code creates the
+Membership and must intentionally keep **To** blank, set
+`membership.flags.keep_to_date_open = True` before insert. To bill an
+open-ended membership through ERPNext subscriptions, use
+`non_profit.non_profit.membership_subscription.ensure_membership_subscription`;
+it links `Membership.subscription` and leaves the Membership **To** field open.
+
 If `good_connector` is installed, legacy member registration creates/reuses the
 linked Contact through Good Connector identity matching. Review possible fuzzy
 matches in **GC Potential Duplicate** instead of expecting automatic merges.
