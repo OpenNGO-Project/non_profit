@@ -175,6 +175,36 @@ class TestMembership(FrappeTestCase):
         self.assertEqual(subscription_doc.start_date, membership.from_date)
         self.assertFalse(subscription_doc.end_date)
 
+    def test_ensure_membership_subscription_skips_non_subscription_type(self):
+        from non_profit.non_profit.membership_subscription import ensure_membership_subscription
+
+        frappe.db.set_value(
+            "Membership Type",
+            "_rzpy_test_milythm",
+            "is_subscription",
+            0,
+            update_modified=False,
+        )
+        membership = frappe.get_doc(
+            {
+                "doctype": "Membership",
+                "member": self.member,
+                "membership_status": "Current",
+                "membership_type": "_rzpy_test_milythm",
+                "currency": frappe.db.get_value(
+                    "Company", erpnext.get_default_company(), "default_currency"
+                ),
+                "from_date": nowdate(),
+                "amount": 100,
+            }
+        )
+        membership.flags.keep_to_date_open = True
+        membership.insert(ignore_permissions=True)
+
+        self.assertIsNone(ensure_membership_subscription(membership))
+        membership.reload()
+        self.assertFalse(membership.subscription)
+
     def test_halted_memberships(self):
         make_membership(
             self.member,
@@ -266,9 +296,12 @@ def setup_membership():
         plan.amount = 100
         plan.razorpay_plan_id = "_rzpy_test_milythm"
         plan.linked_item = create_item("_Test Item for Non Profit Membership").name
+        plan.is_subscription = 1
         plan.insert()
     else:
         plan = frappe.get_doc("Membership Type", "_rzpy_test_milythm")
+        plan.is_subscription = 1
+        plan.save(ignore_permissions=True)
 
     return plan
 

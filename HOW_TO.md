@@ -45,10 +45,16 @@ Use **Member** as the canonical identity and **Membership** for membership perio
 
 Leave **To** empty for a perpetual/open-ended membership. If code creates the
 Membership and must intentionally keep **To** blank, set
-`membership.flags.keep_to_date_open = True` before insert. To bill an
-open-ended membership through ERPNext subscriptions, use
+`membership.flags.keep_to_date_open = True` before insert.
+
+Only enable **Is Subscription** on **Membership Type** when memberships of that
+type should create/link ERPNext Subscriptions automatically. Leave it disabled
+for declaration or data-collection memberships, for example MiKi memberships
+that are billed after a separate declaration process. To bill an open-ended
+membership through ERPNext subscriptions, use
 `non_profit.non_profit.membership_subscription.ensure_membership_subscription`;
-it links `Membership.subscription` and leaves the Membership **To** field open.
+it only creates a Subscription for subscription-enabled Membership Types, links
+`Membership.subscription`, and leaves the Membership **To** field open.
 
 If `good_connector` is installed, legacy member registration creates/reuses the
 linked Contact through Good Connector identity matching. Review possible fuzzy

@@ -17,12 +17,23 @@ def ensure_membership_subscription_plan(
 	cost: float | None = None,
 	billing_interval: str = "Year",
 	billing_interval_count: int = 1,
+	mark_membership_type_as_subscription: bool = True,
 ) -> str | None:
 	"""Create or update an ERPNext Subscription Plan for a Membership Type."""
 	if not frappe.db.exists("DocType", "Subscription Plan"):
 		return None
 
 	membership_type_doc = frappe.get_doc("Membership Type", membership_type)
+	if mark_membership_type_as_subscription and membership_type_doc.meta.has_field("is_subscription"):
+		if not membership_type_doc.get("is_subscription"):
+			frappe.db.set_value(
+				"Membership Type",
+				membership_type_doc.name,
+				"is_subscription",
+				1,
+				update_modified=False,
+			)
+			membership_type_doc.is_subscription = 1
 	plan_name = plan_name or f"{membership_type_doc.name} Subscription"
 	item = item or membership_type_doc.get("linked_item")
 	if not item:
@@ -89,6 +100,8 @@ def ensure_membership_subscription(
 		if clear_membership_to_date:
 			_clear_membership_to_date(membership)
 		return membership.subscription
+	if not is_subscription_membership_type(membership.membership_type):
+		return None
 
 	if member is None:
 		member = frappe.get_doc("Member", membership.member)
@@ -135,6 +148,14 @@ def ensure_membership_subscription(
 	if clear_membership_to_date:
 		_clear_membership_to_date(membership)
 	return subscription.name
+
+
+def is_subscription_membership_type(membership_type: str) -> bool:
+	if not frappe.db.exists("Membership Type", membership_type):
+		return False
+	if not frappe.get_meta("Membership Type").has_field("is_subscription"):
+		return False
+	return bool(frappe.db.get_value("Membership Type", membership_type, "is_subscription"))
 
 
 def _clear_membership_to_date(membership) -> None:

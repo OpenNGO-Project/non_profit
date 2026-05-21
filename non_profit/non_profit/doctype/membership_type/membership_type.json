@@ -8,6 +8,7 @@
  "field_order": [
   "membership_type",
   "amount",
+  "is_subscription",
   "razorpay_plan_id",
   "linked_item"
  ],
@@ -27,6 +28,13 @@
    "in_list_view": 1,
    "label": "Amount",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Enable when memberships of this type should create or link ERPNext Subscriptions. Leave disabled for declaration or data-collection memberships that are billed through a separate process.",
+   "fieldname": "is_subscription",
+   "fieldtype": "Check",
+   "label": "Is Subscription"
   },
   {
    "fieldname": "razorpay_plan_id",
