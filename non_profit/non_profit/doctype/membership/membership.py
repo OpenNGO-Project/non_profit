@@ -148,7 +148,6 @@ class Membership(Document):
 		if not member.email_id:
 			frappe.throw(_("Email address of member {0} is missing").format(frappe.utils.get_link_to_form("Member", self.member)))
 
-		plan = frappe.get_doc("Membership Type", self.membership_type)
 		email = member.email_id
 		attachments = [frappe.attach_print("Membership", self.name, print_format=settings.membership_print_format)]
 
@@ -364,7 +363,7 @@ def get_company_for_memberships():
 
 
 def get_additional_notes(member, subscription):
-	if type(subscription.notes) == dict:
+	if isinstance(subscription.notes, dict):
 		for k, v in subscription.notes.items():
 			notes = "\n".join("{}: {}".format(k, v))
 
@@ -382,7 +381,7 @@ def get_additional_notes(member, subscription):
 
 		member.add_comment("Comment", notes)
 
-	elif type(subscription.notes) == str:
+	elif isinstance(subscription.notes, str):
 		member.add_comment("Comment", subscription.notes)
 
 	return member

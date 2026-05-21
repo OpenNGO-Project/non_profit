@@ -41,6 +41,10 @@ Settings** are ignored when they belong to a different company.
 
 Use **Member** as the canonical identity and **Membership** for membership periods and billing. This fork supports both B2C membership via `Membership.member` and B2B workflows where a Member can be linked to a Customer.
 
+If `good_connector` is installed, legacy member registration creates/reuses the
+linked Contact through Good Connector identity matching. Review possible fuzzy
+matches in **GC Potential Duplicate** instead of expecting automatic merges.
+
 When changing Member or Membership behavior, run the relevant `miki_app` tests too because Miki depends on the shared membership substrate.
 
 ## Smoke Checks

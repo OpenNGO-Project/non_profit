@@ -53,6 +53,13 @@ Miki uses:
 
 If any of these contracts change, adjust `miki_app` and run its membership-related tests.
 
+When `good_connector` is installed, legacy Member registration uses
+`good_connector.identity_matching` to create or reuse the linked Contact for the
+generated Customer/Member. Exact email/name matches are reused, ambiguous data
+creates a fresh Contact, and fuzzy matches are sent to the shared duplicate
+review queue instead of being merged automatically. The import is optional so
+the fork remains installable without Good Connector in upstream-style benches.
+
 ## Test Commands
 
 ```bash
