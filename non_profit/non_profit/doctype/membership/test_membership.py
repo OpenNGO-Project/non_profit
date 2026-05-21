@@ -12,6 +12,50 @@ from non_profit.non_profit.doctype.member.member import create_member
 from non_profit.non_profit.doctype.membership.membership import (
     update_halted_razorpay_subscription,
 )
+from non_profit.setup import ensure_non_profit_desk_roles
+
+
+class TestNonProfitSetup(FrappeTestCase):
+    def test_non_profit_roles_repair_sso_users_for_list_filters(self):
+        role = "Non Profit Manager"
+        original_desk_access = frappe.db.get_value("Role", role, "desk_access")
+        self.addCleanup(
+            lambda: frappe.db.set_value(
+                "Role", role, "desk_access", original_desk_access, update_modified=False
+            )
+        )
+
+        frappe.db.set_value("Role", role, "desk_access", 0, update_modified=False)
+        frappe.clear_cache(doctype="Role")
+
+        user_email = "non-profit-sso-list-filter@example.com"
+        if frappe.db.exists("User", user_email):
+            user = frappe.get_doc("User", user_email)
+        else:
+            user = frappe.get_doc(
+                {
+                    "doctype": "User",
+                    "email": user_email,
+                    "first_name": "Non Profit",
+                    "last_name": "SSO",
+                    "send_welcome_email": 0,
+                    "user_type": "Website User",
+                }
+            ).insert(ignore_permissions=True)
+        user.user_type = "Website User"
+        user.set("roles", [])
+        user.append("roles", {"role": role})
+        user.save(ignore_permissions=True)
+        frappe.clear_cache(user=user.name)
+
+        self.assertFalse(frappe.has_permission("List Filter", "read", user=user.name))
+
+        ensure_non_profit_desk_roles()
+        frappe.clear_cache(user=user.name)
+
+        self.assertEqual(frappe.db.get_value("Role", role, "desk_access"), 1)
+        self.assertEqual(frappe.db.get_value("User", user.name, "user_type"), "System User")
+        self.assertTrue(frappe.has_permission("List Filter", "read", user=user.name))
 
 
 class TestMembership(FrappeTestCase):

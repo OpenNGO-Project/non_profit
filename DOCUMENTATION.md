@@ -30,6 +30,10 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 - Daily scheduler jobs expire memberships and process recurring donations.
 - `Payment Entry` is extended through `override_doctype_class`.
 
+## Roles And Desk Access
+
+`Non Profit Manager` and `Non Profit Member` are Desk roles in this bench. Install/migrate setup keeps them enabled with Desk Access and repairs existing users with either role that were left as Website Users. This prevents SSO-created NPO operators from having non_profit DocType permissions but failing Frappe's standard list helpers such as saved `List Filter` loading.
+
 ## Donation Thank-Yous
 
 `Donation.thank_you_sent` is a standard field on Donation. `Donation.send_thank_you()` queues the configured Email Template and marks this field once the email is queued. Presentation apps such as `ilanga_app` and `good_npo` read this field for pending thank-you queues.

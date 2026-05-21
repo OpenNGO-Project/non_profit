@@ -94,6 +94,9 @@ Ihr Team</p>"""
 
 
 def ensure_fundraising_fixtures():
+	from non_profit.setup import ensure_non_profit_desk_roles
+
+	ensure_non_profit_desk_roles()
 	ensure_print_format()
 	ensure_swiss_qrbill_print_format()
 	ensure_email_template()

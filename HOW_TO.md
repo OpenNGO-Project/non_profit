@@ -12,6 +12,8 @@ bench --site development16.localhost migrate
 
 ERPNext must already be installed.
 
+NPO desk operators need `Non Profit Manager` or `Non Profit Member` with Desk Access. Setup repairs those roles and existing users during install/migrate. If an SSO-created user gets **Insufficient Permission for List Filter** on a non_profit list, run migrate/setup and have the user log in again.
+
 ## Configure Core Settings
 
 Open **Non Profit Settings** and set at least:
