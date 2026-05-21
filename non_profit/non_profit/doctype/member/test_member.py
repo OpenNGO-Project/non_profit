@@ -8,6 +8,7 @@ import frappe
 from non_profit.non_profit.doctype.member.member import (
     create_member,
     get_or_create_member,
+    resolve_or_create_contact_from_external_signup,
 )
 
 
@@ -45,6 +46,9 @@ class TestMember(unittest.TestCase):
         self.assertEqual(result, member.name)
 
     def test_create_member_reuses_exact_good_connector_contact(self):
+        if not resolve_or_create_contact_from_external_signup:
+            self.skipTest("good_connector identity matching is not installed")
+
         membership_type = self._membership_type()
         email = f"np-contact-{frappe.generate_hash(length=8)}@example.org"
         contact = frappe.get_doc(
