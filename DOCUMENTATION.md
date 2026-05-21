@@ -68,4 +68,8 @@ bench --site development16.localhost run-tests --app non_profit
 bench --site development16.localhost run-tests --module miki_app.tests.test_membership_sync
 ```
 
-The local bench has a known ERPNext bootstrap issue that can make full non_profit tests exit non-zero after app tests pass when Customer naming settings drift. Treat that as local test-data state unless the failure points at non_profit code.
+`non_profit.non_profit.utils.before_tests` also normalizes local ERPNext bootstrap
+preconditions before the suite runs: it uses a short in-process test host URL,
+renames fixed ERPNext test Customers when local Customer naming is set to naming
+series, and pre-creates ERPNext test Addresses with `pincode` for Swiss benches
+where that field is mandatory.
