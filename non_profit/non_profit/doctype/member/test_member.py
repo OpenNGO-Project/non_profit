@@ -40,7 +40,7 @@ class TestMember(unittest.TestCase):
         ).insert(ignore_permissions=True)
 
         result = get_or_create_member(
-            frappe._dict({"email": email, "plan_id": membership_type})
+            frappe._dict({"email": email, "membership_type": membership_type})
         )
 
         self.assertEqual(result, member.name)
@@ -65,11 +65,8 @@ class TestMember(unittest.TestCase):
                 {
                     "fullname": "Legacy Tester",
                     "email": email,
-                    "plan_id": membership_type,
+                    "membership_type": membership_type,
                     "pan": None,
-                    "customer_id": None,
-                    "subscription_id": None,
-                    "subscription_status": "",
                     "mobile": "+41 79 555 12 34",
                 }
             )

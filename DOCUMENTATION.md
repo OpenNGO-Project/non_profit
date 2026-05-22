@@ -20,7 +20,7 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 - **Member** and **Membership** for membership identity, periods, invoicing, and B2B/B2C flows.
 - **Donor**, **Donation**, **Donation Campaign**, **Recurring Donation**, and **Donation Receipt** for fundraising.
 - **Sponsor**, **Sponsor Tier**, **Volunteer**, and **Grant Application** for broader NPO operations.
-- **Non Profit Settings** for company, donor type, billing, invoicing, payment, webhook, and email defaults.
+- **Non Profit Settings** for company, donor type, billing, invoicing, payment account, and email defaults.
 
 ## Hooks
 
@@ -40,8 +40,9 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 
 `Donation.on_payment_authorized()` sets `paid = 1` before optional accounting
 side effects. Automated Payment Entry failures are logged with the Donation
-name and do not prevent thank-you dispatch. This keeps hosted-checkout webhooks
-from being rolled back by single-company account settings on multi-demo sites.
+name and do not prevent thank-you dispatch. This keeps hosted-checkout payment
+callbacks from being rolled back by single-company account settings on
+multi-demo sites.
 Global `Non Profit Settings` accounts are applied only when the configured
 Account belongs to the Donation company, so one company's legacy settings do
 not overwrite another company's party or bank accounts.
@@ -73,6 +74,12 @@ linked Customer, writes `Membership.subscription`, and clears
 `Membership.to_date` when requested. Presentation apps such as `good_npo`
 should call this helper instead of creating Subscription rows locally.
 
+Payment-provider integrations are intentionally outside `non_profit`. Gateway
+apps such as `payrexx_integration` should verify provider callbacks and then
+call the standard document hooks (`Donation.on_payment_authorized`,
+Membership/Sales Invoice/Subscription helpers) instead of adding
+provider-specific settings or webhook endpoints here.
+
 When `good_connector` is installed, legacy Member registration uses
 `good_connector.identity_matching` to create or reuse the linked Contact for the
 generated Customer/Member. Exact email/name matches are reused, ambiguous data
@@ -85,7 +92,7 @@ the fork remains installable without Good Connector in upstream-style benches.
 ```bash
 cd frappe-bench
 bench --site development16.localhost run-tests --app non_profit
-bench --site development16.localhost run-tests --module miki_app.tests.test_membership_sync
+bench --site development16.localhost run-tests --module miki_app.tests.test_end_to_end
 ```
 
 `non_profit.non_profit.utils.before_tests` also normalizes local ERPNext bootstrap

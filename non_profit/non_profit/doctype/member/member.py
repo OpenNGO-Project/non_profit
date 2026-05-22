@@ -6,16 +6,7 @@ import frappe
 from frappe import _
 from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.model.document import Document
-from frappe.utils import cint, cstr, get_link_to_form
-
-try:
-    from payments.utils import get_payment_gateway_controller
-except ImportError:
-    get_payment_gateway_controller = None
-
-from non_profit.non_profit.doctype.membership_type.membership_type import (
-    get_membership_type,
-)
+from frappe.utils import cstr
 
 try:
     from good_connector.identity_matching import (
@@ -39,37 +30,6 @@ class Member(Document):
 
         validate_email_address(email.strip(), True)
 
-    def setup_subscription(self):
-        non_profit_settings = frappe.get_doc("Non Profit Settings")
-        if not non_profit_settings.enable_razorpay_for_memberships:
-            frappe.throw(
-                _(
-                    "Please check Enable Razorpay for Memberships in {0} to setup subscription"
-                )
-            ).format(get_link_to_form("Non Profit Settings", "Non Profit Settings"))
-
-        controller = get_payment_gateway_controller("Razorpay")
-        settings = controller.get_settings({})
-
-        plan_id = frappe.get_value(
-            "Membership Type", self.membership_type, "razorpay_plan_id"
-        )
-
-        if not plan_id:
-            frappe.throw(_("Please setup Razorpay Plan ID"))
-
-        subscription_details = {
-            "plan_id": plan_id,
-            "billing_frequency": cint(non_profit_settings.billing_frequency),
-            "customer_notify": 1,
-        }
-
-        args = {"subscription_details": subscription_details}
-
-        subscription = controller.setup_subscription(settings, **args)
-
-        return subscription
-
     @frappe.whitelist()
     def make_customer_and_link(self):
         if self.customer:
@@ -89,11 +49,12 @@ class Member(Document):
 
 
 def get_or_create_member(user_details):
+    membership_type = user_details.get("membership_type")
     member_list = frappe.get_all(
         "Member",
         filters={
             "email_id": user_details.email,
-            "membership_type": user_details.plan_id,
+            "membership_type": membership_type,
         },
     )
     if member_list and member_list[0]:
@@ -104,16 +65,14 @@ def get_or_create_member(user_details):
 
 def create_member(user_details):
     user_details = frappe._dict(user_details)
+    membership_type = user_details.get("membership_type")
     member = frappe.new_doc("Member")
     member.update(
         {
             "member_name": user_details.fullname,
             "email_id": user_details.email,
             "pan_number": user_details.pan or None,
-            "membership_type": user_details.plan_id,
-            "customer_id": user_details.customer_id or None,
-            "subscription_id": user_details.subscription_id or None,
-            "subscription_status": user_details.subscription_status or "",
+            "membership_type": membership_type,
         }
     )
 
@@ -191,61 +150,3 @@ def _split_person_name(fullname):
     if len(parts) == 1:
         return parts[0], ""
     return parts[0], " ".join(parts[1:])
-
-
-@frappe.whitelist(allow_guest=True)
-def create_member_subscription_order(user_details):
-    """Create Member subscription and order for payment
-
-    Args:
-            user_details (TYPE): Description
-
-    Returns:
-            Dictionary: Dictionary with subscription details
-            {
-                    'subscription_details': {
-                                                                            'plan_id': 'plan_EXwyxDYDCj3X4v',
-                                                                            'billing_frequency': 24,
-                                                                            'customer_notify': 1
-                                                                    },
-                    'subscription_id': 'sub_EZycCvXFvqnC6p'
-            }
-    """
-
-    user_details = frappe._dict(user_details)
-    member = get_or_create_member(user_details)
-
-    subscription = member.setup_subscription()
-
-    member.subscription_id = subscription.get("subscription_id")
-    member.save(ignore_permissions=True)
-
-    return subscription
-
-
-@frappe.whitelist()
-def register_member(
-    fullname, email, rzpay_plan_id, subscription_id, pan=None, mobile=None
-):
-    plan = get_membership_type(rzpay_plan_id)
-    if not plan:
-        raise frappe.DoesNotExistError
-
-    member = frappe.db.exists(
-        "Member", {"email_id": email, "subscription_id": subscription_id}
-    )
-    if member:
-        return member
-    else:
-        member = create_member(
-            dict(
-                fullname=fullname,
-                email=email,
-                plan_id=plan,
-                subscription_id=subscription_id,
-                pan=pan,
-                mobile=mobile,
-            )
-        )
-
-        return member.name

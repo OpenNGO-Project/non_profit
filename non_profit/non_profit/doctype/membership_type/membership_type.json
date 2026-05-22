@@ -9,7 +9,6 @@
   "membership_type",
   "amount",
   "is_subscription",
-  "razorpay_plan_id",
   "linked_item"
  ],
  "fields": [
@@ -35,13 +34,6 @@
    "fieldname": "is_subscription",
    "fieldtype": "Check",
    "label": "Is Subscription"
-  },
-  {
-   "fieldname": "razorpay_plan_id",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Razorpay Plan ID",
-   "unique": 1
   },
   {
    "fieldname": "linked_item",

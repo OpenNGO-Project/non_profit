@@ -2,12 +2,6 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on('Membership', {
-	setup: function(frm) {
-		frappe.db.get_single_value("Non Profit Settings", "enable_razorpay_for_memberships").then(val => {
-			if (val) frm.set_df_property("razorpay_details_section", "hidden", false);
-		})
-	},
-
 	refresh: function(frm) {
 		if (frm.doc.__islocal)
 			return;

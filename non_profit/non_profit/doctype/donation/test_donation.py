@@ -6,7 +6,7 @@ from unittest.mock import patch
 import erpnext
 import frappe
 
-from non_profit.non_profit.doctype.donation.donation import create_razorpay_donation
+from non_profit.non_profit.doctype.donation.donation import create_gateway_donation
 
 
 class TestDonation(unittest.TestCase):
@@ -33,7 +33,7 @@ class TestDonation(unittest.TestCase):
         payment = frappe._dict(
             {"amount": 100, "method": "Debit Card", "id": "pay_MeXAmsgeKOhq7O"}
         )
-        donation = create_razorpay_donation(donor, payment)
+        donation = create_gateway_donation(donor, payment)
 
         self.assertTrue(donation.name)
 

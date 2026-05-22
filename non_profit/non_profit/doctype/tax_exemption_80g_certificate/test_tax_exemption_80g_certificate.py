@@ -8,7 +8,7 @@ from frappe.utils import getdate
 from frappe.tests.utils import FrappeTestCase
 
 from erpnext.accounts.utils import get_fiscal_year
-from non_profit.non_profit.doctype.donation.donation import create_razorpay_donation
+from non_profit.non_profit.doctype.donation.donation import create_gateway_donation
 from non_profit.non_profit.doctype.donation.test_donation import (
     create_donor,
     create_donor_type,
@@ -48,12 +48,12 @@ class TestTaxExemption80GCertificate(FrappeTestCase):
         )
         payment = frappe._dict(
             {
-                "amount": 100,  # rzp sends data in paise
+                "amount": 100,
                 "method": "Debit Card",
                 "id": "pay_MeXAmsgeKOhq7O",
             }
         )
-        donation = create_razorpay_donation(donor, payment)
+        donation = create_gateway_donation(donor, payment)
 
         args = frappe._dict(
             {"recipient": "Donor", "donor": donor.name, "donation": donation.name}
@@ -89,7 +89,7 @@ class TestTaxExemption80GCertificate(FrappeTestCase):
                 {
                     "fullname": "_Test_Member",
                     "email": "_test_member_erpnext@example.com",
-                    "plan_id": plan.name,
+                    "membership_type": plan.name,
                 }
             )
         )

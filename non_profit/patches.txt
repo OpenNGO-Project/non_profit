@@ -1,2 +1,1 @@
-non_profit.patches.rename_non_profit_fields
 non_profit.patches.set_non_profit_desktop_icon_app

@@ -19,5 +19,5 @@
 ```bash
 cd frappe-bench
 bench --site development16.localhost run-tests --app non_profit
-bench --site development16.localhost run-tests --module miki_app.tests.test_membership_sync
+bench --site development16.localhost run-tests --module miki_app.tests.test_end_to_end
 ```

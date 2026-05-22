@@ -2,15 +2,10 @@
 # For license information, please see license.txt
 
 
-import json
-
 import frappe
 from frappe import _
-from frappe.email import sendmail_to_system_managers
 from frappe.model.document import Document
 from frappe.utils import flt, get_link_to_form, getdate
-
-from non_profit.non_profit.doctype.membership.membership import verify_signature
 
 
 class Donation(Document):
@@ -138,55 +133,7 @@ def mock_pay(donation):
 	return {"status": "success", "donation": doc.name}
 
 
-@frappe.whitelist(allow_guest=True)
-def capture_razorpay_donations(*args, **kwargs):
-	"""
-		Creates Donation from Razorpay Webhook Request Data on payment.captured event
-		Creates Donor from email if not found
-	"""
-	data = frappe.request.get_data(as_text=True)
-
-	try:
-		verify_signature(data, endpoint='Donation')
-	except Exception as e:
-		log = frappe.log_error(e, 'Donation Webhook Verification Error')
-		notify_failure(log)
-		return { 'status': 'Failed', 'reason': e }
-
-	if isinstance(data, str):
-		data = json.loads(data)
-	data = frappe._dict(data)
-
-	payment = data.payload.get('payment', {}).get('entity', {})
-	payment = frappe._dict(payment)
-
-	try:
-		if not data.event == 'payment.captured':
-			return
-
-		# to avoid capturing subscription payments as donations
-		if payment.invoice_id or (
-			payment.description and "subscription" in str(payment.description).lower()
-		):
-			return
-
-		donor = get_donor(payment.email)
-		if not donor:
-			donor = create_donor(payment)
-
-		donation = create_razorpay_donation(donor, payment)
-		donation.run_method('create_payment_entry')
-
-	except Exception as e:
-		message = '{0}\n\n{1}\n\n{2}: {3}'.format(e, frappe.get_traceback(), _('Payment ID'), payment.id)
-		log = frappe.log_error(message, _('Error creating donation entry for {0}').format(donor.name))
-		notify_failure(log)
-		return { 'status': 'Failed', 'reason': e }
-
-	return { 'status': 'Success' }
-
-
-def create_razorpay_donation(donor, payment):
+def create_gateway_donation(donor, payment):
 	if not frappe.db.exists('Mode of Payment', payment.method):
 		create_mode_of_payment(payment.method)
 
@@ -198,7 +145,7 @@ def create_razorpay_donation(donor, payment):
 		'donor_name': donor.donor_name,
 		'email': donor.email,
 		'date': getdate(),
-		'amount': flt(payment.amount) / 100, # Convert to rupees from paise
+		'amount': flt(payment.amount),
 		'mode_of_payment': payment.method,
 		'payment_id': payment.id
 	}).insert(ignore_mandatory=True)
@@ -276,18 +223,3 @@ def create_mode_of_payment(method):
 		'doctype': 'Mode of Payment',
 		'mode_of_payment': method
 	}).insert(ignore_mandatory=True)
-
-
-def notify_failure(log):
-	try:
-		content = '''
-			Dear System Manager,
-			Razorpay webhook for creating donation failed due to some reason.
-			Please check the error log linked below
-			Error Log: {0}
-			Regards, Administrator
-		'''.format(get_link_to_form('Error Log', log.name))
-
-		sendmail_to_system_managers(_('[Important] [ERPNext] Razorpay donation webhook failed, please check.'), content)
-	except Exception:
-		pass

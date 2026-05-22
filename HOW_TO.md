@@ -24,6 +24,12 @@ Open **Non Profit Settings** and set at least:
 - invoice and payment accounts when automated invoicing or payment entries are enabled,
 - default thank-you Email Template when donation thank-you email should be sent.
 
+Do not configure provider-specific checkout or webhook credentials in
+`non_profit`. Payment gateways live in the payments layer, for example
+`payrexx_integration`; those apps should verify provider callbacks and then
+mark the relevant Donation, Sales Invoice, Membership, or Subscription through
+the standard document APIs.
+
 ## Donations
 
 Use **Donor**, **Donation Campaign**, **Donation**, and **Donation Receipt** for fundraising workflows.

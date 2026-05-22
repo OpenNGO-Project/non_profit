@@ -5,11 +5,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "enable_razorpay_for_memberships",
-  "razorpay_settings_section",
   "billing_cycle",
-  "billing_frequency",
-  "membership_webhook_secret",
   "column_break_6",
   "allow_invoicing",
   "automate_membership_invoicing",
@@ -26,7 +22,6 @@
   "donation_settings_section",
   "donation_company",
   "default_donor_type",
-  "donation_webhook_secret",
   "column_break_22",
   "automate_donation_payment_entries",
   "donation_debit_account",
@@ -45,18 +40,6 @@
    "options": "\nMonthly\nYearly\nCustom"
   },
   {
-   "depends_on": "eval:doc.enable_razorpay_for_memberships",
-   "fieldname": "razorpay_settings_section",
-   "fieldtype": "Section Break",
-   "label": "RazorPay Settings for Memberships"
-  },
-  {
-   "description": "The number of billing cycles for which the customer should be charged. For example, if a customer is buying a 1-year membership that should be billed on a monthly basis, this value should be 12.",
-   "fieldname": "billing_frequency",
-   "fieldtype": "Int",
-   "label": "Billing Frequency"
-  },
-  {
    "fieldname": "column_break_6",
    "fieldtype": "Section Break",
    "label": "Membership Invoicing"
@@ -66,7 +49,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "This company will be set for the Memberships created via webhook.",
+   "description": "This company will be set for Memberships created from web forms or payment integrations.",
    "fieldname": "company",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -134,12 +117,6 @@
    "label": "Automate Payment Entry Creation"
   },
   {
-   "default": "0",
-   "fieldname": "enable_razorpay_for_memberships",
-   "fieldtype": "Check",
-   "label": "Enable RazorPay For Memberships"
-  },
-  {
    "depends_on": "eval:doc.automate_membership_payment_entries",
    "description": "Account for accepting membership payments",
    "fieldname": "membership_payment_account",
@@ -147,18 +124,6 @@
    "label": "Membership Payment To",
    "mandatory_depends_on": "eval:doc.automate_membership_payment_entries",
    "options": "Account"
-  },
-  {
-   "fieldname": "membership_webhook_secret",
-   "fieldtype": "Password",
-   "label": "Membership Webhook Secret",
-   "read_only": 1
-  },
-  {
-   "fieldname": "donation_webhook_secret",
-   "fieldtype": "Password",
-   "label": "Donation Webhook Secret",
-   "read_only": 1
   },
   {
    "depends_on": "automate_donation_payment_entries",
@@ -193,7 +158,7 @@
    "options": "Account"
   },
   {
-   "description": "This company will be set for the Donations created via webhook.",
+   "description": "This company will be set for Donations created from web forms or payment integrations.",
    "fieldname": "donation_company",
    "fieldtype": "Link",
    "in_list_view": 1,

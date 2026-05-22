@@ -9,9 +9,6 @@ from frappe.tests.utils import FrappeTestCase
 
 import erpnext
 from non_profit.non_profit.doctype.member.member import create_member
-from non_profit.non_profit.doctype.membership.membership import (
-    update_halted_razorpay_subscription,
-)
 from non_profit.setup import ensure_non_profit_desk_roles
 
 
@@ -68,10 +65,7 @@ class TestMembership(FrappeTestCase):
                 {
                     "fullname": "_Test_Member",
                     "email": "_test_member_erpnext@example.com",
-                    "plan_id": plan.name,
-                    "subscription_id": "sub_DEX6xcJ1HSW4CR",
-                    "customer_id": "cust_C0WlbKhp3aLA7W",
-                    "subscription_status": "Active",
+                    "membership_type": plan.name,
                 }
             )
         )
@@ -132,7 +126,7 @@ class TestMembership(FrappeTestCase):
                 "doctype": "Membership",
                 "member": self.member,
                 "membership_status": "Current",
-                "membership_type": "_rzpy_test_milythm",
+                "membership_type": "_test_membership_type",
                 "currency": frappe.db.get_value(
                     "Company", erpnext.get_default_company(), "default_currency"
                 ),
@@ -153,7 +147,7 @@ class TestMembership(FrappeTestCase):
                 "doctype": "Membership",
                 "member": self.member,
                 "membership_status": "Current",
-                "membership_type": "_rzpy_test_milythm",
+                "membership_type": "_test_membership_type",
                 "currency": frappe.db.get_value(
                     "Company", erpnext.get_default_company(), "default_currency"
                 ),
@@ -180,7 +174,7 @@ class TestMembership(FrappeTestCase):
 
         frappe.db.set_value(
             "Membership Type",
-            "_rzpy_test_milythm",
+            "_test_membership_type",
             "is_subscription",
             0,
             update_modified=False,
@@ -190,7 +184,7 @@ class TestMembership(FrappeTestCase):
                 "doctype": "Membership",
                 "member": self.member,
                 "membership_status": "Current",
-                "membership_type": "_rzpy_test_milythm",
+                "membership_type": "_test_membership_type",
                 "currency": frappe.db.get_value(
                     "Company", erpnext.get_default_company(), "default_currency"
                 ),
@@ -204,24 +198,6 @@ class TestMembership(FrappeTestCase):
         self.assertIsNone(ensure_membership_subscription(membership))
         membership.reload()
         self.assertFalse(membership.subscription)
-
-    def test_halted_memberships(self):
-        make_membership(
-            self.member,
-            {
-                "from_date": add_months(nowdate(), 2),
-                "to_date": add_months(nowdate(), 3),
-            },
-        )
-
-        self.assertEqual(
-            frappe.db.get_value("Member", self.member, "subscription_status"), "Active"
-        )
-        payload = get_subscription_payload()
-        update_halted_razorpay_subscription(data=payload)
-        self.assertEqual(
-            frappe.db.get_value("Member", self.member, "subscription_status"), "Halted"
-        )
 
     def tearDown(self):
         frappe.db.rollback()
@@ -243,7 +219,7 @@ def make_membership(member, payload={}):
         "doctype": "Membership",
         "member": member,
         "membership_status": "Current",
-        "membership_type": "_rzpy_test_milythm",
+        "membership_type": "_test_membership_type",
         "currency": currency,
         "from_date": nowdate(),
         "amount": 100,
@@ -275,10 +251,7 @@ def setup_membership():
 
     # update non profit settings
     settings = frappe.get_doc("Non Profit Settings")
-    # Enable razorpay
-    settings.enable_razorpay_for_memberships = 1
     settings.billing_cycle = "Monthly"
-    settings.billing_frequency = 24
     # Enable invoicing
     settings.allow_invoicing = 1
     settings.automate_membership_payment_entries = 1
@@ -290,38 +263,16 @@ def setup_membership():
     settings.save()
 
     # make test plan
-    if not frappe.db.exists("Membership Type", "_rzpy_test_milythm"):
+    if not frappe.db.exists("Membership Type", "_test_membership_type"):
         plan = frappe.new_doc("Membership Type")
-        plan.membership_type = "_rzpy_test_milythm"
+        plan.membership_type = "_test_membership_type"
         plan.amount = 100
-        plan.razorpay_plan_id = "_rzpy_test_milythm"
         plan.linked_item = create_item("_Test Item for Non Profit Membership").name
         plan.is_subscription = 1
         plan.insert()
     else:
-        plan = frappe.get_doc("Membership Type", "_rzpy_test_milythm")
+        plan = frappe.get_doc("Membership Type", "_test_membership_type")
         plan.is_subscription = 1
         plan.save(ignore_permissions=True)
 
     return plan
-
-
-def get_subscription_payload():
-    return {
-        "entity": "event",
-        "account_id": "acc_BFQ7uQEaa7j2z7",
-        "event": "subscription.halted",
-        "contains": ["subscription"],
-        "payload": {
-            "subscription": {
-                "entity": {
-                    "id": "sub_DEX6xcJ1HSW4CR",
-                    "entity": "subscription",
-                    "plan_id": "_rzpy_test_milythm",
-                    "customer_id": "cust_C0WlbKhp3aLA7W",
-                    "status": "halted",
-                    "notes": {"Important": "Notes for Internal Reference"},
-                }
-            }
-        },
-    }
