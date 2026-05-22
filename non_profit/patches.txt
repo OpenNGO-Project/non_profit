@@ -1,2 +1,5 @@
+[pre_model_sync]
 non_profit.patches.set_non_profit_desktop_icon_app
+
+[post_model_sync]
 non_profit.patches.backfill_donor_customers_from_email

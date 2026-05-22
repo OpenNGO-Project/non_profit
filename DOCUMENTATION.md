@@ -53,8 +53,10 @@ reuse a Customer from a same-email Member first, then a same-email Customer, and
 otherwise create a new Customer. The helper links Contact and Address rows to
 both Donor and Customer. A one-time migrate patch preserves existing
 `Donor.email` values by creating/linking Customers before the Donor email field
-is removed from the model; `backfill_donor_customers(limit=None)` remains
-available for explicit repair runs.
+is removed from the model. The patch runs after DocType model sync so fresh
+installs have the newer `Donor.customer` column before it queries donor rows;
+`backfill_donor_customers(limit=None)` remains available for explicit repair
+runs.
 
 `Donation.thank_you_sent` is a standard field on Donation. `Donation.send_thank_you()` queues the configured Email Template and marks this field once the email is queued. Presentation apps such as `ilanga_app` and `good_npo` read this field for pending thank-you queues.
 

@@ -2,7 +2,11 @@ import frappe
 
 
 def execute():
-	if not frappe.db.exists("DocType", "Donor") or not frappe.db.has_column("Donor", "email"):
+	if (
+		not frappe.db.exists("DocType", "Donor")
+		or not frappe.db.has_column("Donor", "customer")
+		or not frappe.db.has_column("Donor", "email")
+	):
 		return
 
 	from non_profit.non_profit.doctype.donor.donor import get_or_create_customer_for_donor

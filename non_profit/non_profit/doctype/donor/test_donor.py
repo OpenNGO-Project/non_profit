@@ -1,6 +1,8 @@
 # Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -91,6 +93,29 @@ class TestDonor(FrappeTestCase):
 
 		self.assertEqual(get_donor_email(donor), email)
 		self.assertEqual(find_donor_by_email(email), donor.name)
+
+	def test_donor_customer_backfill_patch_runs_after_model_sync(self) -> None:
+		from frappe.modules.patch_handler import PatchType, get_patches_from_app
+
+		patch_name = "non_profit.patches.backfill_donor_customers_from_email"
+
+		self.assertNotIn(patch_name, get_patches_from_app("non_profit", PatchType.pre_model_sync))
+		self.assertIn(patch_name, get_patches_from_app("non_profit", PatchType.post_model_sync))
+
+	def test_donor_customer_backfill_patch_skips_until_customer_column_exists(self) -> None:
+		from non_profit.patches import backfill_donor_customers_from_email
+
+		def has_column(doctype: str, fieldname: str) -> bool:
+			return doctype == "Donor" and fieldname == "email"
+
+		with (
+			patch.object(backfill_donor_customers_from_email.frappe.db, "exists", return_value=True),
+			patch.object(backfill_donor_customers_from_email.frappe.db, "has_column", side_effect=has_column),
+			patch.object(backfill_donor_customers_from_email.frappe, "get_all") as get_all,
+		):
+			backfill_donor_customers_from_email.execute()
+
+		get_all.assert_not_called()
 
 	def _donor_type(self) -> str:
 		name = f"Donor Type {frappe.generate_hash(length=8)}"
