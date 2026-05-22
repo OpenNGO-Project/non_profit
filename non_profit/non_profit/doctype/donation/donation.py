@@ -7,9 +7,17 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, get_link_to_form, getdate
 
+from non_profit.non_profit.doctype.donor.donor import (
+	find_donor_by_email,
+	get_donor_email,
+	get_or_create_customer_for_donor,
+)
+
 
 class Donation(Document):
 	def validate(self):
+		if self.donor:
+			self.email = get_donor_email(self.donor) or self.email
 		if not self.donor or not frappe.db.exists('Donor', self.donor):
 			# for web forms
 			user_type = frappe.db.get_value('User', frappe.session.user, 'user_type')
@@ -19,16 +27,16 @@ class Donation(Document):
 				frappe.throw(_('Please select a Member'))
 
 	def create_donor_for_website_user(self):
-		donor_name = frappe.get_value('Donor', dict(email=frappe.session.user))
+		donor_name = find_donor_by_email(frappe.session.user)
 
 		if not donor_name:
 			user = frappe.get_doc('User', frappe.session.user)
 			donor = frappe.get_doc(dict(
 				doctype='Donor',
 				donor_type=self.get('donor_type'),
-				email=frappe.session.user,
-				member_name=user.get_fullname()
+				donor_name=user.get_fullname()
 			)).insert(ignore_permissions=True)
+			get_or_create_customer_for_donor(donor, email=frappe.session.user)
 			donor_name = donor.name
 
 		if self.get('__islocal'):
@@ -143,7 +151,7 @@ def create_gateway_donation(donor, payment):
 		'company': company,
 		'donor': donor.name,
 		'donor_name': donor.donor_name,
-		'email': donor.email,
+		'email': get_donor_email(donor),
 		'date': getdate(),
 		'amount': flt(payment.amount),
 		'mode_of_payment': payment.method,
@@ -155,14 +163,8 @@ def create_gateway_donation(donor, payment):
 
 
 def get_donor(email):
-	donors = frappe.get_all('Donor',
-		filters={'email': email},
-		order_by='creation desc')
-
-	try:
-		return frappe.get_doc('Donor', donors[0]['name'])
-	except Exception:
-		return None
+	donor = find_donor_by_email(email)
+	return frappe.get_doc('Donor', donor) if donor else None
 
 
 @frappe.whitelist()
@@ -174,7 +176,6 @@ def create_donor(payment):
 	donor.update({
 		'donor_name': donor_details.email,
 		'donor_type': donor_type,
-		'email': donor_details.email,
 		'contact': donor_details.contact
 	})
 
@@ -182,6 +183,7 @@ def create_donor(payment):
 		donor = get_additional_notes(donor, donor_details)
 
 	donor.insert(ignore_mandatory=True)
+	get_or_create_customer_for_donor(donor, email=donor_details.email)
 	return donor
 
 

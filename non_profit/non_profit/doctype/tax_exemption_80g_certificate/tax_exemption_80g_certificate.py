@@ -9,10 +9,13 @@ from frappe.model.document import Document
 from frappe.utils import flt, get_link_to_form
 
 from erpnext.accounts.utils import get_fiscal_year
+from non_profit.non_profit.doctype.donor.donor import get_donor_email
 
 
 class TaxExemption80GCertificate(Document):
 	def validate(self):
+		if self.recipient == 'Donor' and self.donor:
+			self.donor_email = get_donor_email(self.donor) or self.donor_email
 		self.validate_duplicates()
 		self.validate_company_details()
 		self.set_company_address()

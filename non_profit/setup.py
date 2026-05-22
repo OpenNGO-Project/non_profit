@@ -16,6 +16,9 @@ def make_custom_records():
 def setup_non_profit():
 	make_custom_records()
 	make_custom_fields()
+	from non_profit.non_profit.erpnext_loyalty import disable_test_loyalty_auto_opt_in
+
+	disable_test_loyalty_auto_opt_in()
 
 	has_domain = frappe.get_doc({
 		'doctype': 'Has Domain',
@@ -114,7 +117,7 @@ def get_custom_fields():
 				'fieldname': 'pan_number',
 				'label': 'PAN Details',
 				'fieldtype': 'Data',
-				'insert_after': 'email'
+				'insert_after': 'customer_name'
 			}
 		],
 	}

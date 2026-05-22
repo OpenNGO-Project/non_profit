@@ -94,8 +94,11 @@ Ihr Team</p>"""
 
 
 def ensure_fundraising_fixtures():
-	from non_profit.setup import ensure_non_profit_desk_roles
+	from non_profit.non_profit.erpnext_loyalty import disable_test_loyalty_auto_opt_in
+	from non_profit.setup import ensure_non_profit_desk_roles, make_custom_fields
 
+	make_custom_fields()
+	disable_test_loyalty_auto_opt_in()
 	ensure_non_profit_desk_roles()
 	ensure_print_format()
 	ensure_swiss_qrbill_print_format()

@@ -1,1 +1,2 @@
 non_profit.patches.set_non_profit_desktop_icon_app
+non_profit.patches.backfill_donor_customers_from_email

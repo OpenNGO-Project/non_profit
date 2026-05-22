@@ -7,6 +7,7 @@ import erpnext
 import frappe
 
 from non_profit.non_profit.doctype.donation.donation import create_gateway_donation
+from non_profit.non_profit.doctype.donor.donor import get_donor_email, get_or_create_customer_for_donor
 
 
 class TestDonation(unittest.TestCase):
@@ -59,7 +60,7 @@ class TestDonation(unittest.TestCase):
                 ),
                 "donor": donor.name,
                 "donor_name": donor.donor_name,
-                "email": donor.email,
+                "email": get_donor_email(donor),
                 "date": get_active_fiscal_year_date(),
                 "amount": 25,
             }
@@ -90,7 +91,7 @@ class TestDonation(unittest.TestCase):
                 ),
                 "donor": donor.name,
                 "donor_name": donor.donor_name,
-                "email": donor.email,
+                "email": get_donor_email(donor),
                 "date": get_active_fiscal_year_date(),
                 "amount": 25,
             }
@@ -142,18 +143,20 @@ def create_donor_type():
 
 
 def create_donor():
-    donor = frappe.db.exists("Donor", "donor@test.com")
+    donor = frappe.db.get_value("Donor", {"donor_name": "_Test Donor"}, "name", order_by="creation desc")
     if donor:
-        return frappe.get_doc("Donor", "donor@test.com")
+        donor_doc = frappe.get_doc("Donor", donor)
     else:
-        return frappe.get_doc(
+        donor_doc = frappe.get_doc(
             {
                 "doctype": "Donor",
                 "donor_name": "_Test Donor",
                 "donor_type": "_Test Donor",
-                "email": "donor@test.com",
             }
         ).insert()
+    get_or_create_customer_for_donor(donor_doc, email="donor@test.com")
+    donor_doc.reload()
+    return donor_doc
 
 
 def create_mode_of_payment(company):

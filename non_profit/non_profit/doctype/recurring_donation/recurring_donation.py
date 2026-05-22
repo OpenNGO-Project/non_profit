@@ -2,9 +2,13 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import add_months, add_years, getdate, nowdate
 
+from non_profit.non_profit.doctype.donor.donor import get_donor_email
+
 
 class RecurringDonation(Document):
 	def validate(self):
+		if self.donor:
+			self.email = get_donor_email(self.donor) or self.email
 		if not self.start_date:
 			self.start_date = nowdate()
 		if not self.next_date:

@@ -13,6 +13,79 @@ from non_profit.setup import ensure_non_profit_desk_roles
 
 
 class TestNonProfitSetup(FrappeTestCase):
+    def test_setup_disables_erpnext_test_loyalty_auto_opt_in(self):
+        if not frappe.db.exists("DocType", "Loyalty Program"):
+            self.skipTest("ERPNext Loyalty Program is not installed")
+
+        from non_profit.non_profit.erpnext_loyalty import (
+            ERP_NEXT_TEST_LOYALTY_PROGRAMS,
+            disable_test_loyalty_auto_opt_in,
+        )
+
+        created = []
+        originals = {}
+
+        for loyalty_program in ERP_NEXT_TEST_LOYALTY_PROGRAMS:
+            if not frappe.db.exists("Loyalty Program", loyalty_program):
+                doc = frappe.get_doc(
+                    {
+                        "doctype": "Loyalty Program",
+                        "loyalty_program_name": loyalty_program,
+                        "loyalty_program_type": "Single Tier Program",
+                        "from_date": nowdate(),
+                        "auto_opt_in": 0,
+                        "collection_rules": [
+                            {
+                                "tier_name": "Standard",
+                                "min_spent": 0,
+                                "collection_factor": 1,
+                            }
+                        ],
+                    }
+                )
+                doc.insert(ignore_permissions=True)
+                created.append(loyalty_program)
+            originals[loyalty_program] = frappe.db.get_value(
+                "Loyalty Program", loyalty_program, "auto_opt_in"
+            )
+            frappe.db.set_value(
+                "Loyalty Program",
+                loyalty_program,
+                "auto_opt_in",
+                1,
+                update_modified=False,
+            )
+
+        def restore_loyalty_programs():
+            for loyalty_program in ERP_NEXT_TEST_LOYALTY_PROGRAMS:
+                if loyalty_program in created and frappe.db.exists(
+                    "Loyalty Program", loyalty_program
+                ):
+                    frappe.delete_doc(
+                        "Loyalty Program",
+                        loyalty_program,
+                        force=True,
+                        ignore_permissions=True,
+                    )
+                elif frappe.db.exists("Loyalty Program", loyalty_program):
+                    frappe.db.set_value(
+                        "Loyalty Program",
+                        loyalty_program,
+                        "auto_opt_in",
+                        originals[loyalty_program],
+                        update_modified=False,
+                    )
+
+        self.addCleanup(restore_loyalty_programs)
+
+        disable_test_loyalty_auto_opt_in()
+
+        for loyalty_program in ERP_NEXT_TEST_LOYALTY_PROGRAMS:
+            self.assertEqual(
+                frappe.db.get_value("Loyalty Program", loyalty_program, "auto_opt_in"),
+                0,
+            )
+
     def test_non_profit_roles_repair_sso_users_for_list_filters(self):
         role = "Non Profit Manager"
         original_desk_access = frappe.db.get_value("Role", role, "desk_access")

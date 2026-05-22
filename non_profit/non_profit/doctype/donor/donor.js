@@ -9,6 +9,28 @@ frappe.ui.form.on('Donor', {
 
 		if(!frm.doc.__islocal) {
 			frappe.contacts.render_address_and_contact(frm);
+
+			frm.add_custom_button(__('Accounting Ledger'), function() {
+				if (frm.doc.customer) {
+					frappe.set_route('query-report', 'General Ledger', {party_type: 'Customer', party: frm.doc.customer});
+				} else {
+					frappe.set_route('query-report', 'General Ledger', {party_type: 'Donor', party: frm.doc.name});
+				}
+			});
+
+			if (frm.doc.customer) {
+				frm.add_custom_button(__('Accounts Receivable'), function() {
+					frappe.set_route('query-report', 'Accounts Receivable', {customer: frm.doc.customer});
+				});
+			} else {
+				frm.add_custom_button(__('Create Customer'), () => {
+					frm.call('make_customer_and_link').then(() => {
+						frm.reload_doc();
+					});
+				});
+			}
+
+			erpnext.utils.set_party_dashboard_indicators(frm);
 		} else {
 			frappe.contacts.clear_address_and_contact(frm);
 		}

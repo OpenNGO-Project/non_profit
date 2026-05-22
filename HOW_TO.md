@@ -34,6 +34,17 @@ the standard document APIs.
 
 Use **Donor**, **Donation Campaign**, **Donation**, and **Donation Receipt** for fundraising workflows.
 
+Use **Donor.customer** to connect fundraising contacts to ERPNext Customer data.
+Open a Donor and click **Create Customer** when the link is missing. The helper
+reuses a Customer already linked to a Member with the same email before creating
+a new Customer, then links Contact and Address rows to both Donor and Customer.
+Donor email is stored on the linked **Customer** (`Customer.email_id`), not on
+Donor. Donation, Recurring Donation, and Donation Receipt rows keep an email
+snapshot for operations and correspondence. For existing records, run
+`non_profit.non_profit.doctype.donor.donor.backfill_donor_customers` with
+`bench execute` when you intentionally want to create/link Customers for older
+Donors.
+
 `Donation.thank_you_sent` is a standard field. It is set automatically when `Donation.send_thank_you()` queues an email and can also be used by presentation apps for manual acknowledgement queues.
 
 When a payment gateway authorizes a Donation, `Donation.on_payment_authorized()`

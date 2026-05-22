@@ -18,14 +18,14 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 ## Key DocTypes
 
 - **Member** and **Membership** for membership identity, periods, invoicing, and B2B/B2C flows.
-- **Donor**, **Donation**, **Donation Campaign**, **Recurring Donation**, and **Donation Receipt** for fundraising.
+- **Donor**, **Donation**, **Donation Campaign**, **Recurring Donation**, and **Donation Receipt** for fundraising. `Donor.customer` is the canonical ERPNext Customer relation for donor identity; Donation still links to Donor.
 - **Sponsor**, **Sponsor Tier**, **Volunteer**, and **Grant Application** for broader NPO operations.
 - **Non Profit Settings** for company, donor type, billing, invoicing, payment account, and email defaults.
 
 ## Hooks
 
 - `after_install = non_profit.setup.setup_non_profit`
-- `after_migrate = non_profit.non_profit.fundraising_setup.ensure_fundraising_fixtures`
+- `after_migrate = non_profit.non_profit.fundraising_setup.ensure_fundraising_fixtures` refreshes non_profit custom fields and fundraising fixtures.
 - `doc_events["Membership"]["validate"] = non_profit.non_profit.membership_sync.validate_no_overlap`
 - Daily scheduler jobs expire memberships and process recurring donations.
 - `Payment Entry` is extended through `override_doctype_class`.
@@ -34,7 +34,27 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 
 `Non Profit Manager` and `Non Profit Member` are Desk roles in this bench. Install/migrate setup keeps them enabled with Desk Access and repairs existing users with either role that were left as Website Users. This prevents SSO-created NPO operators from having non_profit DocType permissions but failing Frappe's standard list helpers such as saved `List Filter` loading.
 
+Non-profit setup also disables `auto_opt_in` on ERPNext's known loyalty test
+fixtures (`Test Single Loyalty` and `Test Multiple Loyalty`) when they exist.
+Those fixtures are created by ERPNext tests and match every Customer, which
+otherwise makes normal NPO/Miki Customer saves show "Multiple Loyalty Programs
+found" messages. Real Loyalty Program records are left untouched.
+
 ## Donation Thank-Yous
+
+Donor identity mirrors the Member/Customer pattern: `Donation.donor` points to a
+Donor, and Customer-level CRM data resolves through `Donation.donor ->
+Donor.customer`. Donor no longer stores its own email address; donor email is
+read from `Donor.customer -> Customer.email_id` and copied onto Donation /
+Recurring Donation / Donation Receipt rows as an operational snapshot.
+`Donor.make_customer_and_link()` and
+`non_profit.non_profit.doctype.donor.donor.get_or_create_customer_for_donor()`
+reuse a Customer from a same-email Member first, then a same-email Customer, and
+otherwise create a new Customer. The helper links Contact and Address rows to
+both Donor and Customer. A one-time migrate patch preserves existing
+`Donor.email` values by creating/linking Customers before the Donor email field
+is removed from the model; `backfill_donor_customers(limit=None)` remains
+available for explicit repair runs.
 
 `Donation.thank_you_sent` is a standard field on Donation. `Donation.send_thank_you()` queues the configured Email Template and marks this field once the email is queued. Presentation apps such as `ilanga_app` and `good_npo` read this field for pending thank-you queues.
 

@@ -2,9 +2,13 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import flt, nowdate
 
+from non_profit.non_profit.doctype.donor.donor import get_donor_email
+
 
 class DonationReceipt(Document):
 	def validate(self):
+		if self.donor:
+			self.email = get_donor_email(self.donor) or self.email
 		self._compute_total()
 		if self.fiscal_year and not self.period_from:
 			fy = frappe.get_doc("Fiscal Year", self.fiscal_year)

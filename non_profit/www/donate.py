@@ -2,6 +2,8 @@ import frappe
 from frappe import _
 from frappe.utils import nowdate
 
+from non_profit.non_profit.doctype.donor.donor import find_donor_by_email, get_or_create_customer_for_donor
+
 
 no_cache = 1
 
@@ -59,19 +61,24 @@ def _handle_submission(form):
 		dt.flags.ignore_permissions = True
 		dt.insert()
 
-	donor_record = frappe.db.get_value("Donor", {"email": email}, "name")
+	donor_record = find_donor_by_email(email)
 	if not donor_record:
 		donor = frappe.get_doc(
 			{
 				"doctype": "Donor",
 				"donor_name": donor_name,
-				"email": email,
 				"donor_type": donor_type,
 			}
 		)
 		donor.flags.ignore_permissions = True
 		donor.insert()
 		donor_record = donor.name
+	else:
+		donor = frappe.get_doc("Donor", donor_record)
+		if donor.donor_name != donor_name:
+			donor.db_set("donor_name", donor_name, update_modified=False)
+			donor.donor_name = donor_name
+	get_or_create_customer_for_donor(donor, email=email)
 
 	company = settings.donation_company or frappe.db.get_default("company")
 	if not company:

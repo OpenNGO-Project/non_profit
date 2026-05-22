@@ -222,7 +222,6 @@
   },
   {
    "depends_on": "eval:doc.recipient === \"Donor\";",
-   "fetch_from": "donor.email",
    "fieldname": "donor_email",
    "fieldtype": "Data",
    "label": "Email",
