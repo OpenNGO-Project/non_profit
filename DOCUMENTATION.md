@@ -101,6 +101,9 @@ apps such as `payrexx_integration` should verify provider callbacks and then
 call the standard document hooks (`Donation.on_payment_authorized`,
 Membership/Sales Invoice/Subscription helpers) instead of adding
 provider-specific settings or webhook endpoints here.
+The old public mock payment helper is guarded by `developer_mode` plus the
+explicit `enable_non_profit_mock_payments` site-config flag and must not be
+used as a production payment confirmation path.
 
 When `good_connector` is installed, legacy Member registration uses
 `good_connector.identity_matching` to create or reuse the linked Contact for the

@@ -31,7 +31,7 @@ class Member(Document):
         validate_email_address(email.strip(), True)
 
     @frappe.whitelist()
-    def make_customer_and_link(self):
+    def make_customer_and_link(self) -> None:
         if self.customer:
             frappe.msgprint(_("A customer is already linked to this Member"))
 

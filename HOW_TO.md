@@ -52,6 +52,12 @@ marks the Donation paid first. If automated Payment Entry creation is enabled
 but account configuration is incomplete, the accounting failure is logged and
 does not roll back the paid state or thank-you dispatch.
 
+The legacy donation mock payment button is disabled by default. It only works
+on developer sites when both `developer_mode` and
+`enable_non_profit_mock_payments` are enabled in `site_config.json`. Production
+sites should use a real payment integration such as `payrexx_integration`,
+which verifies the provider callback before calling the Donation payment hook.
+
 For multi-company benches, make sure the Donation's Mode of Payment has a
 default account row for the Donation company. Global accounts in **Non Profit
 Settings** are ignored when they belong to a different company.
