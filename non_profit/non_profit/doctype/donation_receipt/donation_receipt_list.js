@@ -1,6 +1,6 @@
 frappe.listview_settings["Donation Receipt"] = {
 	onload(listview) {
-		listview.page.add_inner_button(__("Generate Yearly Receipts"), () => {
+		listview.page.add_action_item(__("Jährliche Spendenbescheinigungen erstellen"), () => {
 			frappe.prompt(
 				[
 					{
@@ -24,17 +24,17 @@ frappe.listview_settings["Donation Receipt"] = {
 						method: "non_profit.non_profit.doctype.donation_receipt.donation_receipt.generate_yearly_receipts",
 						args: values,
 						freeze: true,
-						freeze_message: __("Generating receipts..."),
+						freeze_message: __("Spendenbescheinigungen werden erstellt..."),
 						callback: (r) => {
 							frappe.msgprint(
-								__("Created {0} receipts", [r.message.created])
+								__("{0} Spendenbescheinigungen erstellt", [r.message.created])
 							);
 							listview.refresh();
 						},
 					});
 				},
-				__("Generate Yearly Receipts"),
-				__("Generate")
+				__("Jährliche Spendenbescheinigungen erstellen"),
+				__("Erstellen")
 			);
 		});
 	},

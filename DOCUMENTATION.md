@@ -58,7 +58,7 @@ installs have the newer `Donor.customer` column before it queries donor rows;
 `backfill_donor_customers(limit=None)` remains available for explicit repair
 runs.
 
-`Donation.thank_you_sent` is a standard field on Donation. `Donation.send_thank_you()` queues the configured Email Template and marks this field once the email is queued. Presentation apps such as `ilanga_app` and `good_npo` read this field for pending thank-you queues.
+`Donation.thank_you_sent` is a standard field on Donation for **Verdankungen**. `Donation.send_thank_you()` queues the configured Email Template, stores `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` when available, and marks this field once the email is queued. Presentation apps such as `ilanga_app` and `good_npo` read this field for pending thank-you queues. `Donation.receipt` remains reserved for **Donation Receipt** / **Spendenbescheinigung** tax certificates, so an immediate thank-you must not populate it.
 
 `Donation.on_payment_authorized()` sets `paid = 1` before optional accounting
 side effects. Automated Payment Entry failures are logged with the Donation

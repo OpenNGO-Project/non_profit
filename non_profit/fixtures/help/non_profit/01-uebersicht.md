@@ -7,7 +7,7 @@ level: Beginner
 
 # Non Profit — Übersicht
 
-Non Profit ist die gemeinsame fachliche Basis für Spenden, Mitglieder, Spendenbestätigungen, Freiwillige, Chapters und Förderanträge. Andere Apps wie GoodNPO oder Ilanga können diese Datensätze mit eigener Oberfläche und eigenem Branding nutzen.
+Non Profit ist die gemeinsame fachliche Basis für Spenden, Mitglieder, Verdankungen, Spendenbescheinigungen, Freiwillige, Chapters und Förderanträge. Andere Apps wie GoodNPO oder Ilanga können diese Datensätze mit eigener Oberfläche und eigenem Branding nutzen.
 
 ![Non Profit Workspace mit den wichtigsten Abkürzungen und Bereichen](/assets/non_profit/images/help/01-non-profit-workspace.png)
 
@@ -16,7 +16,8 @@ Non Profit ist die gemeinsame fachliche Basis für Spenden, Mitglieder, Spendenb
 | Aufgabe | Datensätze |
 |---|---|
 | Spenden erfassen | **Donor**, **Donation**, **Donation Campaign** |
-| Spenden bestätigen | **Donation Receipt** |
+| Verdankungen verwalten | **Donation** |
+| Spendenbescheinigungen erstellen | **Donation Receipt** |
 | Mitglieder führen | **Member**, **Membership**, **Membership Type** |
 | Wiederkehrende Spenden | **Recurring Donation** |
 | Freiwillige verwalten | **Volunteer**, **Volunteer Type**, **Volunteer Skill** |
@@ -27,7 +28,7 @@ Non Profit ist die gemeinsame fachliche Basis für Spenden, Mitglieder, Spendenb
 1. Stammdaten prüfen oder anlegen.
 2. Spende, Mitgliedschaft oder Förderantrag erfassen.
 3. Status und verknüpfte Dokumente prüfen.
-4. Bestätigung, Rechnung oder Follow-up auslösen.
+4. Verdankung, Spendenbescheinigung, Rechnung oder Follow-up auslösen.
 
 ## Wann nutze ich GoodNPO oder Ilanga statt Non Profit?
 

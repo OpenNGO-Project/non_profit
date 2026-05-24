@@ -17,6 +17,9 @@
   "payment_details_section",
   "paid",
   "thank_you_sent",
+  "thank_you_sent_on",
+  "thank_you_email_queue",
+  "thank_you_sent_by",
   "amount",
   "mode_of_payment",
   "recurring_donation",
@@ -119,6 +122,29 @@
    "fieldtype": "Check",
    "label": "Thank You Sent",
    "no_copy": 1
+  },
+  {
+   "fieldname": "thank_you_sent_on",
+   "fieldtype": "Datetime",
+   "label": "Thank You Sent On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "thank_you_email_queue",
+   "fieldtype": "Link",
+   "label": "Thank You Email Queue",
+   "no_copy": 1,
+   "options": "Email Queue",
+   "read_only": 1
+  },
+  {
+   "fieldname": "thank_you_sent_by",
+   "fieldtype": "Link",
+   "label": "Thank You Sent By",
+   "no_copy": 1,
+   "options": "User",
+   "read_only": 1
   },
   {
    "fieldname": "company",

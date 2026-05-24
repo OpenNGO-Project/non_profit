@@ -32,12 +32,13 @@ the standard document APIs.
 
 ## Donations
 
-Use **Donor**, **Donation Campaign**, **Donation**, and **Donation Receipt** for fundraising workflows.
+Use **Donor** (Spender), **Donation Campaign** (Spendenkampagne), **Donation** (Spende), and **Donation Receipt** (Spendenbescheinigung) for fundraising workflows.
 
 Use **Donor.customer** to connect fundraising contacts to ERPNext Customer data.
-Open a Donor and click **Create Customer** when the link is missing. The helper
-reuses a Customer already linked to a Member with the same email before creating
-a new Customer, then links Contact and Address rows to both Donor and Customer.
+Open a Donor and use **Actions → Create Customer** when the link is missing.
+The helper reuses a Customer already linked to a Member with the same email
+before creating a new Customer, then links Contact and Address rows to both
+Donor and Customer.
 Donor email is stored on the linked **Customer** (`Customer.email_id`), not on
 Donor. Donation, Recurring Donation, and Donation Receipt rows keep an email
 snapshot for operations and correspondence. For existing records, run
@@ -45,7 +46,7 @@ snapshot for operations and correspondence. For existing records, run
 `bench execute` when you intentionally want to create/link Customers for older
 Donors.
 
-`Donation.thank_you_sent` is a standard field. It is set automatically when `Donation.send_thank_you()` queues an email and can also be used by presentation apps for manual acknowledgement queues.
+`Donation.thank_you_sent` is a standard field for **Verdankungen**. It is set automatically when `Donation.send_thank_you()` queues an email and can also be used by presentation apps for manual acknowledgement queues. `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` keep the audit trail. This is intentionally separate from `Donation.receipt`, which links to **Donation Receipt** / **Spendenbescheinigung** tax certificates generated yearly or ad hoc.
 
 When a payment gateway authorizes a Donation, `Donation.on_payment_authorized()`
 marks the Donation paid first. If automated Payment Entry creation is enabled

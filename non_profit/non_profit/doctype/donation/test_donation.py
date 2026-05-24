@@ -111,6 +111,94 @@ class TestDonation(unittest.TestCase):
         finally:
             frappe.flags.ignore_account_permission = original_flag
 
+    def test_send_thank_you_sets_audit_fields_without_receipt(self):
+        template_name = f"_Test Donation Thank You {frappe.generate_hash(length=8)}"
+        frappe.get_doc(
+            {
+                "doctype": "Email Template",
+                "name": template_name,
+                "subject": "Danke {{ doc.name }}",
+                "response": "<p>Danke {{ doc.donor_name }}</p>",
+                "use_html": 1,
+            }
+        ).insert(ignore_permissions=True)
+        settings = frappe.get_doc("Non Profit Settings")
+        settings.default_thank_you_template = template_name
+        settings.flags.ignore_permissions = True
+        settings.save()
+
+        donor = create_donor()
+        donation = frappe.get_doc(
+            {
+                "doctype": "Donation",
+                "company": frappe.get_cached_value(
+                    "Non Profit Settings", None, "company"
+                ),
+                "donor": donor.name,
+                "donor_name": donor.donor_name,
+                "email": get_donor_email(donor),
+                "date": get_active_fiscal_year_date(),
+                "amount": 25,
+            }
+        ).insert(ignore_permissions=True)
+        donation.submit()
+
+        with patch("frappe.sendmail", return_value=frappe._dict(name="EMAIL-Q-NPO")) as sendmail:
+            self.assertTrue(donation.send_thank_you())
+
+        donation.reload()
+        self.assertEqual(donation.thank_you_sent, 1)
+        self.assertEqual(donation.thank_you_email_queue, "EMAIL-Q-NPO")
+        self.assertFalse(donation.receipt)
+        sendmail.assert_called_once()
+        self.assertEqual(sendmail.call_args.kwargs["reference_doctype"], "Donation")
+        self.assertEqual(sendmail.call_args.kwargs["reference_name"], donation.name)
+
+    def test_yearly_receipts_include_thanked_donations_without_receipt(self):
+        from non_profit.non_profit.doctype.donation_receipt.donation_receipt import (
+            generate_yearly_receipts,
+        )
+
+        donation_date = get_active_fiscal_year_date()
+        fiscal_year = frappe.db.get_value(
+            "Fiscal Year",
+            {"year_start_date": ["<=", donation_date], "year_end_date": [">=", donation_date]},
+            "name",
+        )
+        if not fiscal_year:
+            self.skipTest("No active Fiscal Year configured")
+
+        donor = create_unique_donor()
+        donation = frappe.get_doc(
+            {
+                "doctype": "Donation",
+                "company": frappe.get_cached_value(
+                    "Non Profit Settings", None, "company"
+                ),
+                "donor": donor.name,
+                "donor_name": donor.donor_name,
+                "email": get_donor_email(donor),
+                "date": donation_date,
+                "amount": 33,
+                "paid": 1,
+                "thank_you_sent": 1,
+            }
+        ).insert(ignore_permissions=True)
+        donation.submit()
+
+        result = generate_yearly_receipts(fiscal_year)
+
+        receipt_names = result.get("receipts", [])
+        self.assertTrue(receipt_names)
+        linked_donations = frappe.get_all(
+            "Donation Receipt Item",
+            filters={"parent": ["in", receipt_names]},
+            pluck="donation",
+        )
+        donation.reload()
+        self.assertIn(donation.name, linked_donations)
+        self.assertFalse(donation.receipt)
+
 
 def get_company_and_accounts():
     company_name = erpnext.get_default_company()
@@ -155,6 +243,22 @@ def create_donor():
             }
         ).insert()
     get_or_create_customer_for_donor(donor_doc, email="donor@test.com")
+    donor_doc.reload()
+    return donor_doc
+
+
+def create_unique_donor():
+    donor_doc = frappe.get_doc(
+        {
+            "doctype": "Donor",
+            "donor_name": f"_Test Donor {frappe.generate_hash(length=8)}",
+            "donor_type": "_Test Donor",
+        }
+    ).insert()
+    get_or_create_customer_for_donor(
+        donor_doc,
+        email=f"donor-{frappe.generate_hash(length=8)}@test.com",
+    )
     donor_doc.reload()
     return donor_doc
 

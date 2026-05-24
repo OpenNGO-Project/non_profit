@@ -13,6 +13,10 @@
 - Keep `HOW_TO.md` and `DOCUMENTATION.md` current when hooks, doctypes, public helpers, setup, scheduled jobs, or operational behavior change.
 - All custom DocTypes must have Python controllers.
 - All new `@frappe.whitelist()` functions need type hints.
+- Desk form and list operations must use Frappe's Actions menu APIs
+  (`frm.page.add_action_item`, `listview.page.add_action_item`, or
+  `listview.page.add_actions_menu_item`) instead of visible inner-toolbar
+  custom buttons, so Non Profit / GoodNPO views remain usable on mobile.
 
 ## Smoke Commands
 

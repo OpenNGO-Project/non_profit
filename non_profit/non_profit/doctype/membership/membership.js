@@ -6,7 +6,7 @@ frappe.ui.form.on('Membership', {
 		if (frm.doc.__islocal)
 			return;
 
-		!frm.doc.invoice && frm.add_custom_button("Generate Invoice", () => {
+		!frm.doc.invoice && frm.page.add_action_item(__("Generate Invoice"), () => {
 			frm.call({
 				doc: frm.doc,
 				method: "generate_invoice",
@@ -21,7 +21,7 @@ frappe.ui.form.on('Membership', {
 		});
 
 		frappe.db.get_single_value("Non Profit Settings", "send_email").then(val => {
-			if (val) frm.add_custom_button("Send Acknowledgement", () => {
+			if (val) frm.page.add_action_item(__("Send Acknowledgement"), () => {
 				frm.call("send_acknowlement").then(() => {
 					frm.reload_doc();
 				});

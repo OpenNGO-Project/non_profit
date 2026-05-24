@@ -23,9 +23,9 @@ Spenden werden über **Donation** erfasst und optional einer **Donation Campaign
 
 Kampagnen bündeln mehrere Spenden zu einem Fundraising-Ziel. Hinterlegen Sie Namen, Zeitraum und Zielbetrag. Danach können Spenden der Kampagne zugeordnet und Auswertungen einfacher gelesen werden.
 
-## Spendenbestätigung
+## Verdankung und Spendenbescheinigung
 
-Für formelle Bestätigungen nutzen Sie **Donation Receipt**. Dort werden die relevanten Spenden gesammelt und für den Versand bzw. Druck vorbereitet.
+Verdankungen gehören zur **Donation** und werden über `thank_you_sent` samt Auditfeldern verfolgt. Für formelle Spendenbescheinigungen nutzen Sie **Donation Receipt**. Dort werden die relevanten Spenden gesammelt und für den Versand bzw. Druck vorbereitet.
 
 ## Häufige Fragen
 

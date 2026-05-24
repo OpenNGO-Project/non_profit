@@ -7,7 +7,7 @@ from typing import Any
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import cint, flt, get_link_to_form, getdate
+from frappe.utils import cint, flt, get_link_to_form, getdate, now_datetime
 
 from non_profit.non_profit.doctype.donor.donor import (
     find_donor_by_email,
@@ -61,11 +61,12 @@ class Donation(Document):
         except Exception:
             frappe.log_error(title=f"Thank-you dispatch failed for {self.name}")
 
-    def send_thank_you(self):
+    @frappe.whitelist()
+    def send_thank_you(self) -> bool:
         settings = frappe.get_single("Non Profit Settings")
         template_name = settings.default_thank_you_template
         if not template_name or not self.email:
-            return
+            return False
         template = frappe.get_doc("Email Template", template_name)
         context = {"doc": self.as_dict()}
         subject = frappe.render_template(template.subject, context)
@@ -73,15 +74,34 @@ class Donation(Document):
         message = frappe.render_template(body, context)
         # Queue the email; the scheduler sends it. Avoid now=True since that
         # runs SMTP synchronously on commit and can break the payment flow.
-        frappe.sendmail(
+        email_queue = frappe.sendmail(
             recipients=[self.email],
             subject=subject,
             message=message,
             reference_doctype=self.doctype,
             reference_name=self.name,
         )
-        if self.meta.has_field("thank_you_sent") and not self.thank_you_sent:
-            self.db_set("thank_you_sent", 1, update_modified=False)
+        self._mark_thank_you_sent(email_queue=email_queue)
+        return True
+
+    @frappe.whitelist()
+    def mark_thank_you_sent(self) -> bool:
+        self.check_permission("write")
+        self._mark_thank_you_sent()
+        return True
+
+    def _mark_thank_you_sent(self, email_queue: object | None = None) -> None:
+        updates = {}
+        if self.meta.has_field("thank_you_sent"):
+            updates["thank_you_sent"] = 1
+        if self.meta.has_field("thank_you_sent_on"):
+            updates["thank_you_sent_on"] = now_datetime()
+        if self.meta.has_field("thank_you_email_queue") and getattr(email_queue, "name", None):
+            updates["thank_you_email_queue"] = email_queue.name
+        if self.meta.has_field("thank_you_sent_by"):
+            updates["thank_you_sent_by"] = frappe.session.user
+        if updates:
+            self.db_set(updates, update_modified=False)
 
     def create_payment_entry(self, date=None):
         settings = frappe.get_doc("Non Profit Settings")
