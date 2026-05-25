@@ -1,9 +1,11 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
-    branches: [main, miki-dev, dev_mikk]
+    branches: [version-16, miki-dev, dev_mikk]
   pull_request:
+    branches: [version-16, miki-dev, dev_mikk]
 
 concurrency:
   group: ci-${{ github.ref }}
