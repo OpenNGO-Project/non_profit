@@ -104,6 +104,7 @@ after_migrate = "non_profit.non_profit.fundraising_setup.ensure_fundraising_fixt
 # Override standard doctype classes
 
 override_doctype_class = {
+	"Bank Transaction": "non_profit.non_profit.custom_doctype.bank_transaction.NonProfitBankTransaction",
 	"Payment Entry": "non_profit.non_profit.custom_doctype.payment_entry.NonProfitPaymentEntry",
 }
 

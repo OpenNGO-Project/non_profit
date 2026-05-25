@@ -65,6 +65,19 @@ side effects. Automated Payment Entry failures are logged with the Donation
 name and do not prevent thank-you dispatch. This keeps hosted-checkout payment
 callbacks from being rolled back by single-company account settings on
 multi-demo sites.
+The `Payment Entry` override also syncs Donation references: submitting a
+Payment Entry with a `Donation` reference marks that Donation paid when the
+submitted allocation total covers the Donation amount, and cancellation
+recalculates the flag from the remaining submitted Payment Entries.
+Bank reconciliation stays separate from payment success. `Donation.reconciled`,
+`reconciled_on`, and `reconciled_payment_entry` are read-only mirrors of
+submitted Donation Payment Entries whose `clearance_date` has been set by
+ERPNext Bank Clearance or Bank Transaction reconciliation. For card providers,
+payment success should submit the Payment Entry and mark the Donation paid;
+later bank/payout import and matching sets the clearance date and therefore the
+Donation reconciliation fields. The `Bank Transaction` override only syncs
+Donation mirrors after ERPNext updates the linked Payment Entry; it does not
+change ERPNext's bank reconciliation rules.
 Global `Non Profit Settings` accounts are applied only when the configured
 Account belongs to the Donation company, so one company's legacy settings do
 not overwrite another company's party or bank accounts.

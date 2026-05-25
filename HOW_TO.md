@@ -53,6 +53,20 @@ marks the Donation paid first. If automated Payment Entry creation is enabled
 but account configuration is incomplete, the accounting failure is logged and
 does not roll back the paid state or thank-you dispatch.
 
+When an operator uses **Create Payment Entry** from a submitted unpaid Donation,
+submitting the Payment Entry marks the Donation paid. Cancelling the Payment
+Entry recalculates the Donation paid flag from the remaining submitted Payment
+Entries for that Donation.
+
+Credit card payments have two separate states. **Paid** means the gateway
+confirmed the transaction and a submitted Payment Entry covers the Donation.
+**Reconciled** means the submitted Payment Entry has been cleared through
+ERPNext bank reconciliation, which sets `Payment Entry.clearance_date`.
+`Donation.reconciled`, `reconciled_on`, and `reconciled_payment_entry` are
+read-only operational mirrors of that accounting state. Use a gateway clearing
+account as the Payment Entry target when card payouts settle later or net of
+fees, then reconcile imported bank or payout transactions in ERPNext.
+
 The legacy donation mock payment button is disabled by default. It only works
 on developer sites when both `developer_mode` and
 `enable_non_profit_mock_payments` are enabled in `site_config.json`. Production

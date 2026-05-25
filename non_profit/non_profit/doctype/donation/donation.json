@@ -16,6 +16,9 @@
   "date",
   "payment_details_section",
   "paid",
+  "reconciled",
+  "reconciled_on",
+  "reconciled_payment_entry",
   "thank_you_sent",
   "thank_you_sent_on",
   "thank_you_email_queue",
@@ -114,6 +117,32 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Paid"
+  },
+  {
+   "default": "0",
+   "description": "Set when submitted Payment Entries for this Donation are cleared through bank reconciliation.",
+   "fieldname": "reconciled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Reconciled",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciled_on",
+   "fieldtype": "Date",
+   "label": "Reconciled On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciled_payment_entry",
+   "fieldtype": "Link",
+   "label": "Reconciled Payment Entry",
+   "no_copy": 1,
+   "options": "Payment Entry",
+   "read_only": 1
   },
   {
    "default": "0",

@@ -7,7 +7,10 @@ import erpnext
 import frappe
 
 from non_profit.non_profit.doctype.donation.donation import create_gateway_donation
-from non_profit.non_profit.doctype.donor.donor import get_donor_email, get_or_create_customer_for_donor
+from non_profit.non_profit.doctype.donor.donor import (
+    get_donor_email,
+    get_or_create_customer_for_donor,
+)
 
 
 class TestDonation(unittest.TestCase):
@@ -26,29 +29,63 @@ class TestDonation(unittest.TestCase):
         settings.flags.ignore_permissions = True
         settings.save()
 
-    def test_payment_entry_for_donations(self):
-        donor = create_donor()
-        create_mode_of_payment(
-            frappe.get_cached_value("Non Profit Settings", None, "company")
-        )
-        payment = frappe._dict(
-            {"amount": 100, "method": "Debit Card", "id": "pay_MeXAmsgeKOhq7O"}
-        )
-        donation = create_gateway_donation(donor, payment)
+    def test_payment_entry_for_donations_marks_paid_and_clears_on_cancel(self):
+        donation, payment_entry = create_donation_with_payment_entry()
 
         self.assertTrue(donation.name)
 
-        # Naive test to check if at all payment entry is generated
-        # This method is actually triggered from Payment Gateway
-        # In any case if details were missing, this would throw an error
-        donation.db_set("paid", 1)
-        donation.create_payment_entry(date=get_active_fiscal_year_date())
-        donation.reload()
-
         self.assertEqual(donation.paid, 1)
-        self.assertTrue(
-            frappe.db.exists("Payment Entry", {"reference_no": donation.name})
+        self.assertTrue(payment_entry.name)
+
+        payment_entry.cancel()
+        donation.reload()
+        self.assertEqual(donation.paid, 0)
+
+    def test_payment_entry_clearance_marks_donation_reconciled(self):
+        donation, payment_entry = create_donation_with_payment_entry()
+        clearance_date = get_active_fiscal_year_date()
+
+        payment_entry.db_set("clearance_date", clearance_date)
+
+        donation.reload()
+        self.assertEqual(donation.paid, 1)
+        self.assertEqual(donation.reconciled, 1)
+        self.assertEqual(donation.reconciled_on, clearance_date)
+        self.assertEqual(donation.reconciled_payment_entry, payment_entry.name)
+
+        payment_entry.db_set("clearance_date", None)
+
+        donation.reload()
+        self.assertEqual(donation.reconciled, 0)
+        self.assertFalse(donation.reconciled_on)
+        self.assertFalse(donation.reconciled_payment_entry)
+
+    def test_bank_transaction_clearance_marks_donation_reconciled(self):
+        donation, payment_entry = create_donation_with_payment_entry()
+        clearance_date = get_active_fiscal_year_date()
+        bank_transaction = frappe.new_doc("Bank Transaction")
+        payment_row = frappe._dict(
+            {
+                "payment_document": "Payment Entry",
+                "payment_entry": payment_entry.name,
+            }
         )
+
+        bank_transaction.clear_linked_payment_entry(
+            payment_row, clearance_date=clearance_date
+        )
+
+        donation.reload()
+        self.assertEqual(donation.reconciled, 1)
+        self.assertEqual(donation.reconciled_on, clearance_date)
+        self.assertEqual(donation.reconciled_payment_entry, payment_entry.name)
+
+        bank_transaction.clear_linked_payment_entry(payment_row, clearance_date=None)
+
+        donation.reload()
+        self.assertEqual(donation.reconciled, 0)
+        self.assertFalse(donation.reconciled_on)
+        self.assertFalse(donation.reconciled_payment_entry)
 
     def test_payment_authorization_keeps_paid_state_when_payment_entry_fails(self):
         donor = create_donor()
@@ -143,7 +180,9 @@ class TestDonation(unittest.TestCase):
         ).insert(ignore_permissions=True)
         donation.submit()
 
-        with patch("frappe.sendmail", return_value=frappe._dict(name="EMAIL-Q-NPO")) as sendmail:
+        with patch(
+            "frappe.sendmail", return_value=frappe._dict(name="EMAIL-Q-NPO")
+        ) as sendmail:
             self.assertTrue(donation.send_thank_you())
 
         donation.reload()
@@ -162,7 +201,10 @@ class TestDonation(unittest.TestCase):
         donation_date = get_active_fiscal_year_date()
         fiscal_year = frappe.db.get_value(
             "Fiscal Year",
-            {"year_start_date": ["<=", donation_date], "year_end_date": [">=", donation_date]},
+            {
+                "year_start_date": ["<=", donation_date],
+                "year_end_date": [">=", donation_date],
+            },
             "name",
         )
         if not fiscal_year:
@@ -231,7 +273,9 @@ def create_donor_type():
 
 
 def create_donor():
-    donor = frappe.db.get_value("Donor", {"donor_name": "_Test Donor"}, "name", order_by="creation desc")
+    donor = frappe.db.get_value(
+        "Donor", {"donor_name": "_Test Donor"}, "name", order_by="creation desc"
+    )
     if donor:
         donor_doc = frappe.get_doc("Donor", donor)
     else:
@@ -245,6 +289,32 @@ def create_donor():
     get_or_create_customer_for_donor(donor_doc, email="donor@test.com")
     donor_doc.reload()
     return donor_doc
+
+
+def create_donation_with_payment_entry(amount=100):
+    donor = create_donor()
+    create_mode_of_payment(
+        frappe.get_cached_value("Non Profit Settings", None, "company")
+    )
+    payment = frappe._dict(
+        {
+            "amount": amount,
+            "method": "Debit Card",
+            "id": f"pay_{frappe.generate_hash(length=8)}",
+        }
+    )
+    donation = create_gateway_donation(donor, payment)
+
+    # This method is normally triggered from Payment Gateway handling. If
+    # accounting details are missing, it should throw here rather than later.
+    donation.create_payment_entry(date=get_active_fiscal_year_date())
+    donation.reload()
+
+    payment_entry = frappe.get_doc(
+        "Payment Entry",
+        frappe.db.get_value("Payment Entry", {"reference_no": donation.name}, "name"),
+    )
+    return donation, payment_entry
 
 
 def create_unique_donor():

@@ -4,7 +4,9 @@ import frappe
 import erpnext
 
 from frappe import _, scrub
+from frappe.query_builder import Order
 from frappe.utils.data import comma_or, flt, getdate
+from frappe.query_builder.functions import Sum
 
 from erpnext.accounts.doctype.invoice_discounting.invoice_discounting import (
     get_party_account_based_on_invoice_discounting,
@@ -23,6 +25,21 @@ from erpnext.setup.utils import get_exchange_rate
 
 
 class NonProfitPaymentEntry(PaymentEntry):
+    def on_submit(self):
+        super().on_submit()
+        sync_donation_accounting_state_for_payment_entry(self)
+
+    def on_cancel(self):
+        super().on_cancel()
+        sync_donation_accounting_state_for_payment_entry(self)
+
+    def on_change(self):
+        super_on_change = getattr(super(), "on_change", None)
+        if callable(super_on_change):
+            super_on_change()
+        if self.docstatus == 1:
+            sync_donation_reconciliation_state_for_payment_entry(self)
+
     def validate_reference_documents(self):
         if self.party_type == "Student":
             valid_reference_doctypes = ("Fees", "Journal Entry")
@@ -275,6 +292,156 @@ def set_paid_amount_and_received_amount(
             received_amount = paid_amount * doc.get("conversion_rate", 1)
 
     return paid_amount, received_amount
+
+
+def sync_donation_accounting_state_for_payment_entry(payment_entry) -> None:
+    sync_donation_paid_state_for_payment_entry(payment_entry)
+    sync_donation_reconciliation_state_for_payment_entry(payment_entry)
+
+
+def sync_donation_paid_state_for_payment_entry(payment_entry) -> None:
+    donation_names = _donation_names_for_payment_entry(payment_entry)
+    for donation_name in donation_names:
+        sync_donation_paid_state(donation_name)
+
+
+def sync_donation_paid_state(donation_name: str) -> None:
+    if not frappe.db.exists("Donation", donation_name):
+        return
+
+    donation_amount, current_paid = frappe.db.get_value(
+        "Donation",
+        donation_name,
+        ["amount", "paid"],
+    )
+    paid = (
+        1
+        if _submitted_donation_payment_total(donation_name) >= flt(donation_amount)
+        else 0
+    )
+    if int(current_paid or 0) != paid:
+        frappe.db.set_value(
+            "Donation", donation_name, "paid", paid, update_modified=False
+        )
+
+
+def _submitted_donation_payment_total(donation_name: str) -> float:
+    payment_entry = frappe.qb.DocType("Payment Entry")
+    payment_reference = frappe.qb.DocType("Payment Entry Reference")
+    total = (
+        frappe.qb.from_(payment_reference)
+        .inner_join(payment_entry)
+        .on(payment_entry.name == payment_reference.parent)
+        .select(Sum(payment_reference.allocated_amount))
+        .where(payment_entry.docstatus == 1)
+        .where(payment_reference.reference_doctype == "Donation")
+        .where(payment_reference.reference_name == donation_name)
+    ).run()[0][0]
+    return flt(total)
+
+
+def sync_donation_reconciliation_state_for_payment_entry(payment_entry) -> None:
+    donation_names = _donation_names_for_payment_entry(payment_entry)
+    for donation_name in donation_names:
+        sync_donation_reconciliation_state(donation_name)
+
+
+def sync_donation_reconciliation_state_for_payment_entry_name(
+    payment_entry_name: str,
+) -> None:
+    for donation_name in _donation_names_for_payment_entry_name(payment_entry_name):
+        sync_donation_reconciliation_state(donation_name)
+
+
+def sync_donation_reconciliation_state(donation_name: str) -> None:
+    if not frappe.db.exists("Donation", donation_name):
+        return
+
+    donation_meta = frappe.get_meta("Donation")
+    if not donation_meta.has_field("reconciled"):
+        return
+
+    donation = frappe.db.get_value(
+        "Donation",
+        donation_name,
+        ["amount", "reconciled", "reconciled_on", "reconciled_payment_entry"],
+        as_dict=True,
+    )
+    if not donation:
+        return
+
+    reconciled_payment = _submitted_reconciled_donation_payment_details(donation_name)
+    reconciled = 1 if reconciled_payment.total >= flt(donation.amount) else 0
+    reconciled_on = reconciled_payment.clearance_date if reconciled else None
+    reconciled_payment_entry = reconciled_payment.payment_entry if reconciled else None
+
+    updates = {}
+    if int(donation.reconciled or 0) != reconciled:
+        updates["reconciled"] = reconciled
+    if (
+        donation_meta.has_field("reconciled_on")
+        and donation.reconciled_on != reconciled_on
+    ):
+        updates["reconciled_on"] = reconciled_on
+    if (
+        donation_meta.has_field("reconciled_payment_entry")
+        and donation.reconciled_payment_entry != reconciled_payment_entry
+    ):
+        updates["reconciled_payment_entry"] = reconciled_payment_entry
+
+    if updates:
+        frappe.db.set_value("Donation", donation_name, updates, update_modified=False)
+
+
+def _donation_names_for_payment_entry(payment_entry) -> set[str]:
+    return {
+        row.reference_name
+        for row in payment_entry.get("references")
+        if row.reference_doctype == "Donation" and row.reference_name
+    }
+
+
+def _donation_names_for_payment_entry_name(payment_entry_name: str) -> set[str]:
+    payment_reference = frappe.qb.DocType("Payment Entry Reference")
+    rows = (
+        frappe.qb.from_(payment_reference)
+        .select(payment_reference.reference_name)
+        .where(payment_reference.parent == payment_entry_name)
+        .where(payment_reference.reference_doctype == "Donation")
+        .where(payment_reference.reference_name.isnotnull())
+    ).run()
+    return {row[0] for row in rows if row[0]}
+
+
+def _submitted_reconciled_donation_payment_details(donation_name: str) -> frappe._dict:
+    payment_entry = frappe.qb.DocType("Payment Entry")
+    payment_reference = frappe.qb.DocType("Payment Entry Reference")
+    rows = (
+        frappe.qb.from_(payment_reference)
+        .inner_join(payment_entry)
+        .on(payment_entry.name == payment_reference.parent)
+        .select(
+            payment_entry.name,
+            payment_entry.clearance_date,
+            payment_reference.allocated_amount,
+        )
+        .where(payment_entry.docstatus == 1)
+        .where(payment_entry.clearance_date.isnotnull())
+        .where(payment_entry.clearance_date != "0000-00-00")
+        .where(payment_reference.reference_doctype == "Donation")
+        .where(payment_reference.reference_name == donation_name)
+        .orderby(payment_entry.clearance_date, order=Order.desc)
+        .orderby(payment_entry.name, order=Order.desc)
+    ).run(as_dict=True)
+
+    if not rows:
+        return frappe._dict(total=0, clearance_date=None, payment_entry=None)
+
+    return frappe._dict(
+        total=sum(flt(row.allocated_amount) for row in rows),
+        clearance_date=rows[0].clearance_date,
+        payment_entry=rows[0].name,
+    )
 
 
 @frappe.whitelist()
