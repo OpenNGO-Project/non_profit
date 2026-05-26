@@ -114,6 +114,7 @@ def generate_yearly_receipts(
 
 
 def _require_receipt_manager() -> None:
-    if frappe.has_role("System Manager") or frappe.has_role("Non Profit Manager"):
+    roles = set(frappe.get_roles(frappe.session.user))
+    if roles.intersection({"System Manager", "Non Profit Manager"}):
         return
     frappe.throw(_("Not permitted"), frappe.PermissionError)
