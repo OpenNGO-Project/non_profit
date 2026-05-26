@@ -74,7 +74,7 @@ def process_recurring_donations():
             rec.create_donation(mark_paid=False)
             rec.advance_next_date()
             rec.save(ignore_permissions=True)
-            frappe.db.commit()
+            frappe.db.commit()  # nosemgrep: frappe-manual-commit
         except Exception:
             frappe.log_error(title=f"Recurring Donation fan-out failed: {name}")
             frappe.db.rollback()

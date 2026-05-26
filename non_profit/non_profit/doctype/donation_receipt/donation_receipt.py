@@ -1,7 +1,9 @@
 from typing import Any
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
+from frappe.query_builder.functions import GroupConcat
 from frappe.utils import flt, nowdate
 
 from non_profit.non_profit.doctype.donor.donor import get_donor_email
@@ -42,8 +44,9 @@ class DonationReceipt(Document):
 
     @frappe.whitelist()
     def send_to_donor(self) -> bool:
+        self.check_permission("write")
         if not self.email:
-            frappe.throw("No donor email")
+            frappe.throw(_("No donor email"))
         frappe.sendmail(
             recipients=[self.email],
             subject=f"Zuwendungsbestätigung {self.fiscal_year}",
@@ -69,21 +72,23 @@ def generate_yearly_receipts(
     country: str = "Germany",
     language: str = "de",
 ) -> dict[str, Any]:
+    _require_receipt_manager()
     fy = frappe.get_doc("Fiscal Year", fiscal_year)
     start, end = fy.year_start_date, fy.year_end_date
-    rows = frappe.db.sql(
-        """
-		SELECT donor, donor_name, email, SUM(amount) AS total,
-			   GROUP_CONCAT(name) AS donation_names
-		FROM `tabDonation`
-		WHERE docstatus = 1 AND paid = 1
-		  AND date BETWEEN %s AND %s
-		  AND (receipt IS NULL OR receipt = '')
-		GROUP BY donor
-		""",
-        (start, end),
-        as_dict=True,
-    )
+    donation = frappe.qb.DocType("Donation")
+    rows = (
+        frappe.qb.from_(donation)
+        .select(
+            donation.donor,
+            GroupConcat(donation.name).as_("donation_names"),
+        )
+        .where(donation.docstatus == 1)
+        .where(donation.paid == 1)
+        .where((donation.date >= start) & (donation.date <= end))
+        .where(donation.donor.isnotnull())
+        .where((donation.receipt.isnull()) | (donation.receipt == ""))
+        .groupby(donation.donor)
+    ).run(as_dict=True)
     created = []
     for row in rows:
         if not row.donor:
@@ -105,5 +110,10 @@ def generate_yearly_receipts(
         receipt.flags.ignore_permissions = True
         receipt.insert()
         created.append(receipt.name)
-    frappe.db.commit()
     return {"created": len(created), "receipts": created}
+
+
+def _require_receipt_manager() -> None:
+    if frappe.has_role("System Manager") or frappe.has_role("Non Profit Manager"):
+        return
+    frappe.throw(_("Not permitted"), frappe.PermissionError)

@@ -40,6 +40,22 @@ Those fixtures are created by ERPNext tests and match every Customer, which
 otherwise makes normal NPO/Miki Customer saves show "Multiple Loyalty Programs
 found" messages. Real Loyalty Program records are left untouched.
 
+## Whitelisted API Contracts
+
+Mutation endpoints must check permissions and let Frappe manage the request
+transaction. `DonationReceipt.generate_yearly_receipts` is restricted to
+`Non Profit Manager` or `System Manager` and creates draft receipts for
+submitted, paid Donations without an existing receipt link. `DonationReceipt`
+email sending, chapter staff edits, and grant review invitations require write
+permission on the target document. A portal user leaving a Chapter may only
+disable their own active row; editing another user still requires Chapter write
+permission.
+
+The development-only `Donation.mock_pay` endpoint is guest-whitelisted but
+POST-only and inert unless both `developer_mode` and
+`enable_non_profit_mock_payments` are set. It is not a production payment
+confirmation path.
+
 ## Donation Thank-Yous
 
 Donor identity mirrors the Member/Customer pattern: `Donation.donor` points to a
@@ -92,6 +108,11 @@ Miki uses:
 - `Membership.member` as the canonical membership link
 
 If any of these contracts change, adjust `miki_app` and run its membership-related tests.
+
+The **Expiring Memberships** report derives one row per Member from the latest
+non-cancelled Membership (`MAX(to_date)`) and filters that date against the
+selected month/fiscal year. Frappe v16 removed the old `Membership.paid`
+assumption from this fork, so report queries must not reference it.
 
 Memberships can be open-ended: callers that intentionally want no expiry set
 `membership.flags.keep_to_date_open = True` before insert. This bypasses the

@@ -96,7 +96,9 @@ class Donation(Document):
             updates["thank_you_sent"] = 1
         if self.meta.has_field("thank_you_sent_on"):
             updates["thank_you_sent_on"] = now_datetime()
-        if self.meta.has_field("thank_you_email_queue") and getattr(email_queue, "name", None):
+        if self.meta.has_field("thank_you_email_queue") and getattr(
+            email_queue, "name", None
+        ):
             updates["thank_you_email_queue"] = email_queue.name
         if self.meta.has_field("thank_you_sent_by"):
             updates["thank_you_sent_by"] = frappe.session.user
@@ -158,7 +160,9 @@ def _account_belongs_to_company(account: str | None, company: str | None) -> boo
     return frappe.db.get_value("Account", account, "company") == company
 
 
-@frappe.whitelist(allow_guest=True)  # nosemgrep: guest-whitelisted-method
+@frappe.whitelist(
+    allow_guest=True, methods=["POST"]
+)  # nosemgrep: guest-whitelisted-method
 def mock_pay(donation: str) -> dict[str, str]:
     """Development-only mock payment endpoint."""
     if not mock_donation_payments_enabled():

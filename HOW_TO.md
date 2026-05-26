@@ -48,6 +48,12 @@ Donors.
 
 `Donation.thank_you_sent` is a standard field for **Verdankungen**. It is set automatically when `Donation.send_thank_you()` queues an email and can also be used by presentation apps for manual acknowledgement queues. `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` keep the audit trail. This is intentionally separate from `Donation.receipt`, which links to **Donation Receipt** / **Spendenbescheinigung** tax certificates generated yearly or ad hoc.
 
+Yearly Donation Receipt generation is an operator action for users with
+`Non Profit Manager` or `System Manager`. It creates draft receipts for
+submitted, paid Donations in the selected fiscal year that do not already link
+to a receipt; it does not commit mid-request, so Frappe can roll back the whole
+operation if receipt creation fails.
+
 When a payment gateway authorizes a Donation, `Donation.on_payment_authorized()`
 marks the Donation paid first. If automated Payment Entry creation is enabled
 but account configuration is incomplete, the accounting failure is logged and
@@ -72,6 +78,7 @@ on developer sites when both `developer_mode` and
 `enable_non_profit_mock_payments` are enabled in `site_config.json`. Production
 sites should use a real payment integration such as `payrexx_integration`,
 which verifies the provider callback before calling the Donation payment hook.
+The mock endpoint is POST-only.
 
 For multi-company benches, make sure the Donation's Mode of Payment has a
 default account row for the Donation company. Global accounts in **Non Profit
@@ -99,6 +106,18 @@ linked Contact through Good Connector identity matching. Review possible fuzzy
 matches in **GC Potential Duplicate** instead of expecting automatic merges.
 
 When changing Member or Membership behavior, run the relevant `miki_app` tests too because Miki depends on the shared membership substrate.
+
+The **Expiring Memberships** report reads the latest non-cancelled Membership
+per Member and filters by its `to_date`. It no longer depends on the legacy
+`Membership.paid` field.
+
+## Chapters And Grants
+
+Chapter members can only leave their own active membership through the public
+leave endpoint. Staff changing another user's chapter row need write permission
+on the Chapter. Grant review invitations require write permission on the Grant
+Application and an Assessment Manager before the status is moved to
+**In Progress**.
 
 ## Smoke Checks
 

@@ -3,6 +3,8 @@
 
 
 import frappe
+from frappe import _
+from frappe.utils import cstr
 from frappe.website.website_generator import WebsiteGenerator
 
 
@@ -24,9 +26,9 @@ class Chapter(WebsiteGenerator):
 
     def enable(self):
         chapter = frappe.get_doc("Chapter", frappe.form_dict.name)
+        chapter.check_permission("write")
         chapter.append("members", dict(enable=self.value))
-        chapter.save(ignore_permissions=1)
-        frappe.db.commit()
+        chapter.save()
 
 
 def get_list_context(context):
@@ -39,12 +41,29 @@ def get_list_context(context):
 
 
 @frappe.whitelist()
-def leave(title: str, user_id: str, leave_reason: str) -> str:
+def leave(title: str, user_id: str | None = None, leave_reason: str = "") -> str:
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Login required"), frappe.PermissionError)
+
     chapter = frappe.get_doc("Chapter", title)
+    target_user = cstr(user_id or frappe.session.user).strip()
+    if target_user != frappe.session.user:
+        chapter.check_permission("write")
+    elif not any(
+        member.user == target_user and member.enabled for member in chapter.members
+    ):
+        frappe.throw(
+            _("You are not an active member of this chapter."), frappe.PermissionError
+        )
+
+    updated = False
     for member in chapter.members:
-        if member.user == user_id:
+        if member.user == target_user:
             member.enabled = 0
             member.leave_reason = leave_reason
-    chapter.save(ignore_permissions=1)
-    frappe.db.commit()
+            updated = True
+    if not updated:
+        frappe.throw(_("Chapter member not found."), frappe.DoesNotExistError)
+
+    chapter.save(ignore_permissions=target_user == frappe.session.user)
     return "Thank you for Feedback"

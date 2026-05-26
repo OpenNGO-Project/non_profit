@@ -47,6 +47,12 @@ def get_list_context(context):
 @frappe.whitelist()
 def send_grant_review_emails(grant_application: str) -> None:
     grant = frappe.get_doc("Grant Application", grant_application)
+    grant.check_permission("write")
+    if not grant.assessment_manager:
+        frappe.throw(
+            _("Assessment Manager is required before sending a review invitation.")
+        )
+
     url = get_url("grant-application/{0}".format(grant_application))
     frappe.sendmail(
         recipients=grant.assessment_manager,
@@ -60,6 +66,5 @@ def send_grant_review_emails(grant_application: str) -> None:
     grant.status = "In Progress"
     grant.email_notification_sent = 1
     grant.save()
-    frappe.db.commit()
 
     frappe.msgprint(_("Review Invitation Sent"))
