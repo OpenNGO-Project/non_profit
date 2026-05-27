@@ -42,28 +42,53 @@ def get_columns():
 
 def get_data(filters):
     start, end = _month_bounds(filters)
-    return frappe.db.sql(
-        """
-		SELECT ms.membership_type, ms.name, member.name, member.member_name,
-		       member.email_id, ms.to_date
-		FROM `tabMember` member
-		INNER JOIN (
-			SELECT membership.member, MAX(membership.to_date) AS max_membership_date
-			FROM `tabMembership` membership
-			WHERE membership.to_date IS NOT NULL
-			  AND membership.to_date != ''
-			  AND COALESCE(membership.membership_status, '') != 'Cancelled'
-			GROUP BY membership.member
-		) latest
-		  ON member.name = latest.member
-		INNER JOIN `tabMembership` ms
-		  ON ms.member = latest.member
-		 AND ms.to_date = latest.max_membership_date
-		WHERE ms.to_date BETWEEN %(start)s AND %(end)s
-		ORDER BY ms.to_date ASC, member.member_name ASC
-		""",
-        {"start": start, "end": end},
+    latest_by_member = {}
+    memberships = frappe.get_all(
+        "Membership",
+        filters={"to_date": ["is", "set"]},
+        fields=["name", "member", "membership_type", "membership_status", "to_date"],
+        order_by="member asc, to_date desc, name desc",
     )
+    for membership in memberships:
+        if not membership.member or membership.member in latest_by_member:
+            continue
+        if membership.membership_status == "Cancelled":
+            continue
+        latest_by_member[membership.member] = membership
+
+    expiring_memberships = [
+        membership
+        for membership in latest_by_member.values()
+        if membership.to_date and start <= getdate(membership.to_date) <= end
+    ]
+    if not expiring_memberships:
+        return []
+
+    member_names = [membership.member for membership in expiring_memberships]
+    members_by_name = {
+        member.name: member
+        for member in frappe.get_all(
+            "Member",
+            filters={"name": ["in", member_names]},
+            fields=["name", "member_name", "email_id"],
+        )
+    }
+    rows = []
+    for membership in expiring_memberships:
+        member = members_by_name.get(membership.member)
+        if not member:
+            continue
+        rows.append(
+            [
+                membership.membership_type,
+                membership.name,
+                member.name,
+                member.member_name,
+                member.email_id,
+                membership.to_date,
+            ]
+        )
+    return sorted(rows, key=lambda row: (row[5], row[3] or ""))
 
 
 def _month_bounds(filters) -> tuple[date, date]:

@@ -256,15 +256,13 @@ def make_invoice(membership, member, plan, settings):
 
 
 def set_expired_status():
-    frappe.db.sql(
-        """
-		UPDATE
-			`tabMembership` SET `membership_status` = 'Expired'
-		WHERE
-			`membership_status` not in ('Cancelled', 'Expired') AND `to_date` < %s
-		""",
-        (nowdate(),),
-    )
+    membership = frappe.qb.DocType("Membership")
+    (
+        frappe.qb.update(membership)
+        .set(membership.membership_status, "Expired")
+        .where(membership.membership_status.notin(("Cancelled", "Expired")))
+        .where(membership.to_date < nowdate())
+    ).run()
 
 
 def get_last_membership(member):

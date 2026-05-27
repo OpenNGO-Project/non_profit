@@ -1,5 +1,6 @@
 import frappe
 from frappe.model.document import Document
+from frappe.query_builder.functions import Count, Sum
 from frappe.utils import flt
 
 
@@ -17,17 +18,16 @@ class DonationCampaign(Document):
             self.donor_count = 0
             self.progress_percent = 0
             return
-        row = frappe.db.sql(
-            """
-			SELECT COALESCE(SUM(amount), 0) AS total, COUNT(DISTINCT donor) AS donors
-			FROM `tabDonation`
-			WHERE campaign = %s AND docstatus = 1 AND paid = 1
-			""",
-            self.name,
-            as_dict=True,
-        )[0]
-        self.total_raised = flt(row.total)
-        self.donor_count = int(row.donors or 0)
+        donation = frappe.qb.DocType("Donation")
+        total, donors = (
+            frappe.qb.from_(donation)
+            .select(Sum(donation.amount), Count(donation.donor).distinct())
+            .where(donation.campaign == self.name)
+            .where(donation.docstatus == 1)
+            .where(donation.paid == 1)
+        ).run()[0]
+        self.total_raised = flt(total)
+        self.donor_count = int(donors or 0)
         self.progress_percent = (
             (self.total_raised / self.goal_amount * 100) if self.goal_amount else 0
         )
