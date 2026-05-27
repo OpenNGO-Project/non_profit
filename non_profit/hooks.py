@@ -35,9 +35,7 @@ required_apps = ["erpnext"]
 
 # include js in doctype views
 # doctype_js = {"doctype" : "public/js/doctype.js"}
-doctype_js = {
-	"Sales Invoice": "public/js/payment_entry.js"
-}
+doctype_js = {"Sales Invoice": "public/js/payment_entry.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -50,7 +48,7 @@ doctype_js = {
 
 # website user home page (by Role)
 # role_home_page = {
-#	"Role": "home_page"
+# "Role": "home_page"
 # }
 
 # Generators
@@ -63,9 +61,9 @@ doctype_js = {
 # ----------
 
 jinja = {
-	"methods": [
-		"non_profit.non_profit.swiss_qrbill.swiss_qrbill_svg",
-	]
+    "methods": [
+        "non_profit.non_profit.swiss_qrbill.swiss_qrbill_svg",
+    ]
 }
 
 # Installation
@@ -104,8 +102,8 @@ after_migrate = "non_profit.non_profit.fundraising_setup.ensure_fundraising_fixt
 # Override standard doctype classes
 
 override_doctype_class = {
-	"Bank Transaction": "non_profit.non_profit.custom_doctype.bank_transaction.NonProfitBankTransaction",
-	"Payment Entry": "non_profit.non_profit.custom_doctype.payment_entry.NonProfitPaymentEntry",
+    "Bank Transaction": "non_profit.non_profit.custom_doctype.bank_transaction.NonProfitBankTransaction",
+    "Payment Entry": "non_profit.non_profit.custom_doctype.payment_entry.NonProfitPaymentEntry",
 }
 
 # Document Events
@@ -113,19 +111,19 @@ override_doctype_class = {
 # Hook on document methods and events
 
 doc_events = {
-	"Membership": {
-		"validate": "non_profit.non_profit.membership_sync.validate_no_overlap",
-	},
+    "Membership": {
+        "validate": "non_profit.non_profit.membership_sync.validate_no_overlap",
+    },
 }
 
 # Scheduled Tasks
 # ---------------
 
 scheduler_events = {
-	"daily": [
-		"non_profit.non_profit.doctype.membership.membership.set_expired_status",
-		"non_profit.non_profit.doctype.recurring_donation.recurring_donation.process_recurring_donations",
-	],
+    "daily": [
+        "non_profit.non_profit.doctype.membership.membership.set_expired_status",
+        "non_profit.non_profit.doctype.recurring_donation.recurring_donation.process_recurring_donations",
+    ],
 }
 
 # Testing
@@ -185,22 +183,26 @@ before_tests = "non_profit.non_profit.utils.before_tests"
 
 
 global_search_doctypes = {
-	"Non Profit": [
-		{'doctype': 'Certified Consultant', 'index': 1},
-		{'doctype': 'Certification Application', 'index': 2},
-		{'doctype': 'Volunteer', 'index': 3},
-		{'doctype': 'Membership', 'index': 4},
-		{'doctype': 'Member', 'index': 5},
-		{'doctype': 'Donor', 'index': 6},
-		{'doctype': 'Chapter', 'index': 7},
-		{'doctype': 'Grant Application', 'index': 8},
-		{'doctype': 'Volunteer Type', 'index': 9},
-		{'doctype': 'Donor Type', 'index': 10},
-		{'doctype': 'Membership Type', 'index': 11}
-	]
+    "Non Profit": [
+        {"doctype": "Certified Consultant", "index": 1},
+        {"doctype": "Certification Application", "index": 2},
+        {"doctype": "Volunteer", "index": 3},
+        {"doctype": "Membership", "index": 4},
+        {"doctype": "Member", "index": 5},
+        {"doctype": "Donor", "index": 6},
+        {"doctype": "Chapter", "index": 7},
+        {"doctype": "Grant Application", "index": 8},
+        {"doctype": "Volunteer Type", "index": 9},
+        {"doctype": "Donor Type", "index": 10},
+        {"doctype": "Membership Type", "index": 11},
+    ]
 }
 
 standard_portal_menu_items = [
-	{"title": _("Certification"), "route": "/certification",
-	 "reference_doctype": "Certification Application", "role": "Non Profit Portal User"},
+    {
+        "title": _("Certification"),
+        "route": "/certification",
+        "reference_doctype": "Certification Application",
+        "role": "Non Profit Portal User",
+    },
 ]

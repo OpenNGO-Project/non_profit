@@ -22,9 +22,9 @@ class TestMember(unittest.TestCase):
 
     def _membership_type(self) -> str:
         name = f"Identity Test {frappe.generate_hash(length=8)}"
-        frappe.get_doc({"doctype": "Membership Type", "membership_type": name, "amount": 10}).insert(
-            ignore_permissions=True
-        )
+        frappe.get_doc(
+            {"doctype": "Membership Type", "membership_type": name, "amount": 10}
+        ).insert(ignore_permissions=True)
         return name
 
     def test_get_or_create_member_uses_email_id_field(self):

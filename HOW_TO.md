@@ -37,7 +37,10 @@ Use **Donor** (Spender), **Donation Campaign** (Spendenkampagne), **Donation** (
 Public donation forms must submit donor name, a valid email, positive amount,
 consent, an allowed frequency, and only active Donation Campaigns. Keep those
 checks server-side in `non_profit.www.donate._handle_submission`; browser
-validation is only a convenience.
+validation is only a convenience. Guest POSTs are rate-limited. When
+`good_connector` provides a GoodVantage CAPTCHA site key, the form renders the
+widget and the server verifies the CAPTCHA token before creating Donor/Donation
+records.
 
 Use **Donor.customer** to connect fundraising contacts to ERPNext Customer data.
 Open a Donor and use **Actions → Create Customer** when the link is missing.

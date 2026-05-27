@@ -124,7 +124,9 @@ class TestNonProfitSetup(FrappeTestCase):
         frappe.clear_cache(user=user.name)
 
         self.assertEqual(frappe.db.get_value("Role", role, "desk_access"), 1)
-        self.assertEqual(frappe.db.get_value("User", user.name, "user_type"), "System User")
+        self.assertEqual(
+            frappe.db.get_value("User", user.name, "user_type"), "System User"
+        )
         self.assertTrue(frappe.has_permission("List Filter", "read", user=user.name))
 
 
@@ -213,7 +215,9 @@ class TestMembership(FrappeTestCase):
         self.assertFalse(membership.to_date)
 
     def test_ensure_membership_subscription_creates_open_ended_subscription(self):
-        from non_profit.non_profit.membership_subscription import ensure_membership_subscription
+        from non_profit.non_profit.membership_subscription import (
+            ensure_membership_subscription,
+        )
 
         membership = frappe.get_doc(
             {
@@ -243,7 +247,9 @@ class TestMembership(FrappeTestCase):
         self.assertFalse(subscription_doc.end_date)
 
     def test_ensure_membership_subscription_skips_non_subscription_type(self):
-        from non_profit.non_profit.membership_subscription import ensure_membership_subscription
+        from non_profit.non_profit.membership_subscription import (
+            ensure_membership_subscription,
+        )
 
         frappe.db.set_value(
             "Membership Type",

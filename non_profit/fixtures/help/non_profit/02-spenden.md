@@ -34,3 +34,6 @@ Prüfen Sie, ob die Person oder Organisation bereits als Donor existiert. Wenn n
 
 **Die Kampagnensumme stimmt nicht.**
 Prüfen Sie, ob alle Spenden der richtigen Kampagne zugeordnet sind und ob nur gültige bzw. bezahlte Spenden in der Auswertung berücksichtigt werden.
+
+**Das öffentliche Spendenformular lehnt eine Eingabe ab.**
+Prüfen Sie Pflichtfelder, Einwilligung, eine aktive Kampagne und, falls angezeigt, den CAPTCHA-Schritt.

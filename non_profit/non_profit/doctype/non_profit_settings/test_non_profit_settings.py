@@ -6,4 +6,4 @@ import unittest
 
 
 class TestNonProfitSettings(unittest.TestCase):
-	pass
+    pass

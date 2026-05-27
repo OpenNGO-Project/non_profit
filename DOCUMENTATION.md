@@ -60,7 +60,10 @@ Public donation pages that delegate to `non_profit.www.donate._handle_submission
 must pass server-side validation for donor name, email syntax, positive amount,
 accepted consent, allowed frequency (`one_off`, `Monthly`, `Quarterly`,
 `Yearly`), and an active Donation Campaign when a campaign is selected. Browser
-`required` attributes are UX only.
+`required` attributes are UX only. The handler is rate-limited. If
+`good_connector` is installed and a GoodVantage CAPTCHA site key is configured,
+guest submissions must include a valid CAPTCHA response; sites without
+Good Connector remain standalone and skip the optional CAPTCHA gate.
 
 ## Donation Thank-Yous
 

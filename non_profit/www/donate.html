@@ -55,7 +55,33 @@
 			<input type="checkbox" name="consent" class="form-check-input" id="consent" value="1" required>
 			<label class="form-check-label" for="consent">{{ _("Ich stimme der Speicherung meiner Daten zu.") }} *</label>
 		</div>
+		{% if captcha_site_key %}
+		<div class="form-group" style="margin-top: 1em;">
+			<div class="non-profit-donation-captcha"></div>
+		</div>
+		{% endif %}
 		<button type="submit" class="btn btn-primary" style="margin-top: 1em;" data-testid="donate-submit">{{ _("Weiter zur Zahlung") }}</button>
 	</form>
 </div>
+
+{% if captcha_site_key %}
+<script>
+	(function () {
+		const siteKey = "{{ captcha_site_key | e }}";
+		const selector = ".non-profit-donation-captcha";
+		let attempts = 0;
+
+		function mountCaptcha() {
+			if (!window.good_connector?.mountGoodvantageCaptcha) {
+				attempts += 1;
+				window.setTimeout(mountCaptcha, attempts < 40 ? 100 : 500);
+				return;
+			}
+			window.good_connector.mountGoodvantageCaptcha(selector, siteKey);
+		}
+
+		mountCaptcha();
+	})();
+</script>
+{% endif %}
 {% endblock %}

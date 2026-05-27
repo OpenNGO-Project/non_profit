@@ -69,8 +69,13 @@ def ensure_erpnext_bootstrap_customer_names():
     if not frappe.db.exists("DocType", "Customer"):
         return
 
-    if frappe.db.get_single_value("Selling Settings", "cust_master_name") != "Customer Name":
-        frappe.db.set_single_value("Selling Settings", "cust_master_name", "Customer Name")
+    if (
+        frappe.db.get_single_value("Selling Settings", "cust_master_name")
+        != "Customer Name"
+    ):
+        frappe.db.set_single_value(
+            "Selling Settings", "cust_master_name", "Customer Name"
+        )
         frappe.clear_cache(doctype="Selling Settings")
 
     for customer_name in (
@@ -86,7 +91,9 @@ def ensure_erpnext_bootstrap_customer_names():
         if frappe.db.exists("Customer", customer_name):
             continue
 
-        existing_name = frappe.db.get_value("Customer", {"customer_name": customer_name}, "name")
+        existing_name = frappe.db.get_value(
+            "Customer", {"customer_name": customer_name}, "name"
+        )
         if existing_name:
             frappe.rename_doc(
                 "Customer",
@@ -113,7 +120,9 @@ def ensure_erpnext_bootstrap_customer_names():
                 "territory": "_Test Territory",
             }
         ).insert(ignore_permissions=True)
-        if customer.name != customer_name and not frappe.db.exists("Customer", customer_name):
+        if customer.name != customer_name and not frappe.db.exists(
+            "Customer", customer_name
+        ):
             frappe.rename_doc(
                 "Customer",
                 customer.name,
@@ -136,13 +145,35 @@ def ensure_erpnext_bootstrap_addresses():
         return
 
     records = [
-        ("_Test Billing Address Title", "Billing", "Address line 1", "_Test Customer 2"),
-        ("_Test Shipping Address 1 Title", "Shipping", "Address line 2", "_Test Customer 2"),
-        ("_Test Shipping Address 2 Title", "Shipping", "Address line 3", "_Test Customer 2"),
-        ("_Test Billing Address 2 Title", "Billing", "Address line 4", "_Test Customer 1"),
+        (
+            "_Test Billing Address Title",
+            "Billing",
+            "Address line 1",
+            "_Test Customer 2",
+        ),
+        (
+            "_Test Shipping Address 1 Title",
+            "Shipping",
+            "Address line 2",
+            "_Test Customer 2",
+        ),
+        (
+            "_Test Shipping Address 2 Title",
+            "Shipping",
+            "Address line 3",
+            "_Test Customer 2",
+        ),
+        (
+            "_Test Billing Address 2 Title",
+            "Billing",
+            "Address line 4",
+            "_Test Customer 1",
+        ),
     ]
     for title, address_type, line1, customer in records:
-        if frappe.db.exists("Address", {"address_title": title, "address_type": address_type}):
+        if frappe.db.exists(
+            "Address", {"address_title": title, "address_type": address_type}
+        ):
             continue
         if not frappe.db.exists("Customer", customer):
             continue
@@ -156,7 +187,13 @@ def ensure_erpnext_bootstrap_addresses():
                 "city": "Lagos",
                 "pincode": "100001",
                 "country": "Nigeria",
-                "links": [{"link_doctype": "Customer", "link_name": customer, "doctype": "Dynamic Link"}],
+                "links": [
+                    {
+                        "link_doctype": "Customer",
+                        "link_name": customer,
+                        "doctype": "Dynamic Link",
+                    }
+                ],
             }
         )
         if title in {"_Test Shipping Address 2 Title", "_Test Billing Address 2 Title"}:
