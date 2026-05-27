@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import nowdate
+from frappe.utils import nowdate, validate_email_address
 
 from non_profit.non_profit.doctype.donor.donor import find_donor_by_email, get_or_create_customer_for_donor
 
@@ -41,9 +41,13 @@ def _handle_submission(form):
 	amount_raw = form.get("amount")
 	frequency = form.get("frequency") or "one_off"
 	campaign = form.get("campaign") or None
+	consent = form.get("consent")
 
 	if not donor_name or not email or not amount_raw:
 		frappe.throw(_("Please fill in name, email and amount"))
+	validate_email_address(email, throw=True)
+	if str(consent or "").lower() not in {"1", "true", "yes", "on"}:
+		frappe.throw(_("Please agree to the storage of your data."))
 
 	try:
 		amount = float(amount_raw)
@@ -52,6 +56,10 @@ def _handle_submission(form):
 
 	if amount <= 0:
 		frappe.throw(_("Amount must be positive"))
+	if frequency not in {"one_off", "Monthly", "Quarterly", "Yearly"}:
+		frappe.throw(_("Invalid donation frequency"))
+	if campaign and not frappe.db.exists("Donation Campaign", {"name": campaign, "status": "Active"}):
+		frappe.throw(_("Selected campaign is not available."))
 
 	settings = frappe.get_single("Non Profit Settings")
 

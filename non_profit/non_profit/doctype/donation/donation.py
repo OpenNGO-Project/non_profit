@@ -61,6 +61,11 @@ class Donation(Document):
         except Exception:
             frappe.log_error(title=f"Thank-you dispatch failed for {self.name}")
 
+    def before_print(self, settings=None):
+        from non_profit.non_profit.swiss_qrbill import swiss_qrbill_svg
+
+        self.qr_bill_svg = swiss_qrbill_svg(self)
+
     @frappe.whitelist()
     def send_thank_you(self) -> bool:
         settings = frappe.get_single("Non Profit Settings")

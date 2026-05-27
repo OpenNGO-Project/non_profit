@@ -34,6 +34,11 @@ the standard document APIs.
 
 Use **Donor** (Spender), **Donation Campaign** (Spendenkampagne), **Donation** (Spende), and **Donation Receipt** (Spendenbescheinigung) for fundraising workflows.
 
+Public donation forms must submit donor name, a valid email, positive amount,
+consent, an allowed frequency, and only active Donation Campaigns. Keep those
+checks server-side in `non_profit.www.donate._handle_submission`; browser
+validation is only a convenience.
+
 Use **Donor.customer** to connect fundraising contacts to ERPNext Customer data.
 Open a Donor and use **Actions → Create Customer** when the link is missing.
 The helper reuses a Customer already linked to a Member with the same email
@@ -63,6 +68,11 @@ When an operator uses **Create Payment Entry** from a submitted unpaid Donation,
 submitting the Payment Entry marks the Donation paid. Cancelling the Payment
 Entry recalculates the Donation paid flag from the remaining submitted Payment
 Entries for that Donation.
+
+The seeded **Donation Slip CH** Print Format renders the donation summary first
+and places the Swiss QR-bill at the bottom of a separate final page. QR data is
+prepared by the Donation controller before print rendering; do not add QR
+generator calls directly to editable Jinja templates.
 
 Credit card payments have two separate states. **Paid** means the gateway
 confirmed the transaction and a submitted Payment Entry covers the Donation.

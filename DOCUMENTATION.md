@@ -56,6 +56,12 @@ POST-only and inert unless both `developer_mode` and
 `enable_non_profit_mock_payments` are set. It is not a production payment
 confirmation path.
 
+Public donation pages that delegate to `non_profit.www.donate._handle_submission`
+must pass server-side validation for donor name, email syntax, positive amount,
+accepted consent, allowed frequency (`one_off`, `Monthly`, `Quarterly`,
+`Yearly`), and an active Donation Campaign when a campaign is selected. Browser
+`required` attributes are UX only.
+
 ## Donation Thank-Yous
 
 Donor identity mirrors the Member/Customer pattern: `Donation.donor` points to a
@@ -97,6 +103,15 @@ change ERPNext's bank reconciliation rules.
 Global `Non Profit Settings` accounts are applied only when the configured
 Account belongs to the Donation company, so one company's legacy settings do
 not overwrite another company's party or bank accounts.
+
+### Donation QR Slips
+
+`Donation.before_print()` generates the Swiss QR-bill SVG in Python and stores
+it on `doc.qr_bill_svg` for the seeded `Donation Slip CH` Print Format. The
+Print Format only renders that prepared value; it must not call QR generators
+from Jinja. The slip body renders first, and the QR-bill is placed at the bottom
+of a separate final page so normal document footer behavior does not overlap the
+payment part.
 
 ## Membership Compatibility
 

@@ -193,6 +193,35 @@ class TestDonation(unittest.TestCase):
         self.assertEqual(sendmail.call_args.kwargs["reference_doctype"], "Donation")
         self.assertEqual(sendmail.call_args.kwargs["reference_name"], donation.name)
 
+    def test_donation_slip_uses_python_generated_qr_context(self):
+        from non_profit.non_profit.fundraising_setup import DONATION_SLIP_CH_HTML
+
+        donor = create_donor()
+        donation = frappe.get_doc(
+            {
+                "doctype": "Donation",
+                "company": frappe.get_cached_value(
+                    "Non Profit Settings", None, "company"
+                ),
+                "donor": donor.name,
+                "donor_name": donor.donor_name,
+                "email": get_donor_email(donor),
+                "date": get_active_fiscal_year_date(),
+                "amount": 25,
+            }
+        )
+
+        with patch(
+            "non_profit.non_profit.swiss_qrbill.swiss_qrbill_svg",
+            return_value="<svg></svg>",
+        ):
+            donation.before_print()
+
+        self.assertEqual(donation.qr_bill_svg, "<svg></svg>")
+        self.assertIn("doc.qr_bill_svg", DONATION_SLIP_CH_HTML)
+        self.assertIn("donation-slip-qr-final-page-slip", DONATION_SLIP_CH_HTML)
+        self.assertNotIn("swiss_qrbill_svg(doc)", DONATION_SLIP_CH_HTML)
+
     def test_yearly_receipts_include_thanked_donations_without_receipt(self):
         from non_profit.non_profit.doctype.donation_receipt.donation_receipt import (
             generate_yearly_receipts,

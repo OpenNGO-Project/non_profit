@@ -94,20 +94,28 @@ Ihr Team</p>"""
 
 
 def ensure_fundraising_fixtures():
-	from non_profit.non_profit.erpnext_loyalty import disable_test_loyalty_auto_opt_in
-	from non_profit.setup import ensure_non_profit_desk_roles, make_custom_fields
+    from non_profit.non_profit.erpnext_loyalty import disable_test_loyalty_auto_opt_in
+    from non_profit.setup import ensure_non_profit_desk_roles, make_custom_fields
 
-	make_custom_fields()
-	disable_test_loyalty_auto_opt_in()
-	ensure_non_profit_desk_roles()
-	ensure_print_format()
-	ensure_swiss_qrbill_print_format()
-	ensure_email_template()
-	ensure_settings_defaults()
+    make_custom_fields()
+    disable_test_loyalty_auto_opt_in()
+    ensure_non_profit_desk_roles()
+    ensure_print_format()
+    ensure_swiss_qrbill_print_format()
+    ensure_email_template()
+    ensure_settings_defaults()
 
 
 DONATION_SLIP_CH_HTML = """
-<div style="font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10pt;">
+<style>
+@page { size: A4; margin: 0; }
+.donation-slip-body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10pt; margin: 16mm 17mm 18mm; }
+.donation-slip-qr-page { box-sizing: border-box; font-family: 'Helvetica Neue', Arial, sans-serif; min-height: 297mm; page-break-before: always; display: flex; flex-direction: column; justify-content: flex-end; }
+.donation-slip-qr-note { color: #666; font-size: 9pt; margin: 0 17mm 6mm; }
+.donation-slip-qr { border-top: 1px dashed #999; padding-top: 5mm; width: 210mm; }
+.donation-slip-qr svg { display: block; height: 105mm; width: 210mm; }
+</style>
+<div class="donation-slip-body">
 	<div style="margin-bottom: 1em;">
 		<h2 style="margin: 0 0 0.3em 0;">Spendenbeleg</h2>
 		<p style="margin: 0; color: #666;">
@@ -132,128 +140,131 @@ DONATION_SLIP_CH_HTML = """
 		</tr>
 		{% endif %}
 	</table>
-
-	<div style="margin-top: 1em; border-top: 1px dashed #999; padding-top: 1em;">
-		<p style="margin: 0 0 0.5em 0; font-size: 9pt; color: #666;">
-			Schweizer QR-Rechnung &mdash; scannen Sie den Code mit TWINT oder Ihrer E-Banking-App:
-		</p>
-		{{ swiss_qrbill_svg(doc) | safe }}
-	</div>
 </div>
+{% if doc.qr_bill_svg %}
+<div class="donation-slip-qr-page">
+	<p class="donation-slip-qr-note">
+		Schweizer QR-Rechnung &mdash; scannen Sie den Code mit TWINT oder Ihrer E-Banking-App:
+	</p>
+	<div class="donation-slip-qr donation-slip-qr-final-page-slip">{{ doc.qr_bill_svg | safe }}</div>
+</div>
+{% endif %}
 """
 
 
 def ensure_swiss_qrbill_print_format():
-	name = "Donation Slip CH"
-	if frappe.db.exists("Print Format", name):
-		pf = frappe.get_doc("Print Format", name)
-		if pf.html != DONATION_SLIP_CH_HTML:
-			pf.html = DONATION_SLIP_CH_HTML
-			pf.flags.ignore_permissions = True
-			pf.save()
-		return
-	frappe.get_doc(
-		{
-			"doctype": "Print Format",
-			"name": name,
-			"doc_type": "Donation",
-			"module": "Non Profit",
-			"standard": "No",
-			"custom_format": 1,
-			"print_format_type": "Jinja",
-			"html": DONATION_SLIP_CH_HTML,
-			"disabled": 0,
-		}
-	).insert(ignore_permissions=True)
+    name = "Donation Slip CH"
+    if frappe.db.exists("Print Format", name):
+        pf = frappe.get_doc("Print Format", name)
+        if pf.html != DONATION_SLIP_CH_HTML:
+            pf.html = DONATION_SLIP_CH_HTML
+            pf.flags.ignore_permissions = True
+            pf.save()
+        return
+    frappe.get_doc(
+        {
+            "doctype": "Print Format",
+            "name": name,
+            "doc_type": "Donation",
+            "module": "Non Profit",
+            "standard": "No",
+            "custom_format": 1,
+            "print_format_type": "Jinja",
+            "html": DONATION_SLIP_CH_HTML,
+            "disabled": 0,
+        }
+    ).insert(ignore_permissions=True)
 
 
 def ensure_print_format():
-	name = "Donation Receipt DE"
-	if frappe.db.exists("Print Format", name):
-		pf = frappe.get_doc("Print Format", name)
-		if pf.html != DONATION_RECEIPT_DE_HTML:
-			pf.html = DONATION_RECEIPT_DE_HTML
-			pf.flags.ignore_permissions = True
-			pf.save()
-		return
-	frappe.get_doc(
-		{
-			"doctype": "Print Format",
-			"name": name,
-			"doc_type": "Donation Receipt",
-			"module": "Non Profit",
-			"standard": "No",
-			"custom_format": 1,
-			"print_format_type": "Jinja",
-			"html": DONATION_RECEIPT_DE_HTML,
-			"disabled": 0,
-		}
-	).insert(ignore_permissions=True)
+    name = "Donation Receipt DE"
+    if frappe.db.exists("Print Format", name):
+        pf = frappe.get_doc("Print Format", name)
+        if pf.html != DONATION_RECEIPT_DE_HTML:
+            pf.html = DONATION_RECEIPT_DE_HTML
+            pf.flags.ignore_permissions = True
+            pf.save()
+        return
+    frappe.get_doc(
+        {
+            "doctype": "Print Format",
+            "name": name,
+            "doc_type": "Donation Receipt",
+            "module": "Non Profit",
+            "standard": "No",
+            "custom_format": 1,
+            "print_format_type": "Jinja",
+            "html": DONATION_RECEIPT_DE_HTML,
+            "disabled": 0,
+        }
+    ).insert(ignore_permissions=True)
 
 
 def ensure_email_template():
-	name = "Donation Thank You DE"
-	subject = "Herzlichen Dank für Ihre Spende"
-	if frappe.db.exists("Email Template", name):
-		tpl = frappe.get_doc("Email Template", name)
-		tpl.subject = subject
-		tpl.response = THANK_YOU_EMAIL_HTML
-		tpl.use_html = 1
-		tpl.flags.ignore_permissions = True
-		tpl.save()
-		return
-	frappe.get_doc(
-		{
-			"doctype": "Email Template",
-			"name": name,
-			"subject": subject,
-			"response": THANK_YOU_EMAIL_HTML,
-			"use_html": 1,
-		}
-	).insert(ignore_permissions=True)
+    name = "Donation Thank You DE"
+    subject = "Herzlichen Dank für Ihre Spende"
+    if frappe.db.exists("Email Template", name):
+        tpl = frappe.get_doc("Email Template", name)
+        tpl.subject = subject
+        tpl.response = THANK_YOU_EMAIL_HTML
+        tpl.use_html = 1
+        tpl.flags.ignore_permissions = True
+        tpl.save()
+        return
+    frappe.get_doc(
+        {
+            "doctype": "Email Template",
+            "name": name,
+            "subject": subject,
+            "response": THANK_YOU_EMAIL_HTML,
+            "use_html": 1,
+        }
+    ).insert(ignore_permissions=True)
 
 
 def ensure_settings_defaults():
-	settings = frappe.get_single("Non Profit Settings")
-	changed = False
+    settings = frappe.get_single("Non Profit Settings")
+    changed = False
 
-	# Best-effort fill of mandatory fields so that save() doesn't abort migrate.
-	# A fresh non_profit install leaves these blank; we seed them so the donation
-	# flow works out of the box.
-	if not settings.company:
-		company = frappe.db.get_value("Company", {}, "name")
-		if company:
-			settings.company = company
-			changed = True
-	if not settings.donation_company:
-		company = settings.company or frappe.db.get_value("Company", {}, "name")
-		if company:
-			settings.donation_company = company
-			changed = True
-	if not settings.default_donor_type:
-		if not frappe.db.exists("Donor Type", "Individual"):
-			frappe.get_doc(
-				{"doctype": "Donor Type", "donor_type": "Individual"}
-			).insert(ignore_permissions=True)
-		settings.default_donor_type = "Individual"
-		changed = True
-	if not settings.creation_user:
-		settings.creation_user = "Administrator"
-		changed = True
+    # Best-effort fill of mandatory fields so that save() doesn't abort migrate.
+    # A fresh non_profit install leaves these blank; we seed them so the donation
+    # flow works out of the box.
+    if not settings.company:
+        company = frappe.db.get_value("Company", {}, "name")
+        if company:
+            settings.company = company
+            changed = True
+    if not settings.donation_company:
+        company = settings.company or frappe.db.get_value("Company", {}, "name")
+        if company:
+            settings.donation_company = company
+            changed = True
+    if not settings.default_donor_type:
+        if not frappe.db.exists("Donor Type", "Individual"):
+            frappe.get_doc(
+                {"doctype": "Donor Type", "donor_type": "Individual"}
+            ).insert(ignore_permissions=True)
+        settings.default_donor_type = "Individual"
+        changed = True
+    if not settings.creation_user:
+        settings.creation_user = "Administrator"
+        changed = True
 
-	if not settings.default_thank_you_template and frappe.db.exists(
-		"Email Template", "Donation Thank You DE"
-	):
-		settings.default_thank_you_template = "Donation Thank You DE"
-		changed = True
-	if not settings.default_receipt_country and frappe.db.exists("Country", "Germany"):
-		settings.default_receipt_country = "Germany"
-		changed = True
+    if not settings.default_thank_you_template and frappe.db.exists(
+        "Email Template", "Donation Thank You DE"
+    ):
+        settings.default_thank_you_template = "Donation Thank You DE"
+        changed = True
+    if not settings.default_receipt_country and frappe.db.exists("Country", "Germany"):
+        settings.default_receipt_country = "Germany"
+        changed = True
 
-	if changed:
-		settings.flags.ignore_permissions = True
-		settings.flags.ignore_mandatory = True
-		try:
-			settings.save()
-		except Exception:
-			frappe.log_error(title="Non Profit Settings fundraising defaults save failed")
+    if changed:
+        settings.flags.ignore_permissions = True
+        settings.flags.ignore_mandatory = True
+        try:
+            settings.save()
+        except Exception:
+            frappe.log_error(
+                title="Non Profit Settings fundraising defaults save failed"
+            )
