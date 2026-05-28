@@ -60,7 +60,8 @@ Yearly Donation Receipt generation is an operator action for users with
 `Non Profit Manager` or `System Manager`. It creates draft receipts for
 submitted, paid Donations in the selected fiscal year that do not already link
 to a receipt; it does not commit mid-request, so Frappe can roll back the whole
-operation if receipt creation fails.
+operation if receipt creation fails. The default receipt country is
+`Switzerland` on the form, yearly-generation dialog, and server fallback.
 
 When a payment gateway authorizes a Donation, `Donation.on_payment_authorized()`
 marks the Donation paid first. If automated Payment Entry creation is enabled

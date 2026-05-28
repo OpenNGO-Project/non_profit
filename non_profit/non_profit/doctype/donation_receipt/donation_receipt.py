@@ -8,6 +8,8 @@ from frappe.utils import flt, nowdate
 
 from non_profit.non_profit.doctype.donor.donor import get_donor_email
 
+DEFAULT_RECEIPT_COUNTRY = "Switzerland"
+
 
 class DonationReceipt(Document):
     def validate(self):
@@ -69,10 +71,11 @@ class DonationReceipt(Document):
 @frappe.whitelist()
 def generate_yearly_receipts(
     fiscal_year: str,
-    country: str = "Germany",
+    country: str | None = None,
     language: str = "de",
 ) -> dict[str, Any]:
     _require_receipt_manager()
+    country = country or _default_receipt_country()
     fy = frappe.get_doc("Fiscal Year", fiscal_year)
     start, end = fy.year_start_date, fy.year_end_date
     donation = frappe.qb.DocType("Donation")
@@ -111,6 +114,14 @@ def generate_yearly_receipts(
         receipt.insert()
         created.append(receipt.name)
     return {"created": len(created), "receipts": created}
+
+
+def _default_receipt_country() -> str:
+    if frappe.db.exists("Country", DEFAULT_RECEIPT_COUNTRY):
+        return DEFAULT_RECEIPT_COUNTRY
+    return frappe.db.get_default("country") or frappe.db.get_value(
+        "Country", {}, "name", order_by="name asc"
+    )
 
 
 def _require_receipt_manager() -> None:

@@ -255,8 +255,11 @@ def ensure_settings_defaults():
     ):
         settings.default_thank_you_template = "Donation Thank You DE"
         changed = True
-    if not settings.default_receipt_country and frappe.db.exists("Country", "Germany"):
-        settings.default_receipt_country = "Germany"
+    if (
+        not settings.default_receipt_country
+        or settings.default_receipt_country == "Germany"
+    ) and frappe.db.exists("Country", "Switzerland"):
+        settings.default_receipt_country = "Switzerland"
         changed = True
 
     if changed:

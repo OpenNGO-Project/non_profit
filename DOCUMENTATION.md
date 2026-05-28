@@ -45,11 +45,13 @@ found" messages. Real Loyalty Program records are left untouched.
 Mutation endpoints must check permissions and let Frappe manage the request
 transaction. `DonationReceipt.generate_yearly_receipts` is restricted to
 `Non Profit Manager` or `System Manager` and creates draft receipts for
-submitted, paid Donations without an existing receipt link. `DonationReceipt`
-email sending, chapter staff edits, and grant review invitations require write
-permission on the target document. A portal user leaving a Chapter may only
-disable their own active row; editing another user still requires Chapter write
-permission.
+submitted, paid Donations without an existing receipt link. Donation Receipt
+country defaults to `Switzerland` in DocType metadata, the yearly-generation
+dialog, and the backend fallback when no country argument is supplied.
+`DonationReceipt` email sending, chapter staff edits, and grant review
+invitations require write permission on the target document. A portal user
+leaving a Chapter may only disable their own active row; editing another user
+still requires Chapter write permission.
 
 The development-only `Donation.mock_pay` endpoint is guest-whitelisted but
 POST-only and inert unless both `developer_mode` and

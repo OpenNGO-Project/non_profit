@@ -15,7 +15,7 @@ frappe.listview_settings["Donation Receipt"] = {
 						label: __("Country"),
 						fieldtype: "Link",
 						options: "Country",
-						default: "Germany",
+						default: "Switzerland",
 						reqd: 1,
 					},
 				],

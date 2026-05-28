@@ -261,6 +261,10 @@ class TestDonation(unittest.TestCase):
 
         receipt_names = result.get("receipts", [])
         self.assertTrue(receipt_names)
+        self.assertEqual(
+            frappe.db.get_value("Donation Receipt", receipt_names[0], "country"),
+            "Switzerland",
+        )
         linked_donations = frappe.get_all(
             "Donation Receipt Item",
             filters={"parent": ["in", receipt_names]},
