@@ -1,4 +1,5 @@
 import frappe
+from frappe import _
 from frappe.model.document import Document
 from frappe.utils import add_months, add_years, getdate, nowdate
 
@@ -14,7 +15,7 @@ class RecurringDonation(Document):
         if not self.next_date:
             self.next_date = self.start_date
         if self.end_date and self.start_date and self.end_date < self.start_date:
-            frappe.throw("End Date cannot be before Start Date")
+            frappe.throw(_("End Date cannot be before Start Date"))
         if not self.currency:
             self.currency = frappe.db.get_default("currency") or "EUR"
 

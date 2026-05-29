@@ -112,10 +112,10 @@ class TestDonation(unittest.TestCase):
             ),
             patch("frappe.log_error") as log_error,
         ):
-            donation.on_payment_authorized("Completed")
+            self.assertRaises(RuntimeError, donation.on_payment_authorized, "Completed")
 
         donation.reload()
-        self.assertEqual(donation.paid, 1)
+        self.assertEqual(donation.paid, 0)
         log_error.assert_called()
 
     def test_payment_entry_restores_account_permission_flag_on_failure(self):

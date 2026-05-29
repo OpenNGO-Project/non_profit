@@ -6,7 +6,6 @@ import frappe
 from frappe import _
 from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.model.document import Document
-from frappe.utils import cstr
 
 try:
     from good_connector.identity_matching import (
@@ -14,6 +13,8 @@ try:
     )
 except ImportError:
     resolve_or_create_contact_from_external_signup = None
+
+from non_profit.non_profit.utils import split_person_name as _split_person_name
 
 
 class Member(Document):
@@ -34,6 +35,7 @@ class Member(Document):
     def make_customer_and_link(self) -> None:
         if self.customer:
             frappe.msgprint(_("A customer is already linked to this Member"))
+            return
 
         customer = create_customer(
             frappe._dict(
@@ -138,15 +140,5 @@ def create_customer(user_details, member=None):
     except Exception:
         frappe.db.rollback(save_point="contact_creation")
         frappe.log_error(frappe.get_traceback(), _("Contact Creation Failed"))
-        pass
 
     return customer.name
-
-
-def _split_person_name(fullname):
-    parts = cstr(fullname).strip().split()
-    if not parts:
-        return "", ""
-    if len(parts) == 1:
-        return parts[0], ""
-    return parts[0], " ".join(parts[1:])

@@ -15,6 +15,8 @@ try:
 except ImportError:
     resolve_or_create_contact_from_external_signup = None
 
+from non_profit.non_profit.utils import split_person_name as _split_person_name
+
 
 class Donor(Document):
     def onload(self):
@@ -367,15 +369,6 @@ def _link_donor_address_to_customer(donor_name: str, customer: str) -> None:
             address_name,
             update_modified=False,
         )
-
-
-def _split_person_name(fullname: str | None) -> tuple[str, str]:
-    parts = cstr(fullname).strip().split()
-    if not parts:
-        return "", ""
-    if len(parts) == 1:
-        return parts[0], ""
-    return parts[0], " ".join(parts[1:])
 
 
 def _default_customer_group() -> str | None:

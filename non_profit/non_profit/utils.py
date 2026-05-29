@@ -1,7 +1,16 @@
 import frappe
-from frappe.utils import getdate
+from frappe.utils import cstr, getdate
 
 from non_profit.setup import setup_non_profit
+
+
+def split_person_name(fullname: str | None) -> tuple[str, str]:
+    parts = cstr(fullname).strip().split()
+    if not parts:
+        return "", ""
+    if len(parts) == 1:
+        return parts[0], ""
+    return parts[0], " ".join(parts[1:])
 
 
 def get_company():

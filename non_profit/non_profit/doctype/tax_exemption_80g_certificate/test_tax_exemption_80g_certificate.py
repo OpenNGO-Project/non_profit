@@ -24,8 +24,8 @@ from non_profit.non_profit.doctype.membership.test_membership import (
 
 class TestTaxExemption80GCertificate(FrappeTestCase):
     def setUp(self):
-        frappe.db.sql("delete from `tabTax Exemption 80G Certificate`")
-        frappe.db.sql("delete from `tabMembership`")
+        frappe.db.delete("Tax Exemption 80G Certificate")
+        frappe.db.delete("Membership")
         company, _, _ = get_company_and_accounts()
         create_donor_type()
         settings = frappe.get_doc("Non Profit Settings")

@@ -2,8 +2,6 @@
 # For license information, please see license.txt
 
 
-from typing import Any
-
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -52,10 +50,12 @@ class Donation(Document):
         try:
             self.create_payment_entry()
         except Exception:
+            self.db_set("paid", 0)
             frappe.log_error(
                 title=f"Donation payment entry failed for {self.name}",
                 message=frappe.get_traceback(),
             )
+            raise
         try:
             self.send_thank_you()
         except Exception:
@@ -222,8 +222,9 @@ def get_donor(email):
 
 
 @frappe.whitelist()
-def create_donor(payment: dict) -> Any:
+def create_donor(payment: dict) -> str:
     donor_details = frappe._dict(payment)
+    frappe.only_for(("Non Profit Manager", "Non Profit Member", "System Manager"))
     donor_type = frappe.db.get_single_value("Non Profit Settings", "default_donor_type")
 
     donor = frappe.new_doc("Donor")
@@ -240,7 +241,7 @@ def create_donor(payment: dict) -> Any:
 
     donor.insert(ignore_mandatory=True)
     get_or_create_customer_for_donor(donor, email=donor_details.email)
-    return donor
+    return donor.name
 
 
 def get_company_for_donations():

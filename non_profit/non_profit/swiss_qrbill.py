@@ -3,8 +3,7 @@
 Uses the `qrbill` PyPI package (SIX-compliant). Creditor details come from
 `Non Profit Settings` so each NGO configures their own IBAN and address.
 
-Falls back to a demo IBAN if nothing is configured — useful for the pitch
-demo, not production.
+Returns an inline error message when creditor details are not configured.
 """
 
 from __future__ import annotations
@@ -15,28 +14,18 @@ import frappe
 from frappe.utils import flt
 
 
-# Demo fallback — replace via Non Profit Settings before going live.
-_DEMO_IBAN = "CH9300762011623852957"
-_DEMO_CREDITOR = {
-    "name": "Ilanga NGO",
-    "line1": "Bahnhofstrasse 1",
-    "line2": "8001 Zürich",
-    "country": "CH",
-}
-
-
-def _resolve_creditor() -> tuple[str, dict]:
-    settings = frappe.get_single("Non Profit Settings")
-    iban = getattr(settings, "creditor_iban", None) or _DEMO_IBAN
-    creditor = {
-        "name": getattr(settings, "creditor_name", None) or _DEMO_CREDITOR["name"],
-        "line1": getattr(settings, "creditor_address_line1", None)
-        or _DEMO_CREDITOR["line1"],
-        "line2": getattr(settings, "creditor_address_line2", None)
-        or _DEMO_CREDITOR["line2"],
-        "country": "CH",
-    }
-    return iban, creditor
+def _resolve_creditor() -> tuple[str | None, dict | None]:
+	settings = frappe.get_single("Non Profit Settings")
+	iban = getattr(settings, "creditor_iban", None) or ""
+	if not iban:
+		return None, None
+	creditor = {
+		"name": getattr(settings, "creditor_name", None) or "",
+		"line1": getattr(settings, "creditor_address_line1", None) or "",
+		"line2": getattr(settings, "creditor_address_line2", None) or "",
+		"country": "CH",
+	}
+	return iban, creditor
 
 
 def swiss_qrbill_svg(doc) -> str:
@@ -57,6 +46,8 @@ def swiss_qrbill_svg(doc) -> str:
 
     try:
         iban, creditor = _resolve_creditor()
+        if not iban or not creditor:
+            return '<p style="color:#b94a48;">Swiss QR-Bill: creditor IBAN not configured in Non Profit Settings.</p>'
 
         amount_raw = doc.get("amount") or doc.get("grand_total") or 0
         amount = flt(amount_raw)
