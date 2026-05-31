@@ -61,6 +61,8 @@ def before_tests():
 def use_short_test_host_name():
     """Avoid oversized generated OAuth callback URLs during local full test runs."""
 
+    if not frappe.flags.in_test:
+        return
     frappe.local.conf.host_name = "http://development16.localhost"
 
 
