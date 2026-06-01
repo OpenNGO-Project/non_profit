@@ -26,6 +26,7 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 
 - `after_install = non_profit.setup.setup_non_profit`
 - `after_migrate = non_profit.non_profit.fundraising_setup.ensure_fundraising_fixtures` refreshes non_profit custom fields and fundraising fixtures.
+- `before_tests = non_profit.non_profit.utils.before_tests` refreshes the same fundraising fixtures after the CI/test setup wizard creates a Company.
 - `doc_events["Membership"]["validate"] = non_profit.non_profit.membership_sync.validate_no_overlap`
 - Daily scheduler jobs expire memberships and process recurring donations.
 - `Payment Entry` is extended through `override_doctype_class`.
@@ -116,7 +117,9 @@ it on `doc.qr_bill_svg` for the seeded `Donation Slip CH` Print Format. The
 Print Format only renders that prepared value; it must not call QR generators
 from Jinja. The slip body renders first, and the QR-bill is placed at the bottom
 of a separate final page so normal document footer behavior does not overlap the
-payment part.
+payment part. Missing creditor configuration is reported before checking the
+optional `qrbill` Python package, so setup errors remain visible even on CI
+images that do not install the QR-bill dependency.
 
 ## Membership Compatibility
 

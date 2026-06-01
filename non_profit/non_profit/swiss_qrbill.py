@@ -15,17 +15,17 @@ from frappe.utils import flt
 
 
 def _resolve_creditor() -> tuple[str | None, dict | None]:
-	settings = frappe.get_single("Non Profit Settings")
-	iban = getattr(settings, "creditor_iban", None) or ""
-	if not iban:
-		return None, None
-	creditor = {
-		"name": getattr(settings, "creditor_name", None) or "",
-		"line1": getattr(settings, "creditor_address_line1", None) or "",
-		"line2": getattr(settings, "creditor_address_line2", None) or "",
-		"country": "CH",
-	}
-	return iban, creditor
+    settings = frappe.get_single("Non Profit Settings")
+    iban = getattr(settings, "creditor_iban", None) or ""
+    if not iban:
+        return None, None
+    creditor = {
+        "name": getattr(settings, "creditor_name", None) or "",
+        "line1": getattr(settings, "creditor_address_line1", None) or "",
+        "line2": getattr(settings, "creditor_address_line2", None) or "",
+        "country": "CH",
+    }
+    return iban, creditor
 
 
 def swiss_qrbill_svg(doc) -> str:
@@ -37,17 +37,17 @@ def swiss_qrbill_svg(doc) -> str:
     crashes the print format.
     """
     try:
-        from qrbill import QRBill
-    except ImportError:
-        return (
-            '<p style="color:#b94a48;">qrbill package not installed — '
-            "run <code>./env/bin/pip install qrbill</code></p>"
-        )
-
-    try:
         iban, creditor = _resolve_creditor()
         if not iban or not creditor:
             return '<p style="color:#b94a48;">Swiss QR-Bill: creditor IBAN not configured in Non Profit Settings.</p>'
+
+        try:
+            from qrbill import QRBill
+        except ImportError:
+            return (
+                '<p style="color:#b94a48;">qrbill package not installed — '
+                "run <code>./env/bin/pip install qrbill</code></p>"
+            )
 
         amount_raw = doc.get("amount") or doc.get("grand_total") or 0
         amount = flt(amount_raw)

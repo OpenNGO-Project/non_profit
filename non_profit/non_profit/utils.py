@@ -27,6 +27,7 @@ def get_company():
 def before_tests():
     # complete setup if missing
     from frappe.desk.page.setup_wizard.setup_wizard import setup_complete
+    from non_profit.non_profit.fundraising_setup import ensure_fundraising_fixtures
 
     use_short_test_host_name()
 
@@ -52,6 +53,7 @@ def before_tests():
         )
         setup_non_profit()
 
+    ensure_fundraising_fixtures()
     ensure_erpnext_bootstrap_customer_names()
     ensure_erpnext_bootstrap_addresses()
     ensure_test_fiscal_years()
