@@ -7,11 +7,14 @@ from frappe.tests.utils import FrappeTestCase
 
 class TestChapter(FrappeTestCase):
     def test_create_chapter(self) -> None:
+        chapter_head = _make_member()
+        title = f"Test Chapter {frappe.generate_hash(length=6)}"
         doc = frappe.get_doc(
             {
                 "doctype": "Chapter",
-                "title": f"Test Chapter {frappe.generate_hash(length=6)}",
-                "chapter_head": "Administrator",
+                "name": title,
+                "title": title,
+                "chapter_head": chapter_head,
                 "region": "Test Region",
                 "introduction": "Test introduction",
             }
@@ -19,11 +22,14 @@ class TestChapter(FrappeTestCase):
         self.assertTrue(frappe.db.exists("Chapter", doc.name))
 
     def test_route_is_auto_set_on_validate(self) -> None:
+        chapter_head = _make_member()
+        title = f"Route Test Chapter {frappe.generate_hash(length=6)}"
         doc = frappe.get_doc(
             {
                 "doctype": "Chapter",
-                "title": f"Route Test Chapter {frappe.generate_hash(length=6)}",
-                "chapter_head": "Administrator",
+                "name": title,
+                "title": title,
+                "chapter_head": chapter_head,
                 "region": "Test Region",
                 "introduction": "Test introduction",
             }
@@ -32,11 +38,14 @@ class TestChapter(FrappeTestCase):
         self.assertTrue(doc.route.startswith("chapters/"))
 
     def test_create_and_delete_chapter(self) -> None:
+        chapter_head = _make_member()
+        title = f"Delete Test Chapter {frappe.generate_hash(length=6)}"
         doc = frappe.get_doc(
             {
                 "doctype": "Chapter",
-                "title": f"Delete Test Chapter {frappe.generate_hash(length=6)}",
-                "chapter_head": "Administrator",
+                "name": title,
+                "title": title,
+                "chapter_head": chapter_head,
                 "region": "Test Region",
                 "introduction": "Test introduction",
             }
@@ -45,3 +54,24 @@ class TestChapter(FrappeTestCase):
         self.assertTrue(frappe.db.exists("Chapter", name))
         doc.delete()
         self.assertFalse(frappe.db.exists("Chapter", name))
+
+
+def _make_member() -> str:
+    name = f"Chapter Head {frappe.generate_hash(length=6)}"
+    membership_type = _make_membership_type()
+    doc = frappe.get_doc(
+        {
+            "doctype": "Member",
+            "member_name": name,
+            "membership_type": membership_type,
+        }
+    ).insert(ignore_permissions=True)
+    return doc.name
+
+
+def _make_membership_type() -> str:
+    name = f"Chapter Test Membership {frappe.generate_hash(length=6)}"
+    frappe.get_doc(
+        {"doctype": "Membership Type", "membership_type": name, "amount": 0}
+    ).insert(ignore_permissions=True)
+    return name

@@ -36,6 +36,11 @@ class TestVolunteer(FrappeTestCase):
     def _make_volunteer_type(self) -> str:
         name = f"Test VType {frappe.generate_hash(length=6)}"
         frappe.get_doc(
-            {"doctype": "Volunteer Type", "volunteer_type": name, "amount": 0}
+            {
+                "doctype": "Volunteer Type",
+                "name": name,
+                "volunteer_type": name,
+                "amount": 0,
+            }
         ).insert(ignore_permissions=True)
         return name

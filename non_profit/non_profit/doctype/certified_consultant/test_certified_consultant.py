@@ -34,11 +34,28 @@ class TestCertifiedConsultant(FrappeTestCase):
         self.assertFalse(frappe.db.exists("Certified Consultant", name))
 
     def _make_application(self) -> str:
+        email = f"linked.app.{frappe.generate_hash(length=8)}@example.com"
+        _ensure_test_user(email)
         doc = frappe.get_doc(
             {
                 "doctype": "Certification Application",
                 "name_of_applicant": f"Linked Applicant {frappe.generate_hash(length=6)}",
-                "email": f"linked.app.{frappe.generate_hash(length=8)}@example.com",
+                "email": email,
             }
         ).insert(ignore_permissions=True)
         return doc.name
+
+
+def _ensure_test_user(email: str) -> str:
+    if frappe.db.exists("User", email):
+        return email
+    frappe.get_doc(
+        {
+            "doctype": "User",
+            "email": email,
+            "first_name": email.split("@", 1)[0],
+            "send_welcome_email": 0,
+            "enabled": 1,
+        }
+    ).insert(ignore_permissions=True)
+    return email
