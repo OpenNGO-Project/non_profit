@@ -55,7 +55,6 @@ def _ensure_member(customer: str | None = None, label: str = "Sync Test Member")
         return existing
     doc = frappe.new_doc("Member")
     doc.member_name = label
-    doc.membership_type = _ensure_membership_type()
     if customer:
         doc.customer = customer
     doc.flags.ignore_mandatory = True

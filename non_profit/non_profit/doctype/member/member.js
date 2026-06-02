@@ -33,10 +33,12 @@ frappe.ui.form.on('Member', {
 			}
 
 			frm.page.add_action_item(__('Create Membership'), () => {
-				frm.call('create_membership').then((r) => {
-					if (r.message) {
-						frappe.set_route('Form', 'Membership', r.message);
-					}
+				prompt_for_membership_type((membership_type) => {
+					frm.call('create_membership', {membership_type}).then((r) => {
+						if (r.message) {
+							frappe.set_route('Form', 'Membership', r.message);
+						}
+					});
 				});
 			});
 
@@ -45,6 +47,7 @@ frappe.ui.form.on('Member', {
 
 		} else {
 			frappe.contacts.clear_address_and_contact(frm);
+			show_member_creation_dialog(frm);
 		}
 
 		frappe.call({
@@ -65,3 +68,79 @@ frappe.ui.form.on('Member', {
 		});
 	}
 });
+
+function show_member_creation_dialog(frm) {
+	if (frm.__member_creation_dialog_shown) return;
+	frm.__member_creation_dialog_shown = true;
+
+	const dialog = new frappe.ui.Dialog({
+		title: __('Create Member and Membership'),
+		fields: [
+			{
+				fieldname: 'contact',
+				fieldtype: 'Link',
+				label: __('Contact'),
+				options: 'Contact',
+			},
+			{
+				fieldname: 'customer',
+				fieldtype: 'Link',
+				label: __('Customer'),
+				options: 'Customer',
+			},
+			{
+				fieldname: 'membership_type',
+				fieldtype: 'Link',
+				label: __('Membership Type'),
+				options: 'Membership Type',
+				reqd: 1,
+			},
+		],
+		primary_action_label: __('Create'),
+		primary_action(values) {
+			const contact = values.contact || '';
+			const customer = values.customer || '';
+			if (Boolean(contact) === Boolean(customer)) {
+				frappe.msgprint(__('Select either a Contact or a Customer.'));
+				return;
+			}
+
+			frappe.call({
+				method: 'non_profit.non_profit.doctype.member.member.create_member_and_membership',
+				args: values,
+				freeze: true,
+				freeze_message: __('Creating Member and Membership'),
+			}).then((r) => {
+				const result = r.message || {};
+				if (result.member) {
+					dialog.hide();
+					frappe.set_route('Form', 'Member', result.member);
+				}
+			});
+		},
+	});
+
+	dialog.show();
+}
+
+function prompt_for_membership_type(callback) {
+	const dialog = new frappe.ui.Dialog({
+		title: __('Create Membership'),
+		fields: [
+			{
+				fieldname: 'membership_type',
+				fieldtype: 'Link',
+				label: __('Membership Type'),
+				options: 'Membership Type',
+				reqd: 1,
+			},
+		],
+		primary_action_label: __('Create'),
+		primary_action(values) {
+			dialog.hide();
+			callback(values.membership_type);
+		},
+	});
+
+	dialog.show();
+}

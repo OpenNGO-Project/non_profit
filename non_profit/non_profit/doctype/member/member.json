@@ -10,7 +10,6 @@
   "naming_series",
   "member_name",
   "column_break_5",
-  "membership_type",
   "image",
   "customer_section",
   "customer",
@@ -38,14 +37,6 @@
   {
    "fieldname": "column_break_5",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "membership_type",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Membership Type",
-   "options": "Membership Type",
-   "reqd": 1
   },
   {
    "fieldname": "image",

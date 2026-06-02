@@ -58,20 +58,10 @@ class TestChapter(FrappeTestCase):
 
 def _make_member() -> str:
     name = f"Chapter Head {frappe.generate_hash(length=6)}"
-    membership_type = _make_membership_type()
     doc = frappe.get_doc(
         {
             "doctype": "Member",
             "member_name": name,
-            "membership_type": membership_type,
         }
     ).insert(ignore_permissions=True)
     return doc.name
-
-
-def _make_membership_type() -> str:
-    name = f"Chapter Test Membership {frappe.generate_hash(length=6)}"
-    frappe.get_doc(
-        {"doctype": "Membership Type", "membership_type": name, "amount": 0}
-    ).insert(ignore_permissions=True)
-    return name

@@ -38,7 +38,6 @@ class Membership(Document):
                 dict(
                     doctype="Member",
                     email_id=frappe.session.user,
-                    membership_type=self.membership_type,
                     member_name=user.get_fullname(),
                 )
             ).insert(ignore_permissions=True)

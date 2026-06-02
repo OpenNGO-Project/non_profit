@@ -6,6 +6,7 @@ import unittest
 import frappe
 
 from non_profit.non_profit.doctype.member.member import (
+    create_member_and_membership,
     create_member,
     get_or_create_member_for_customer,
     get_or_create_membership_for_member,
@@ -42,32 +43,28 @@ class TestMember(unittest.TestCase):
         return customer
 
     def test_get_or_create_member_uses_email_id_field(self):
-        membership_type = self._membership_type()
         email = f"np-member-{frappe.generate_hash(length=8)}@example.org"
         member = frappe.get_doc(
             {
                 "doctype": "Member",
                 "member_name": "Existing Member",
-                "membership_type": membership_type,
                 "email_id": email,
             }
         ).insert(ignore_permissions=True)
 
         result = get_or_create_member(
-            frappe._dict({"email": email, "membership_type": membership_type})
+            frappe._dict({"email": email, "membership_type": self._membership_type()})
         )
 
         self.assertEqual(result, member.name)
 
     def test_member_name_autofills_from_customer(self):
-        membership_type = self._membership_type()
         customer = self._customer()
 
         member = frappe.get_doc(
             {
                 "doctype": "Member",
                 "customer": customer.name,
-                "membership_type": membership_type,
             }
         ).insert(ignore_permissions=True)
 
@@ -90,6 +87,58 @@ class TestMember(unittest.TestCase):
 
         self.assertEqual(member.customer, customer.name)
         self.assertFalse(membership.to_date)
+        self.assertEqual(membership.membership_type, membership_type)
+
+    def test_contact_member_helper_creates_standalone_member_and_membership(self):
+        membership_type = self._membership_type()
+        email = f"np-contact-member-{frappe.generate_hash(length=8)}@example.org"
+        contact = frappe.get_doc(
+            {
+                "doctype": "Contact",
+                "first_name": "Standalone",
+                "last_name": "Member",
+                "email_ids": [{"email_id": email, "is_primary": 1}],
+            }
+        ).insert(ignore_permissions=True)
+
+        result = create_member_and_membership(
+            contact=contact.name,
+            membership_type=membership_type,
+        )
+
+        member = frappe.get_doc("Member", result["member"])
+        membership = frappe.get_doc("Membership", result["membership"])
+        self.assertFalse(member.customer)
+        self.assertEqual(member.email_id, email)
+        self.assertEqual(membership.member, member.name)
+        self.assertEqual(membership.membership_type, membership_type)
+        self.assertFalse(membership.to_date)
+        self.assertTrue(
+            frappe.db.exists(
+                "Dynamic Link",
+                {
+                    "parenttype": "Contact",
+                    "parent": contact.name,
+                    "link_doctype": "Member",
+                    "link_name": member.name,
+                },
+            )
+        )
+
+    def test_customer_dialog_helper_creates_member_and_membership(self):
+        membership_type = self._membership_type()
+        customer = self._customer()
+
+        result = create_member_and_membership(
+            customer=customer.name,
+            membership_type=membership_type,
+        )
+
+        member = frappe.get_doc("Member", result["member"])
+        membership = frappe.get_doc("Membership", result["membership"])
+        self.assertEqual(member.customer, customer.name)
+        self.assertEqual(membership.member, member.name)
+        self.assertEqual(membership.membership_type, membership_type)
 
     def test_member_pan_details_removed_from_schema(self):
         self.assertFalse(frappe.db.exists("Custom Field", "Member-pan_number"))
@@ -107,6 +156,10 @@ class TestMember(unittest.TestCase):
         self.assertFalse(
             frappe.db.exists("Print Format", "80G Certificate for Membership")
         )
+
+    def test_member_membership_type_removed_from_schema(self):
+        self.assertFalse(frappe.get_meta("Member").has_field("membership_type"))
+        self.assertFalse(frappe.db.has_column("Member", "membership_type"))
 
     def test_member_dashboard_has_single_membership_link(self):
         dashboard = frappe.get_meta("Member").get_dashboard_data()

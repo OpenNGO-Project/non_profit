@@ -70,7 +70,6 @@ class TestDonor(FrappeTestCase):
             {
                 "doctype": "Member",
                 "member_name": "Shared Person",
-                "membership_type": self._membership_type(),
                 "email_id": email,
                 "customer": customer.name,
             }

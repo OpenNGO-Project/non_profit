@@ -107,11 +107,16 @@ Customer. The linked Customer is the place to inspect the business or
 organisation context; `Membership.company` was removed and must not be used as
 an operator-maintained member company. Membership invoices and subscriptions
 resolve their accounting company from **Non Profit Settings**.
+Membership Type, Status, and validity dates live on **Membership** only; the
+Member form does not store its own Membership Type.
 
 When a Member is linked to a Customer and **Member Name** is blank, the Member
-controller fills it from `Customer.customer_name`. From a saved Member, use
-**Actions → Create Membership** to create or open the active open-ended
-Membership for that Member and Membership Type.
+controller fills it from `Customer.customer_name`. Creating a new Member opens a
+dialog where operators choose either a Contact or a Customer plus the Membership
+Type; the system creates/reuses the Member and creates/reuses the open-ended
+Membership in one step. From a saved Member, use **Actions → Create Membership**
+to create or open the active open-ended Membership for that Member and chosen
+Membership Type.
 
 Leave **To** empty for a perpetual/open-ended membership. If code creates the
 Membership and must intentionally keep **To** blank, set
