@@ -8,10 +8,9 @@
  "field_order": [
   "member",
   "member_name",
-  "membership_type",
   "column_break_3",
-  "company",
   "membership_status",
+  "membership_type",
   "membership_validity_section",
   "from_date",
   "to_date",
@@ -39,14 +38,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "membership_type",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Membership Type",
-   "options": "Membership Type",
-   "reqd": 1
-  },
-  {
    "fieldname": "column_break_3",
    "fieldtype": "Column Break"
   },
@@ -59,10 +50,11 @@
    "options": "New\nCurrent\nExpired\nPending\nCancelled"
   },
   {
-   "fieldname": "company",
+   "fieldname": "membership_type",
    "fieldtype": "Link",
-   "label": "Company",
-   "options": "Company",
+   "in_list_view": 1,
+   "label": "Membership Type",
+   "options": "Membership Type",
    "reqd": 1
   },
   {

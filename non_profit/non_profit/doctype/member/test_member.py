@@ -7,6 +7,8 @@ import frappe
 
 from non_profit.non_profit.doctype.member.member import (
     create_member,
+    get_or_create_member_for_customer,
+    get_or_create_membership_for_member,
     get_or_create_member,
     resolve_or_create_contact_from_external_signup,
 )
@@ -27,6 +29,18 @@ class TestMember(unittest.TestCase):
         ).insert(ignore_permissions=True)
         return name
 
+    def _customer(self):
+        customer = frappe.new_doc("Customer")
+        customer.customer_name = f"Member Customer {frappe.generate_hash(length=8)}"
+        customer.customer_type = "Company"
+        customer.customer_group = frappe.db.get_value(
+            "Customer Group", {"is_group": 0}, "name"
+        )
+        customer.territory = frappe.db.get_value("Territory", {"is_group": 0}, "name")
+        customer.flags.ignore_mandatory = True
+        customer.insert(ignore_permissions=True)
+        return customer
+
     def test_get_or_create_member_uses_email_id_field(self):
         membership_type = self._membership_type()
         email = f"np-member-{frappe.generate_hash(length=8)}@example.org"
@@ -44,6 +58,67 @@ class TestMember(unittest.TestCase):
         )
 
         self.assertEqual(result, member.name)
+
+    def test_member_name_autofills_from_customer(self):
+        membership_type = self._membership_type()
+        customer = self._customer()
+
+        member = frappe.get_doc(
+            {
+                "doctype": "Member",
+                "customer": customer.name,
+                "membership_type": membership_type,
+            }
+        ).insert(ignore_permissions=True)
+
+        self.assertEqual(member.member_name, customer.customer_name)
+
+    def test_customer_member_helper_creates_open_ended_membership(self):
+        membership_type = self._membership_type()
+        customer = self._customer()
+
+        member = get_or_create_member_for_customer(
+            customer.name,
+            membership_type,
+            ignore_permissions=True,
+        )
+        membership = get_or_create_membership_for_member(
+            member.name,
+            membership_type=membership_type,
+            ignore_permissions=True,
+        )
+
+        self.assertEqual(member.customer, customer.name)
+        self.assertFalse(membership.to_date)
+
+    def test_member_pan_details_removed_from_schema(self):
+        self.assertFalse(frappe.db.exists("Custom Field", "Member-pan_number"))
+        self.assertFalse(frappe.db.has_column("Member", "pan_number"))
+        for fieldname in ("company_80g_number", "with_effect_from", "pan_details"):
+            self.assertFalse(frappe.db.has_column("Company", fieldname))
+            self.assertFalse(frappe.db.exists("Custom Field", f"Company-{fieldname}"))
+        self.assertFalse(frappe.db.exists("DocType", "Tax Exemption 80G Certificate"))
+        self.assertFalse(
+            frappe.db.exists("DocType", "Tax Exemption 80G Certificate Detail")
+        )
+        self.assertFalse(
+            frappe.db.exists("Print Format", "80G Certificate for Donation")
+        )
+        self.assertFalse(
+            frappe.db.exists("Print Format", "80G Certificate for Membership")
+        )
+
+    def test_member_dashboard_has_single_membership_link(self):
+        dashboard = frappe.get_meta("Member").get_dashboard_data()
+        transaction_items = [
+            item for group in dashboard.transactions for item in group.get("items", [])
+        ]
+
+        self.assertEqual(transaction_items.count("Membership"), 1)
+        self.assertNotIn("Bank Account", transaction_items)
+        self.assertEqual(dashboard.transactions[0].get("label"), "Membership Details")
+        self.assertEqual(dashboard.non_standard_fieldnames.get("Membership"), "member")
+        self.assertNotIn("Bank Account", dashboard.non_standard_fieldnames)
 
     def test_create_member_reuses_exact_good_connector_contact(self):
         if not resolve_or_create_contact_from_external_signup:

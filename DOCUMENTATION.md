@@ -127,8 +127,28 @@ Miki uses:
 
 - `non_profit.non_profit.membership_sync.get_customer_for_membership`
 - `non_profit.non_profit.membership_sync.list_customer_memberships`
+- `non_profit.non_profit.doctype.member.member.get_or_create_member_for_customer`
+- `non_profit.non_profit.doctype.member.member.get_or_create_membership_for_member`
 - Member/Customer links through `Member.customer`
 - `Membership.member` as the canonical membership link
+
+`Membership.company` has been removed. It is not the member's
+business/company relation, and any business organisation lookup should resolve
+through
+`Membership.member -> Member.customer -> Customer`.
+
+Member and Company records do not store PAN/tax-id details. The legacy
+`Member-pan_number` custom field and India-specific 80G certificate DocTypes are
+removed by migrate so that PAN data is not retained as hidden database columns.
+
+The Member dashboard gets its Membership connection from the DocType `links`
+table. It intentionally does not show Bank Account; bank details belong to the
+linked ERPNext Customer, not directly to Member.
+
+Member names auto-fill from the linked Customer when `Member.member_name` is
+blank. The Customer/Member helper creates the Member first, then an open-ended
+Membership when callers pass `keep_to_date_open=True`; presentation apps such
+as `miki_app` use this for parent-owned business memberships.
 
 If any of these contracts change, adjust `miki_app` and run its membership-related tests.
 
@@ -149,7 +169,9 @@ customer data has been collected. The shared
 helper returns without creating anything unless the Membership Type is marked as
 a subscription. For subscription-enabled types, it creates or reuses an ERPNext
 **Subscription Plan**, creates an open-ended ERPNext **Subscription** for the
-linked Customer, writes `Membership.subscription`, and clears
+linked Customer using **Non Profit Settings -> Company** as the accounting
+company unless an explicit company argument is passed, writes
+`Membership.subscription`, and clears
 `Membership.to_date` when requested. Presentation apps such as `good_npo`
 should call this helper instead of creating Subscription rows locally.
 

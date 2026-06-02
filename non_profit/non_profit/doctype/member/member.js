@@ -32,6 +32,14 @@ frappe.ui.form.on('Member', {
 				});
 			}
 
+			frm.page.add_action_item(__('Create Membership'), () => {
+				frm.call('create_membership').then((r) => {
+					if (r.message) {
+						frappe.set_route('Form', 'Membership', r.message);
+					}
+				});
+			});
+
 			// indicator
 			erpnext.utils.set_party_dashboard_indicators(frm);
 

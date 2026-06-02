@@ -16,13 +16,6 @@ import frappe
 from frappe.utils import add_months, nowdate
 
 
-def _ensure_company() -> str:
-    default = frappe.db.get_single_value("Global Defaults", "default_company")
-    if default:
-        return default
-    return frappe.db.get_value("Company", {}, "name")
-
-
 def _ensure_membership_type() -> str:
     name = "Sync Test Membership Type"
     if frappe.db.exists("Membership Type", name):
@@ -80,7 +73,6 @@ def _make_membership(
     doc.member = member
     doc.membership_type = _ensure_membership_type()
     doc.membership_status = status
-    doc.company = _ensure_company()
     doc.from_date = from_date or nowdate()
     # to_date optional — leave None for perpetual
     if to_date is not None:

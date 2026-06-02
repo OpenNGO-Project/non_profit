@@ -100,7 +100,18 @@ Settings** are ignored when they belong to a different company.
 
 ## Memberships
 
-Use **Member** as the canonical identity and **Membership** for membership periods and billing. This fork supports both B2C membership via `Membership.member` and B2B workflows where a Member can be linked to a Customer.
+Use **Member** as the canonical identity and **Membership** for membership
+periods and billing. This fork supports both B2C membership via
+`Membership.member` and B2B workflows where a Member can be linked to a
+Customer. The linked Customer is the place to inspect the business or
+organisation context; `Membership.company` was removed and must not be used as
+an operator-maintained member company. Membership invoices and subscriptions
+resolve their accounting company from **Non Profit Settings**.
+
+When a Member is linked to a Customer and **Member Name** is blank, the Member
+controller fills it from `Customer.customer_name`. From a saved Member, use
+**Actions → Create Membership** to create or open the active open-ended
+Membership for that Member and Membership Type.
 
 Leave **To** empty for a perpetual/open-ended membership. If code creates the
 Membership and must intentionally keep **To** blank, set
@@ -118,6 +129,10 @@ it only creates a Subscription for subscription-enabled Membership Types, links
 If `good_connector` is installed, legacy member registration creates/reuses the
 linked Contact through Good Connector identity matching. Review possible fuzzy
 matches in **GC Potential Duplicate** instead of expecting automatic merges.
+
+Member and Company records do not store PAN/tax-id details. Migrate removes the
+legacy Member PAN custom field, Company PAN/80G fields, and India-specific 80G
+certificate DocTypes instead of only hiding them from the form.
 
 When changing Member or Membership behavior, run the relevant `miki_app` tests too because Miki depends on the shared membership substrate.
 

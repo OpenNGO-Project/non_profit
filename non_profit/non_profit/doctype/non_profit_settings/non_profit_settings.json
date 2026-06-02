@@ -49,7 +49,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "This company will be set for Memberships created from web forms or payment integrations.",
+   "description": "Used as the accounting company for membership invoices and membership subscriptions.",
    "fieldname": "company",
    "fieldtype": "Link",
    "in_list_view": 1,

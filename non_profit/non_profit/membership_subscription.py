@@ -128,6 +128,18 @@ def ensure_membership_subscription(
             _("A Customer is required before creating a Membership Subscription.")
         )
 
+    subscription_company = company
+    if not subscription_company:
+        from non_profit.non_profit.doctype.membership.membership import (
+            get_company_for_memberships,
+        )
+
+        subscription_company = get_company_for_memberships()
+    if not subscription_company:
+        frappe.throw(
+            _("Set a Default Company in Non Profit Settings before creating a Subscription.")
+        )
+
     plan = ensure_membership_subscription_plan(
         membership.membership_type,
         plan_name=plan_name,
@@ -143,7 +155,7 @@ def ensure_membership_subscription(
             "doctype": "Subscription",
             "party_type": "Customer",
             "party": customer,
-            "company": company or membership.get("company"),
+            "company": subscription_company,
             "start_date": start_date or membership.get("from_date") or nowdate(),
             "end_date": end_date,
             "generate_invoice_at": generate_invoice_at,

@@ -255,6 +255,15 @@ def make_invoice(membership, member, plan, settings):
     return invoice
 
 
+def get_company_for_memberships():
+    company = frappe.db.get_single_value("Non Profit Settings", "company")
+    if not company:
+        from non_profit.non_profit.utils import get_company
+
+        company = get_company()
+    return company
+
+
 def set_expired_status():
     membership = frappe.qb.DocType("Membership")
     (

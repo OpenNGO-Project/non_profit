@@ -1,5 +1,8 @@
 [pre_model_sync]
 non_profit.patches.set_non_profit_desktop_icon_app
+non_profit.patches.remove_tax_exemption_80g
 
 [post_model_sync]
 non_profit.patches.backfill_donor_customers_from_email
+non_profit.patches.remove_member_pan_details
+non_profit.patches.remove_membership_company

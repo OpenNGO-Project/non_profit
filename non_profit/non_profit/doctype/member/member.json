@@ -105,7 +105,11 @@
  ],
  "image_field": "image",
   "links": [
-   {"link_doctype": "Membership", "link_fieldname": "member"}
+   {
+    "group": "Membership Details",
+    "link_doctype": "Membership",
+    "link_fieldname": "member"
+   }
   ],
  "modified": "2026-04-20 00:00:00.000000",
  "modified_by": "Administrator",

@@ -243,6 +243,10 @@ class TestMembership(FrappeTestCase):
         self.assertFalse(membership.to_date)
         self.assertEqual(subscription_doc.party_type, "Customer")
         self.assertEqual(subscription_doc.party, self.member_doc.customer)
+        self.assertEqual(
+            subscription_doc.company,
+            frappe.db.get_single_value("Non Profit Settings", "company"),
+        )
         self.assertEqual(subscription_doc.start_date, membership.from_date)
         self.assertFalse(subscription_doc.end_date)
 
