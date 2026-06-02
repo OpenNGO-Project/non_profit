@@ -32,3 +32,236 @@
 "Als extern verdankt markieren","Als extern verdankt markieren"
 "Verdankung gesendet.","Verdankung gesendet."
 "Spende als extern verdankt markiert.","Spende als extern verdankt markiert."
+A Customer is required before creating a Membership Subscription.,Vor dem Erstellen eines Mitgliedschaftsabonnements ist ein Kunde erforderlich.
+A customer is already linked to this Donor,Mit diesem Spender ist bereits ein Kunde verknüpft
+A customer is already linked to this Member,Mit diesem Mitglied ist bereits ein Kunde verknüpft
+Account for accepting donation payments,Konto für den Empfang von Spendenzahlungen
+Account for accepting membership payments,Konto für den Empfang von Mitgliedschaftszahlungen
+Afternoon,Nachmittag
+Allow Invoicing for Memberships,Rechnungsstellung für Mitgliedschaften erlauben
+Amount must be positive,Betrag muss positiv sein
+An active Membership already exists for {0} overlapping {1} — {2} (existing: {3}),"Für {0} existiert bereits eine aktive Mitgliedschaft, die {1} — {2} überschneidet (bestehend: {3})"
+An invoice is already linked to this document,Mit diesem Dokument ist bereits eine Rechnung verknüpft
+Anonym spenden,Anonym spenden
+Anytime,Jederzeit
+Applicant Type,Antragstellertyp
+Approved,Genehmigt
+Assessment  Manager,Bewertungsmanager
+Assessment  Mark (Out of 10),Bewertungspunktzahl (von 10)
+Assessment Manager is required before sending a review invitation.,Vor dem Versand einer Bewertungseinladung ist ein Bewertungsmanager erforderlich.
+Assessment Result,Bewertungsergebnis
+Auto creates Payment Entry for Donations created from web forms.,"Erstellt automatisch Zahlungseinträge für Spenden, die über Webformulare erstellt wurden."
+Auto creates Payment Entry for Sales Invoices created for Membership from web forms.,"Erstellt automatisch Zahlungseinträge für Verkaufsrechnungen, die über Webformulare für Mitgliedschaften erstellt wurden."
+Automate Donation Payment Entries,Zahlungseinträge für Spenden automatisieren
+Automate Invoicing for Web Forms,Rechnungsstellung für Webformulare automatisieren
+Automate Payment Entry Creation,Erstellung von Zahlungseinträgen automatisieren
+Automatically create an invoice when payment is authorized from a web form entry,"Automatisch eine Rechnung erstellen, wenn die Zahlung aus einem Webformular autorisiert wird"
+Availability,Verfügbarkeit
+Availability Timeslot,Verfügbarkeits-Zeitfenster
+Availability and Skills,Verfügbarkeit und Fähigkeiten
+Betrag,Betrag
+Betrag (EUR),Betrag (EUR)
+Betrag:,Betrag:
+Billing Cycle,Abrechnungszyklus
+Campaign Code,Kampagnencode
+Certification,Zertifizierung
+Certification Application,Zertifizierungsantrag
+Certification Status,Zertifizierungsstatus
+Certification Validity,Gültigkeit der Zertifizierung
+Certified,Zertifiziert
+Certified Consultant,Zertifizierter Berater
+Chair,Vorsitz
+Chapter,Sektion
+Chapter Head,Sektionsleitung
+Chapter Member,Sektionsmitglied
+Chapter Members,Sektionsmitglieder
+Chapter member not found.,Sektionsmitglied nicht gefunden.
+Coach,Coach
+Contact Creation Failed,Kontakt konnte nicht erstellt werden
+Contact is required to create a Member,Zum Erstellen eines Mitglieds ist ein Kontakt erforderlich
+Contact {0} does not exist,Kontakt {0} existiert nicht
+Contract End,Vertragsende
+Contract Start,Vertragsbeginn
+Create Customer,Kunde erstellen
+Create Member and Membership,Mitglied und Mitgliedschaft erstellen
+Create Membership,Mitgliedschaft erstellen
+Create Next Donation Now,Nächste Spende jetzt erstellen
+Created donation {0},Spende {0} erstellt
+Creating Member and Membership,Mitglied und Mitgliedschaft werden erstellt
+Creating Membership Invoice,Mitgliedschaftsrechnung wird erstellt
+Creation User,Erstellungsbenutzer
+Customer is required to create a Member,Zum Erstellen eines Mitglieds ist ein Kunde erforderlich
+Customer {0} does not exist,Kunde {0} existiert nicht
+Customer {0} has been created succesfully.,Kunde {0} wurde erfolgreich erstellt.
+Customer {0} has been created successfully.,Kunde {0} wurde erfolgreich erstellt.
+Default Donation Campaign,Standard-Spendenkampagne
+Default Donor Type,Standard-Spendertyp
+Default Receipt Country,Standardland für Spendenbestätigung
+Default Thank You Email Template,Standard-E-Mail-Vorlage für Verdankung
+Demo payments are disabled on this site.,Demo-Zahlungen sind auf dieser Site deaktiviert.
+Die Zahlung muss durch einen konfigurierten Zahlungsanbieter bestätigt werden.,Die Zahlung muss durch einen konfigurierten Zahlungsanbieter bestätigt werden.
+Discuss ID,Discuss-ID
+Display Order,Anzeigereihenfolge
+Donation Payment To,Spendenzahlung an
+Donation Receipt Item,Artikel für Spendenbestätigung
+Donation Settings,Spendeneinstellungen
+Donor Contact Creation Failed,Spenderkontakt konnte nicht erstellt werden
+Donor Count,Spenderanzahl
+Donor Type,Spendertyp
+Donor customer backfill failed,Nachtragen des Spenderkunden fehlgeschlagen
+E-Mail,E-Mail
+ERPNext Docs,ERPNext-Dokumentation
+ERPNext Subscription that bills this membership.,"ERPNext-Abonnement, das diese Mitgliedschaft abrechnet."
+Eine Bestätigung wurde an Ihre E-Mail-Adresse gesendet.,Eine Bestätigung wurde an Ihre E-Mail-Adresse gesendet.
+Einmalige Spende,Einmalige Spende
+Email Notification Sent,E-Mail-Benachrichtigung gesendet
+Email Sent On,E-Mail gesendet am
+Email address of member {0} is missing,E-Mail-Adresse von Mitglied {0} fehlt
+Email that owns a demo-created record; empty means shared seed data.,"E-Mail-Adresse, der ein Demo-erstellter Datensatz gehört; leer bedeutet gemeinsam genutzte Seed-Daten."
+Enable when memberships of this type should create or link ERPNext Subscriptions. Leave disabled for declaration or data-collection memberships that are billed through a separate process.,"Aktivieren, wenn Mitgliedschaften dieses Typs ERPNext-Abonnements erstellen oder verknüpfen sollen. Deaktiviert lassen für Deklarations- oder Datenerfassungsmitgliedschaften, die über einen separaten Prozess abgerechnet werden."
+End Date cannot be before Start Date,Enddatum darf nicht vor dem Startdatum liegen
+Erstellen,Erstellen
+Evening,Abend
+Expiring Memberships,Ablaufende Mitgliedschaften
+Expiring On,Läuft ab am
+Generate Invoice,Rechnung erstellen
+GitHub ID,GitHub-ID
+Goal Amount,Zielbetrag
+Good Demo Language,Good Demo Sprache
+Good Demo Record Email,Good Demo Datensatz-E-Mail
+Good Demo Seed,Good Demo Seed
+Good NPO User,Good NPO Benutzer
+Grant Application,Förderantrag
+Grant Application Details ,Details zum Förderantrag
+Grant Description,Beschreibung der Förderung
+Has any past Grant Record,Hat frühere Förderdatensätze
+Häufigkeit,Häufigkeit
+INR,INR
+Ich stimme der Speicherung meiner Daten zu.,Ich stimme der Speicherung meiner Daten zu.
+Ihre Spende ist eingegangen.,Ihre Spende ist eingegangen.
+Ihre Spende unterstützt unsere Arbeit.,Ihre Spende unterstützt unsere Arbeit.
+Invalid amount,Ungültiger Betrag
+Invalid donation frequency,Ungültige Spendenhäufigkeit
+Invoice Print Format,Druckformat für Rechnung
+Is Subscription,Ist Abonnement
+Issued By,Ausgestellt von
+Issued On,Ausgestellt am
+Jetzt bezahlen (Mock),Jetzt bezahlen (Mock)
+Jährlich,Jährlich
+Kampagne (optional),Kampagne (optional)
+Landing Page URL,Landingpage-URL
+Language selected on the public GoodNPO demo flow.,"Sprache, die im öffentlichen GoodNPO Demo-Ablauf ausgewählt wurde."
+Leave Reason,Austrittsgrund
+Leave empty for a perpetual (non-expiring) membership.,Leer lassen für eine unbefristete Mitgliedschaft.
+Linked Item,Verknüpfter Artikel
+Managed by good_demo reset/seed routines.,Wird durch good_demo Reset-/Seed-Routinen verwaltet.
+Meetup Embed HTML,Meetup-Einbettungs-HTML
+Member Activity,Mitgliedsaktivität
+Member ID,Mitglieds-ID
+Member Name,Mitgliedsname
+Member Since,Mitglied seit
+Member is required to create a Membership,Zum Erstellen einer Mitgliedschaft ist ein Mitglied erforderlich
+Membership ID,Mitgliedschafts-ID
+Membership Invoicing,Mitgliedschaftsabrechnung
+Membership Payment To,Mitgliedschaftszahlung an
+Membership Print Format,Druckformat für Mitgliedschaft
+Membership Type,Mitgliedschaftstyp
+Membership Type is required to create a Membership,Zum Erstellen einer Mitgliedschaft ist ein Mitgliedschaftstyp erforderlich
+Minimum Amount,Mindestbetrag
+Mock donation payments are disabled.,Mock-Spendenzahlungen sind deaktiviert.
+Monatlich,Monatlich
+Morning,Morgen
+NPO-CAMP-.YYYY.-,NPO-CAMP-.YYYY.-
+NPO-DON-.YYYY.-,NPO-DON-.YYYY.-
+NPO-DRCPT-DE-.YYYY.-,NPO-DRCPT-DE-.YYYY.-
+NPO-DTN-.YYYY.-,NPO-DTN-.YYYY.-
+NPO-MEM-.YYYY.-,NPO-MEM-.YYYY.-
+NPO-REC-.YYYY.-,NPO-REC-.YYYY.-
+NPO-SPON-.YYYY.-,NPO-SPON-.YYYY.-
+Nachricht (optional),Nachricht (optional)
+Name of Applicant,Name des Antragstellers
+Name of Consultant,Name des Beraters
+Next Date,Nächstes Datum
+No Company configured on Non Profit Settings,In den Non-Profit-Einstellungen ist keine Firma konfiguriert
+No customer linked to member {0},Mit Mitglied {0} ist kein Kunde verknüpft
+No donor email,Keine Spender-E-Mail
+Non Profit Manager,Non-Profit-Manager
+Non Profit Member,Non-Profit-Mitglied
+Non Profit Settings,Non-Profit-Einstellungen
+Not Certified,Nicht zertifiziert
+Overlapping Membership,Überschneidende Mitgliedschaft
+PAN Details,PAN-Details
+PDF File,PDF-Datei
+Payment Details,Zahlungsdetails
+Payment ID,Zahlungs-ID
+Period From,Zeitraum von
+Period To,Zeitraum bis
+Please agree to the storage of your data.,Bitte stimmen Sie der Speicherung Ihrer Daten zu.
+"Please fill in name, email and amount","Bitte Name, E-Mail und Betrag ausfüllen"
+Please select a Member,Bitte ein Mitglied auswählen
+Please set a Linked Item for Membership Type {0}.,Bitte einen verknüpften Artikel für Mitgliedschaftstyp {0} setzen.
+Please set a Linked Item for the Membership Type {0},Bitte einen verknüpften Artikel für den Mitgliedschaftstyp {0} setzen
+Preferred Language,Bevorzugte Sprache
+Receipt Delivery,Zustellung der Spendenbestätigung
+Recurring Donation,Wiederkehrende Spende
+Referenz,Referenz
+Referenz:,Referenz:
+Refresh Totals,Summen aktualisieren
+Replaced,Ersetzt
+Replaces,Ersetzt
+Requested Amount,Beantragter Betrag
+Review Invitation Sent,Bewertungseinladung gesendet
+Sales Invoice created successfully,Verkaufsrechnung erfolgreich erstellt
+Select a valid fiscal year.,Bitte ein gültiges Geschäftsjahr auswählen.
+Select a valid month.,Bitte einen gültigen Monat auswählen.
+Select either a Contact or a Customer.,Bitte entweder einen Kontakt oder einen Kunden auswählen.
+Selected campaign is not available.,Die ausgewählte Kampagne ist nicht verfügbar.
+Send Acknowledgement,Bestätigung senden
+Send Grant Review Email,E-Mail zur Förderprüfung senden
+Send Invoice with Email,Rechnung per E-Mail senden
+Send Membership Acknowledgement,Mitgliedschaftsbestätigung senden
+Set a Default Company in Non Profit Settings before creating a Subscription.,"Setzen Sie in den Non-Profit-Einstellungen eine Standardfirma, bevor Sie ein Abonnement erstellen."
+Set when a thank-you letter or email has been sent for this donation.,"Gesetzt, wenn für diese Spende ein Dankesschreiben oder eine E-Mail gesendet wurde."
+Set when submitted Payment Entries for this Donation are cleared through bank reconciliation.,"Gesetzt, wenn eingereichte Zahlungseinträge für diese Spende über die Bankabstimmung ausgeglichen sind."
+Show on Website,Auf Website anzeigen
+Spende nicht gefunden.,Spende nicht gefunden.
+Spenden,Spenden
+Spendenbestätigung,Spendenbestätigung
+Sponsor,Sponsor
+Sponsor Name,Sponsorname
+Sponsor Tier,Sponsorstufe
+The Linked Item should be a service item,Der verknüpfte Artikel sollte ein Dienstleistungsartikel sein
+The payment for this membership is not paid. To generate invoice fill the payment details,Die Zahlung für diese Mitgliedschaft ist nicht bezahlt. Zum Erstellen der Rechnung bitte die Zahlungsdetails ausfüllen
+"The user that will be used to create Donations, Memberships, Invoices, and Payment Entries. This user should have the relevant permissions.","Der Benutzer, mit dem Spenden, Mitgliedschaften, Rechnungen und Zahlungseinträge erstellt werden. Dieser Benutzer sollte über die entsprechenden Berechtigungen verfügen."
+This Donor Type will be set for the Donor created via Donation web form entry.,"Dieser Spendertyp wird für den Spender gesetzt, der über den Spenden-Webformulareintrag erstellt wird."
+This company will be set for Donations created from web forms or payment integrations.,"Diese Firma wird für Spenden gesetzt, die über Webformulare oder Zahlungsintegrationen erstellt werden."
+Tier,Stufe
+Total Raised,Gesamt gesammelt
+Treasurer,Kassier
+USD,USD
+Used as the accounting company for membership invoices and membership subscriptions.,Wird als Buchhaltungsfirma für Mitgliedschaftsrechnungen und Mitgliedschaftsabonnements verwendet.
+Vice Chair,Vizevorsitz
+Vielen Dank!,Vielen Dank!
+Vierteljährlich,Vierteljährlich
+Volunteer Name,Name des Freiwilligen
+Volunteer Skill,Fähigkeit des Freiwilligen
+Volunteer Skills,Fähigkeiten der Freiwilligen
+Volunteer Type,Freiwilligentyp
+Website URL,Website-URL
+Weekends,Wochenenden
+Weiter zur Zahlung,Weiter zur Zahlung
+Yet to appear,Noch nicht erschienen
+You are not an active member of this chapter.,Sie sind kein aktives Mitglied dieser Sektion.
+You can learn more about memberships in the manual. ,Mehr über Mitgliedschaften erfahren Sie im Handbuch.
+You can only renew if your membership expires within 30 days,"Sie können nur verlängern, wenn Ihre Mitgliedschaft innerhalb von 30 Tagen abläuft"
+You need to enable <b>Send Acknowledge Email</b> in {0},Sie müssen <b>Bestätigungs-E-Mail senden</b> in {0} aktivieren
+You need to set <b>Debit Account</b> in {0},Sie müssen <b>Sollkonto</b> in {0} setzen
+You need to set <b>Default Company</b> for invoicing in {0},Sie müssen <b>Standardfirma</b> für die Rechnungsstellung in {0} setzen
+You need to set <b>Payment Account</b> for Donation in {0},Sie müssen <b>Zahlungskonto</b> für Spenden in {0} setzen
+You need to set <b>Payment Account</b> for Membership in {0},Sie müssen <b>Zahlungskonto</b> für Mitgliedschaften in {0} setzen
+Zahlung abschließen,Zahlung abschließen
+"chapters/chapter_name
+leave blank automatically set after saving chapter.","chapters/chapter_name
+Leer lassen; wird nach dem Speichern der Sektion automatisch gesetzt."
+en,en
+keine Zuordnung,keine Zuordnung
