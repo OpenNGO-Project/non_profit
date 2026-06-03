@@ -4,6 +4,8 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from non_profit.non_profit.doctype.chapter.chapter import join
+
 
 class TestChapter(FrappeTestCase):
     def test_create_chapter(self) -> None:
@@ -55,6 +57,39 @@ class TestChapter(FrappeTestCase):
         doc.delete()
         self.assertFalse(frappe.db.exists("Chapter", name))
 
+    def test_logged_in_user_can_join_published_chapter_as_self(self) -> None:
+        chapter_head = _make_member()
+        user = _make_user()
+        title = f"Join Test Chapter {frappe.generate_hash(length=6)}"
+        chapter = frappe.get_doc(
+            {
+                "doctype": "Chapter",
+                "name": title,
+                "title": title,
+                "chapter_head": chapter_head,
+                "region": "Test Region",
+                "introduction": "Test introduction",
+                "published": 1,
+            }
+        ).insert(ignore_permissions=True)
+
+        previous_user = frappe.session.user
+        try:
+            frappe.set_user("Guest")
+            with self.assertRaises(frappe.PermissionError):
+                join(chapter.name)
+
+            frappe.set_user(user)
+            join(chapter.name, introduction="Hello", website_url="https://example.com")
+        finally:
+            frappe.set_user(previous_user)
+
+        chapter.reload()
+        members = [row for row in chapter.members if row.user == user and row.enabled]
+        self.assertEqual(len(members), 1)
+        self.assertEqual(members[0].introduction, "Hello")
+        self.assertEqual(members[0].website_url, "https://example.com")
+
 
 def _make_member() -> str:
     name = f"Chapter Head {frappe.generate_hash(length=6)}"
@@ -65,3 +100,18 @@ def _make_member() -> str:
         }
     ).insert(ignore_permissions=True)
     return doc.name
+
+
+def _make_user() -> str:
+    email = f"chapter-member-{frappe.generate_hash(length=8)}@example.com"
+    frappe.get_doc(
+        {
+            "doctype": "User",
+            "email": email,
+            "first_name": "Chapter",
+            "last_name": "Member",
+            "send_welcome_email": 0,
+            "user_type": "Website User",
+        }
+    ).insert(ignore_permissions=True)
+    return email

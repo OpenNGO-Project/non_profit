@@ -50,9 +50,10 @@ submitted, paid Donations without an existing receipt link. Donation Receipt
 country defaults to `Switzerland` in DocType metadata, the yearly-generation
 dialog, and the backend fallback when no country argument is supplied.
 `DonationReceipt` email sending, chapter staff edits, and grant review
-invitations require write permission on the target document. A portal user
-leaving a Chapter may only disable their own active row; editing another user
-still requires Chapter write permission.
+invitations require write permission on the target document. A logged-in portal
+user may join a published Chapter only as themselves, and may leave only their
+own active Chapter row; editing another user's Chapter row still requires
+Chapter write permission.
 
 The development-only `Donation.mock_pay` endpoint is guest-whitelisted but
 POST-only and inert unless both `developer_mode` and

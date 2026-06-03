@@ -147,10 +147,11 @@ per Member and filters by its `to_date`. It no longer depends on the legacy
 
 ## Chapters And Grants
 
-Chapter members can only leave their own active membership through the public
-leave endpoint. Staff changing another user's chapter row need write permission
-on the Chapter. Grant review invitations require write permission on the Grant
-Application and an Assessment Manager before the status is moved to
+Logged-in users can join a published Chapter only as themselves through the
+public join page. Chapter members can only leave their own active membership
+through the public leave endpoint. Staff changing another user's chapter row
+need write permission on the Chapter. Grant review invitations require write
+permission on the Grant Application and an Assessment Manager before the status is moved to
 **In Progress**.
 
 ## Smoke Checks

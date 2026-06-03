@@ -40,6 +40,39 @@ def get_list_context(context):
     context.order_by = "creation desc"
 
 
+@frappe.whitelist(methods=["POST"])
+def join(title: str, introduction: str = "", website_url: str = "") -> str:
+    if frappe.session.user == "Guest":
+        frappe.throw(_("Login required"), frappe.PermissionError)
+
+    chapter = frappe.get_doc("Chapter", title)
+    if not chapter.published:
+        chapter.check_permission("read")
+
+    if any(member.user == frappe.session.user and member.enabled for member in chapter.members):
+        return _("You are already a member of this chapter.")
+
+    for member in chapter.members:
+        if member.user == frappe.session.user:
+            member.enabled = 1
+            member.introduction = introduction
+            member.website_url = website_url
+            break
+    else:
+        chapter.append(
+            "members",
+            {
+                "user": frappe.session.user,
+                "introduction": introduction,
+                "website_url": website_url,
+                "enabled": 1,
+            },
+        )
+
+    chapter.save(ignore_permissions=True)
+    return _("Welcome to chapter {0}!").format(chapter.name)
+
+
 @frappe.whitelist()
 def leave(title: str, user_id: str | None = None, leave_reason: str = "") -> str:
     if frappe.session.user == "Guest":
