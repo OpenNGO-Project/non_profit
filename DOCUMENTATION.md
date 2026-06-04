@@ -137,8 +137,8 @@ Miki uses:
 
 Member no longer stores `membership_type`. Membership Type, Status, and validity
 dates belong only to `Membership`; Member is the identity record and can be
-linked to a Customer for B2B flows or to a Contact for standalone person
-memberships.
+linked to a Customer for B2B flows. Contact-only person memberships are linked
+through Contact Dynamic Link rows; Member does not store a Contact field.
 
 `Membership.company` has been removed. It is not the member's
 business/company relation, and any business organisation lookup should resolve
@@ -153,11 +153,13 @@ The Member dashboard gets its Membership connection from the DocType `links`
 table. It intentionally does not show Bank Account; bank details belong to the
 linked ERPNext Customer, not directly to Member.
 
-Member names auto-fill from the linked Customer when `Member.member_name` is
-blank. The Contact/Customer dialog and helper create or reuse the Member first,
-then create or reuse an open-ended Membership for the selected Membership Type;
-presentation apps such as `miki_app` use this for parent-owned business
-memberships.
+Member names are derived by the controller. For Customer-backed Members, the
+name comes from `Customer.customer_name` plus `Customer.name_additional` when
+that field exists. Contact-only helper flows derive the name from the Contact
+and link the Contact through Dynamic Link rows. The Contact/Customer dialog and
+helper create or reuse the Member first, then create or reuse an open-ended
+Membership for the selected Membership Type; presentation apps such as
+`miki_app` use this for parent-owned business memberships.
 
 If any of these contracts change, adjust `miki_app` and run its membership-related tests.
 

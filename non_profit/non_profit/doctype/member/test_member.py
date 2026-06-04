@@ -60,6 +60,9 @@ class TestMember(unittest.TestCase):
 
     def test_member_name_autofills_from_customer(self):
         customer = self._customer()
+        if customer.meta.has_field("name_additional"):
+            customer.name_additional = "Additional Line"
+            customer.save(ignore_permissions=True)
 
         member = frappe.get_doc(
             {
@@ -68,7 +71,18 @@ class TestMember(unittest.TestCase):
             }
         ).insert(ignore_permissions=True)
 
-        self.assertEqual(member.member_name, customer.customer_name)
+        expected_name = (
+            f"{customer.customer_name} - Additional Line"
+            if customer.meta.has_field("name_additional")
+            else customer.customer_name
+        )
+        self.assertEqual(member.member_name, expected_name)
+
+    def test_member_name_is_required_without_customer_or_programmatic_name(self):
+        member = frappe.new_doc("Member")
+
+        with self.assertRaises(frappe.ValidationError):
+            member.insert(ignore_permissions=True)
 
     def test_customer_member_helper_creates_open_ended_membership(self):
         membership_type = self._membership_type()

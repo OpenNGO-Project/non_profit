@@ -25,18 +25,15 @@ class Member(Document):
 
     def validate(self):
         self.set_member_name_from_customer()
+        if not self.member_name:
+            frappe.throw(_("Customer is required to derive Member Name."))
 
         if self.email_id:
             self.validate_email_type(self.email_id)
 
     def set_member_name_from_customer(self) -> None:
-        if self.member_name or not self.customer:
-            return
-
-        self.member_name = (
-            frappe.db.get_value("Customer", self.customer, "customer_name")
-            or self.customer
-        )
+        if self.customer:
+            self.member_name = _customer_display_name(self.customer)
 
     def validate_email_type(self, email):
         from frappe.utils import validate_email_address
@@ -102,7 +99,6 @@ def get_or_create_member_for_customer(
 
     member = frappe.new_doc("Member")
     member.customer = customer
-    member.member_name = customer_name
     member.insert(ignore_permissions=ignore_permissions)
     return member
 
@@ -328,6 +324,25 @@ def _contact_display_name(contact_doc) -> str:
     return " ".join(part for part in name_parts if part).strip() or contact_doc.name
 
 
+def _customer_display_name(customer: str) -> str:
+    if not frappe.db.exists("Customer", customer):
+        frappe.throw(_("Customer {0} does not exist").format(frappe.bold(customer)))
+    customer_doc = frappe.get_doc("Customer", customer)
+    name = customer_doc.customer_name or customer
+    additional = (customer_doc.get("name_additional") or "").strip()
+    return f"{name} - {additional}" if additional else name
+
+
+def _contact_for_email(email: str | None) -> str | None:
+    if not email:
+        return None
+    return frappe.db.get_value(
+        "Contact Email",
+        {"email_id": email, "parenttype": "Contact"},
+        "parent",
+    )
+
+
 def get_or_create_member(user_details):
     user_details = frappe._dict(user_details)
     member_list = frappe.get_all(
@@ -343,17 +358,19 @@ def get_or_create_member(user_details):
 
 def create_member(user_details):
     user_details = frappe._dict(user_details)
+    customer = create_customer(user_details)
     member = frappe.new_doc("Member")
     member.update(
         {
-            "member_name": user_details.fullname,
+            "customer": customer,
             "email_id": user_details.email,
         }
     )
 
     member.insert(ignore_permissions=True)
-    member.customer = create_customer(user_details, member.name)
-    member.save(ignore_permissions=True)
+    contact = _contact_for_email(user_details.email)
+    if contact:
+        _link_contact_to_member(contact, member.name, ignore_permissions=True)
 
     return member
 

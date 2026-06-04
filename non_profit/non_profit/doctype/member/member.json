@@ -32,7 +32,7 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Member Name",
-   "reqd": 1
+   "read_only": 1
   },
   {
    "fieldname": "column_break_5",
@@ -48,6 +48,7 @@
   },
   {
    "collapsible": 1,
+   "description": "Member Name is derived from the linked Customer.",
    "fieldname": "customer_section",
    "fieldtype": "Section Break",
    "label": "Customer"
