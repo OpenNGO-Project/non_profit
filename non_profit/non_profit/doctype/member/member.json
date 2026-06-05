@@ -10,10 +10,8 @@
   "naming_series",
   "member_name",
   "column_break_5",
-  "image",
-  "customer_section",
   "customer",
-  "customer_name",
+  "image",
   "address_contacts",
   "address_html",
   "column_break_9",
@@ -31,8 +29,7 @@
    "fieldname": "member_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Member Name",
-   "read_only": 1
+   "label": "Member Name"
   },
   {
    "fieldname": "column_break_5",
@@ -47,24 +44,10 @@
    "print_hide": 1
   },
   {
-   "collapsible": 1,
-   "description": "Member Name is derived from the linked Customer.",
-   "fieldname": "customer_section",
-   "fieldtype": "Section Break",
-   "label": "Customer"
-  },
-  {
    "fieldname": "customer",
    "fieldtype": "Link",
    "label": "Customer",
    "options": "Customer"
-  },
-  {
-   "fetch_from": "customer.customer_name",
-   "fieldname": "customer_name",
-   "fieldtype": "Data",
-   "label": "Customer Name",
-   "read_only": 1
   },
   {
    "depends_on": "eval:!doc.__islocal;",

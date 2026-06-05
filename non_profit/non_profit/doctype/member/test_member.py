@@ -1,6 +1,7 @@
 # Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
+import json
 import unittest
 
 import frappe
@@ -78,11 +79,42 @@ class TestMember(unittest.TestCase):
         )
         self.assertEqual(member.member_name, expected_name)
 
+    def test_member_name_preserves_manual_value_with_customer(self):
+        customer = self._customer()
+        member = frappe.get_doc(
+            {
+                "doctype": "Member",
+                "customer": customer.name,
+                "member_name": "Manual Membership Display Name",
+            }
+        ).insert(ignore_permissions=True)
+
+        self.assertEqual(member.member_name, "Manual Membership Display Name")
+
     def test_member_name_is_required_without_customer_or_programmatic_name(self):
         member = frappe.new_doc("Member")
 
         with self.assertRaises(frappe.ValidationError):
             member.insert(ignore_permissions=True)
+
+    def test_member_form_layout_keeps_customer_next_to_member_name(self):
+        with open(
+            frappe.get_app_path("non_profit", "non_profit", "doctype", "member", "member.json")
+        ) as handle:
+            member_meta = json.load(handle)
+
+        self.assertEqual(
+            member_meta["field_order"][:4],
+            ["naming_series", "member_name", "column_break_5", "customer"],
+        )
+        fieldnames = {field["fieldname"] for field in member_meta["fields"]}
+        self.assertNotIn("customer_section", fieldnames)
+        self.assertNotIn("customer_name", fieldnames)
+
+        member_name_field = next(
+            field for field in member_meta["fields"] if field["fieldname"] == "member_name"
+        )
+        self.assertFalse(member_name_field.get("read_only"))
 
     def test_customer_member_helper_creates_open_ended_membership(self):
         membership_type = self._membership_type()

@@ -110,14 +110,15 @@ resolve their accounting company from **Non Profit Settings**.
 Membership Type, Status, and validity dates live on **Membership** only; the
 Member form does not store its own Membership Type.
 
-The Member form derives **Member Name** from the linked Customer. If the Customer
-has a `name_additional` field, it is appended to the display name. Creating a new
-Member opens a dialog where operators choose either a Contact or a Customer plus
-the Membership Type; contact-only members are linked through Contact Dynamic
-Links, not a Contact field on Member. The system creates/reuses the Member and
-creates/reuses the open-ended Membership in one step. From a saved Member, use
-**Actions → Create Membership** to create or open the active open-ended
-Membership for that Member and chosen Membership Type.
+Operators may edit **Member Name** directly. When it is left blank and a
+Customer is linked, the Member form fills it from that Customer; if the Customer
+has a `name_additional` field, it is appended to the display name. Creating a
+new Member opens a dialog where operators choose either a Contact or a Customer
+plus the Membership Type; contact-only members are linked through Contact
+Dynamic Links, not a Contact field on Member. The system creates/reuses the
+Member and creates/reuses the open-ended Membership in one step. From a saved
+Member, use **Actions → Create Membership** to create or open the active
+open-ended Membership for that Member and chosen Membership Type.
 
 Leave **To** empty for a perpetual/open-ended membership. If code creates the
 Membership and must intentionally keep **To** blank, set

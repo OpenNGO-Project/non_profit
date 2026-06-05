@@ -158,9 +158,8 @@ Managed by good_demo reset/seed routines.,Wird durch good_demo Reset-/Seed-Routi
 Meetup Embed HTML,Meetup-Einbettungs-HTML
 Member Activity,Mitgliedsaktivität
 Member ID,Mitglieds-ID
-Customer is required to derive Member Name.,Kunde ist erforderlich um den Mitgliedsnamen abzuleiten.
+Member Name is required.,Mitgliedsname ist erforderlich.
 Member Name,Mitgliedsname
-Member Name is derived from the linked Customer.,Der Mitgliedsname wird aus dem verknüpften Kunden abgeleitet.
 Member Since,Mitglied seit
 Member is required to create a Membership,Zum Erstellen einer Mitgliedschaft ist ein Mitglied erforderlich
 Membership ID,Mitgliedschafts-ID

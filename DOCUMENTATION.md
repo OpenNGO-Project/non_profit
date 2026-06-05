@@ -153,13 +153,14 @@ The Member dashboard gets its Membership connection from the DocType `links`
 table. It intentionally does not show Bank Account; bank details belong to the
 linked ERPNext Customer, not directly to Member.
 
-Member names are derived by the controller. For Customer-backed Members, the
-name comes from `Customer.customer_name` plus `Customer.name_additional` when
-that field exists. Contact-only helper flows derive the name from the Contact
-and link the Contact through Dynamic Link rows. The Contact/Customer dialog and
-helper create or reuse the Member first, then create or reuse an open-ended
-Membership for the selected Membership Type; presentation apps such as
-`miki_app` use this for parent-owned business memberships.
+Member names are operator-editable. When `Member.member_name` is blank and a
+Customer is linked, the controller fills it from `Customer.customer_name` plus
+`Customer.name_additional` when that field exists. Contact-only helper flows
+derive the name from the Contact and link the Contact through Dynamic Link rows.
+The Contact/Customer dialog and helper create or reuse the Member first, then
+create or reuse an open-ended Membership for the selected Membership Type;
+presentation apps such as `miki_app` use this for parent-owned business
+memberships.
 
 If any of these contracts change, adjust `miki_app` and run its membership-related tests.
 

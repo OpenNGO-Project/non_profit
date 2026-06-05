@@ -6,7 +6,7 @@ import frappe
 from frappe import _
 from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.model.document import Document
-from frappe.utils import getdate, nowdate
+from frappe.utils import cstr, getdate, nowdate
 
 try:
     from good_connector.identity_matching import (
@@ -26,13 +26,13 @@ class Member(Document):
     def validate(self):
         self.set_member_name_from_customer()
         if not self.member_name:
-            frappe.throw(_("Customer is required to derive Member Name."))
+            frappe.throw(_("Member Name is required."))
 
         if self.email_id:
             self.validate_email_type(self.email_id)
 
     def set_member_name_from_customer(self) -> None:
-        if self.customer:
+        if self.customer and not cstr(self.member_name).strip():
             self.member_name = _customer_display_name(self.customer)
 
     def validate_email_type(self, email):
