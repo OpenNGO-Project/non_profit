@@ -33,7 +33,59 @@ frappe.ui.form.on('Donor', {
 			erpnext.utils.set_party_dashboard_indicators(frm);
 		} else {
 			frappe.contacts.clear_address_and_contact(frm);
+			show_donor_creation_dialog(frm);
 		}
 
 	}
 });
+
+function show_donor_creation_dialog(frm) {
+	if (frm.__donor_creation_dialog_shown) return;
+	frm.__donor_creation_dialog_shown = true;
+
+	const dialog = new frappe.ui.Dialog({
+		title: __('Create Donor'),
+		fields: [
+			{
+				fieldname: 'contact',
+				fieldtype: 'Link',
+				label: __('Contact'),
+				options: 'Contact',
+			},
+			{
+				fieldname: 'customer',
+				fieldtype: 'Link',
+				label: __('Customer'),
+				options: 'Customer',
+			},
+			{
+				fieldname: 'donor_type',
+				fieldtype: 'Link',
+				label: __('Donor Type'),
+				options: 'Donor Type',
+			},
+		],
+		primary_action_label: __('Create'),
+		primary_action(values) {
+			if (!values.contact && !values.customer) {
+				frappe.msgprint(__('Select a Contact or a Customer.'));
+				return;
+			}
+
+			frappe.call({
+				method: 'non_profit.non_profit.doctype.donor.donor.create_donor_from_identity',
+				args: values,
+				freeze: true,
+				freeze_message: __('Creating Donor'),
+			}).then((r) => {
+				const result = r.message || {};
+				if (result.donor) {
+					dialog.hide();
+					frappe.set_route('Form', 'Donor', result.donor);
+				}
+			});
+		},
+	});
+
+	dialog.show();
+}

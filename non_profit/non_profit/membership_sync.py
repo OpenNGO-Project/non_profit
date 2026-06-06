@@ -55,16 +55,20 @@ def validate_no_overlap(doc, method: str | None = None) -> None:
             row.from_date,
             row.to_date,
         ):
+            message = _(
+                "An active Membership already exists for {0} overlapping "
+                "{1} — {2} (existing: {3})"
+            ).format(
+                frappe.bold(doc.member),
+                doc.from_date,
+                doc.get("to_date") or "∞",
+                row.name,
+            )
+            if getattr(doc.flags, "warn_on_membership_overlap", False):
+                frappe.msgprint(message, title=_("Overlapping Membership"), indicator="orange")
+                return
             frappe.throw(
-                _(
-                    "An active Membership already exists for {0} overlapping "
-                    "{1} — {2} (existing: {3})"
-                ).format(
-                    frappe.bold(doc.member),
-                    doc.from_date,
-                    doc.get("to_date") or "∞",
-                    row.name,
-                ),
+                message,
                 title=_("Overlapping Membership"),
             )
 

@@ -88,6 +88,146 @@ class TestDonor(FrappeTestCase):
         donor.reload()
         self.assertEqual(donor.customer, customer.name)
 
+    def test_donor_pan_details_removed_from_schema_and_setup(self) -> None:
+        from non_profit.setup import get_custom_fields
+
+        self.assertFalse(frappe.db.exists("Custom Field", "Donor-pan_number"))
+        self.assertFalse(frappe.get_meta("Donor").has_field("pan_number"))
+        self.assertFalse(frappe.db.has_column("Donor", "pan_number"))
+        self.assertNotIn("Donor", get_custom_fields())
+
+    def test_donor_payment_notes_do_not_store_pan_details(self) -> None:
+        from non_profit.non_profit.doctype.donation.donation import get_additional_notes
+
+        donor = frappe.get_doc(
+            {
+                "doctype": "Donor",
+                "donor_name": "Sensitive Notes Donor",
+                "donor_type": self._donor_type(),
+            }
+        ).insert(ignore_permissions=True)
+
+        get_additional_notes(
+            donor,
+            frappe._dict(
+                notes={
+                    "name": "Sensitive Notes Donor",
+                    "pan": "SECRET-PAN",
+                    "purpose": "General donation",
+                }
+            ),
+        )
+
+        comments = "\n".join(
+            frappe.get_all(
+                "Comment",
+                filters={"reference_doctype": "Donor", "reference_name": donor.name},
+                pluck="content",
+            )
+        )
+        self.assertNotIn("SECRET-PAN", comments)
+        self.assertNotIn("pan", comments.lower())
+        self.assertIn("General donation", comments)
+
+    def test_create_donor_from_identity_requires_create_permission(self) -> None:
+        from non_profit.non_profit.doctype.donor.donor import create_donor_from_identity
+
+        customer = self._customer("Donor Permission Customer")
+
+        with patch(
+            "non_profit.non_profit.doctype.donor.donor.frappe.has_permission",
+            side_effect=frappe.PermissionError,
+        ):
+            with self.assertRaises(frappe.PermissionError):
+                create_donor_from_identity(customer=customer.name, donor_type=self._donor_type())
+
+    def test_create_donor_from_contact_and_customer_links_both(self) -> None:
+        from non_profit.non_profit.doctype.donor.donor import create_donor_from_identity
+
+        email = f"donor-contact-customer-{frappe.generate_hash(length=8)}@example.org"
+        customer = self._customer("Donor Contact Customer")
+        contact = frappe.get_doc(
+            {
+                "doctype": "Contact",
+                "first_name": "Donor",
+                "last_name": "Contact",
+                "email_ids": [{"email_id": email, "is_primary": 1}],
+            }
+        ).insert(ignore_permissions=True)
+
+        result = create_donor_from_identity(
+            contact=contact.name,
+            customer=customer.name,
+            donor_type=self._donor_type(),
+        )
+
+        donor = frappe.get_doc("Donor", result["donor"])
+        self.assertEqual(donor.customer, customer.name)
+        for link_doctype, link_name in (("Donor", donor.name), ("Customer", customer.name)):
+            self.assertTrue(
+                frappe.db.exists(
+                    "Dynamic Link",
+                    {
+                        "parenttype": "Contact",
+                        "parent": contact.name,
+                        "link_doctype": link_doctype,
+                        "link_name": link_name,
+                    },
+                )
+            )
+
+    def test_create_donor_from_identity_rejects_conflicting_contact_customer_links(self) -> None:
+        from non_profit.non_profit.doctype.donor.donor import create_donor_from_identity
+
+        email = f"donor-conflict-{frappe.generate_hash(length=8)}@example.org"
+        contact = frappe.get_doc(
+            {
+                "doctype": "Contact",
+                "first_name": "Donor",
+                "last_name": "Conflict",
+                "email_ids": [{"email_id": email, "is_primary": 1}],
+            }
+        ).insert(ignore_permissions=True)
+        donor_type = self._donor_type()
+        linked_donor = frappe.get_doc(
+            {"doctype": "Donor", "donor_name": "Linked Donor", "donor_type": donor_type}
+        ).insert(ignore_permissions=True)
+        contact.append("links", {"link_doctype": "Donor", "link_name": linked_donor.name})
+        contact.save(ignore_permissions=True)
+        customer = self._customer("Donor Conflict Customer")
+        frappe.get_doc(
+            {
+                "doctype": "Donor",
+                "donor_name": "Customer Donor",
+                "donor_type": donor_type,
+                "customer": customer.name,
+            }
+        ).insert(ignore_permissions=True)
+
+        with self.assertRaises(frappe.ValidationError):
+            create_donor_from_identity(contact=contact.name, customer=customer.name, donor_type=donor_type)
+
+    def test_contact_only_donor_email_reads_linked_contact(self) -> None:
+        from non_profit.non_profit.doctype.donor.donor import (
+            get_donor_email,
+            get_or_create_donor_for_contact,
+        )
+
+        email = f"donor-contact-only-{frappe.generate_hash(length=8)}@example.org"
+        contact = frappe.get_doc(
+            {
+                "doctype": "Contact",
+                "first_name": "Contact",
+                "last_name": "Only",
+                "email_ids": [{"email_id": email, "is_primary": 1}],
+            }
+        ).insert(ignore_permissions=True)
+
+        donor = get_or_create_donor_for_contact(contact.name, donor_type=self._donor_type(), ignore_permissions=True)
+
+        self.assertFalse(donor.customer)
+        self.assertEqual(get_donor_email(donor), email)
+
     def test_get_donor_email_reads_linked_customer(self) -> None:
         from non_profit.non_profit.doctype.donor.donor import (
             find_donor_by_email,

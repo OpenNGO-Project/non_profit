@@ -36,6 +36,154 @@ class Donor(Document):
         )
 
 
+@frappe.whitelist(methods=["POST"])
+def create_donor_from_identity(
+    contact: str | None = None,
+    customer: str | None = None,
+    donor_type: str | None = None,
+) -> dict[str, str | None]:
+    contact = cstr(contact).strip()
+    customer = cstr(customer).strip()
+    if not contact and not customer:
+        frappe.throw(_("Select a Contact or a Customer."))
+    frappe.has_permission("Donor", "create", throw=True)
+    if contact:
+        _check_identity_doc_permission("Contact", contact, "write")
+    if customer:
+        _check_identity_doc_permission("Customer", customer, "write")
+
+    if contact and customer:
+        donor = get_or_create_donor_for_contact(
+            contact,
+            customer=customer,
+            donor_type=donor_type,
+        )
+    elif contact:
+        donor = get_or_create_donor_for_contact(contact, donor_type=donor_type)
+    else:
+        donor = get_or_create_donor_for_customer(customer, donor_type=donor_type)
+
+    return {
+        "donor": donor.name,
+        "customer": donor.get("customer"),
+        "contact": contact or _contact_for_donor(donor, customer=donor.get("customer")),
+    }
+
+
+def _check_identity_doc_permission(doctype: str, name: str, ptype: str = "read") -> None:
+    doc = frappe.get_doc(doctype, name)
+    doc.check_permission("read")
+    if ptype != "read":
+        doc.check_permission(ptype)
+
+
+def get_or_create_donor_for_customer(
+    customer: str,
+    donor_type: str | None = None,
+    *,
+    ignore_permissions: bool = False,
+):
+    if not customer:
+        frappe.throw(_("Customer is required to create a Donor"))
+    if not frappe.db.exists("Customer", customer):
+        frappe.throw(_("Customer {0} does not exist").format(frappe.bold(customer)))
+    if not ignore_permissions:
+        _check_identity_doc_permission("Customer", customer, "write")
+
+    existing_donor = frappe.db.exists("Donor", {"customer": customer})
+    if existing_donor:
+        donor = frappe.get_doc("Donor", existing_donor)
+        if not ignore_permissions:
+            donor.check_permission("read")
+        return donor
+    if not ignore_permissions:
+        frappe.has_permission("Donor", "create", throw=True)
+
+    donor = frappe.new_doc("Donor")
+    donor.donor_type = _resolve_donor_type(donor_type)
+    donor.donor_name = _customer_display_name(customer)
+    donor.customer = customer
+    donor.insert(ignore_permissions=ignore_permissions)
+    _link_contact_and_address_to_customer(donor, customer)
+    return donor
+
+
+def get_or_create_donor_for_contact(
+    contact: str,
+    donor_type: str | None = None,
+    *,
+    customer: str | None = None,
+    ignore_permissions: bool = False,
+):
+    if not contact:
+        frappe.throw(_("Contact is required to create a Donor"))
+    if not frappe.db.exists("Contact", contact):
+        frappe.throw(_("Contact {0} does not exist").format(frappe.bold(contact)))
+    if customer and not frappe.db.exists("Customer", customer):
+        frappe.throw(_("Customer {0} does not exist").format(frappe.bold(customer)))
+    if not ignore_permissions:
+        _check_identity_doc_permission("Contact", contact, "write")
+        if customer:
+            _check_identity_doc_permission("Customer", customer, "write")
+
+    linked_donor = _donor_linked_to_contact(contact)
+    if linked_donor:
+        if customer:
+            donor_for_customer = frappe.db.exists("Donor", {"customer": customer})
+            if donor_for_customer and donor_for_customer != linked_donor:
+                frappe.throw(
+                    _("Contact is already linked to another Donor."),
+                    frappe.ValidationError,
+                )
+        donor = frappe.get_doc("Donor", linked_donor)
+        if not ignore_permissions:
+            donor.check_permission("write" if customer and donor.get("customer") != customer else "read")
+        if customer and donor.get("customer") != customer:
+            frappe.db.set_value("Donor", donor.name, "customer", customer, update_modified=False)
+            donor.customer = customer
+        if customer:
+            _link_contact_and_address_to_customer(donor, customer, email=get_contact_email(contact))
+        return donor
+
+    contact_doc = frappe.get_doc("Contact", contact)
+    email = get_contact_email(contact_doc)
+    if customer:
+        existing_donor = frappe.db.exists("Donor", {"customer": customer})
+        if existing_donor:
+            ensure_contact_link(contact, "Donor", existing_donor, ignore_permissions=ignore_permissions)
+            donor = frappe.get_doc("Donor", existing_donor)
+            if not ignore_permissions:
+                donor.check_permission("read")
+            _link_contact_and_address_to_customer(donor, customer, email=email)
+            return donor
+    if email:
+        existing_donor = find_donor_by_email(email)
+        if existing_donor:
+            ensure_contact_link(contact, "Donor", existing_donor, ignore_permissions=ignore_permissions)
+            donor = frappe.get_doc("Donor", existing_donor)
+            if not ignore_permissions:
+                donor.check_permission("write" if customer and donor.get("customer") != customer else "read")
+            if customer and donor.get("customer") != customer:
+                frappe.db.set_value("Donor", donor.name, "customer", customer, update_modified=False)
+                donor.customer = customer
+            if donor.get("customer"):
+                _link_contact_and_address_to_customer(donor, donor.customer, email=email)
+            return donor
+
+    donor = frappe.new_doc("Donor")
+    if not ignore_permissions:
+        frappe.has_permission("Donor", "create", throw=True)
+    donor.donor_type = _resolve_donor_type(donor_type)
+    donor.donor_name = get_contact_display_name(contact_doc)
+    if customer:
+        donor.customer = customer
+    donor.insert(ignore_permissions=ignore_permissions)
+    ensure_contact_link(contact, "Donor", donor.name, ignore_permissions=ignore_permissions)
+    if customer:
+        _link_contact_and_address_to_customer(donor, customer, email=email)
+    return donor
+
+
 def get_or_create_customer_for_donor(donor, email: str | None = None) -> str:
     if isinstance(donor, str):
         donor = frappe.get_doc("Donor", donor)
@@ -87,6 +235,12 @@ def get_donor_email(donor) -> str | None:
 
     if customer:
         email = _normalize_email(frappe.db.get_value("Customer", customer, "email_id"))
+        if email:
+            return email
+
+    contact = _contact_linked_to("Donor", donor_name)
+    if contact:
+        email = get_contact_email(contact)
         if email:
             return email
 
@@ -252,20 +406,23 @@ def _contact_for_donor(
                 order_by="idx asc",
             )
         if contact_name:
-            _ensure_contact_link_row(contact_name, "Donor", donor.name)
+            ensure_contact_link(contact_name, "Donor", donor.name)
             return contact_name
 
     if not email:
         return None
 
     first_name, last_name = _split_person_name(donor.donor_name)
-    if resolve_or_create_contact_from_external_signup and not customer:
+    if resolve_or_create_contact_from_external_signup:
+        links = [("Donor", donor.name)]
+        if customer:
+            links.append(("Customer", customer))
         contact = resolve_or_create_contact_from_external_signup(
             email=email,
             first_name=first_name,
             last_name=last_name,
             full_name=donor.donor_name,
-            links=[("Donor", donor.name)],
+            links=links,
             source_doctype="Donor",
             source_name=donor.name,
         )
@@ -309,8 +466,27 @@ def _existing_contact_for_email(email: str | None) -> str | None:
     )
 
 
+def ensure_contact_link(
+    contact_name: str,
+    link_doctype: str,
+    link_name: str,
+    *,
+    ignore_permissions: bool = True,
+) -> None:
+    _ensure_contact_link_row(
+        contact_name,
+        link_doctype,
+        link_name,
+        ignore_permissions=ignore_permissions,
+    )
+
+
 def _ensure_contact_link_row(
-    contact_name: str, link_doctype: str, link_name: str
+    contact_name: str,
+    link_doctype: str,
+    link_name: str,
+    *,
+    ignore_permissions: bool = True,
 ) -> None:
     filters = {
         "parenttype": "Contact",
@@ -320,24 +496,70 @@ def _ensure_contact_link_row(
     }
     if frappe.db.exists("Dynamic Link", filters):
         return
-    existing_idx = frappe.get_all(
-        "Dynamic Link",
-        filters={"parenttype": "Contact", "parent": contact_name},
-        pluck="idx",
-        order_by="idx desc",
-        limit=1,
+    contact = frappe.get_doc("Contact", contact_name)
+    contact.append("links", {"link_doctype": link_doctype, "link_name": link_name})
+    contact.save(ignore_permissions=ignore_permissions)
+
+
+def get_contact_email(contact) -> str | None:
+    if isinstance(contact, str):
+        contact = frappe.get_doc("Contact", contact)
+    if contact.get("email_id"):
+        return _normalize_email(contact.email_id)
+    emails = sorted(
+        contact.get("email_ids") or [],
+        key=lambda row: (0 if row.get("is_primary") else 1, row.get("idx") or 0),
     )
-    frappe.get_doc(
-        {
-            "doctype": "Dynamic Link",
-            "parenttype": "Contact",
-            "parent": contact_name,
-            "parentfield": "links",
-            "idx": (existing_idx[0] if existing_idx else 0) + 1,
-            "link_doctype": link_doctype,
-            "link_name": link_name,
-        }
-    ).insert(ignore_permissions=True)
+    return _normalize_email(emails[0].email_id) if emails else None
+
+
+def get_contact_display_name(contact_doc) -> str:
+    full_name = cstr(contact_doc.get("full_name")).strip()
+    if full_name:
+        return full_name
+    name_parts = [contact_doc.get("first_name"), contact_doc.get("last_name")]
+    return " ".join(part for part in name_parts if cstr(part).strip()).strip() or contact_doc.name
+
+
+def _donor_linked_to_contact(contact: str) -> str | None:
+    donor = frappe.db.get_value(
+        "Dynamic Link",
+        {"parenttype": "Contact", "parent": contact, "link_doctype": "Donor"},
+        "link_name",
+        order_by="idx asc",
+    )
+    return donor if donor and frappe.db.exists("Donor", donor) else None
+
+
+def _contact_linked_to(link_doctype: str, link_name: str) -> str | None:
+    return frappe.db.get_value(
+        "Dynamic Link",
+        {"parenttype": "Contact", "link_doctype": link_doctype, "link_name": link_name},
+        "parent",
+        order_by="idx asc",
+    )
+
+
+def _customer_display_name(customer: str) -> str:
+    customer_doc = frappe.get_doc("Customer", customer)
+    name = customer_doc.customer_name or customer
+    additional = cstr(customer_doc.get("name_additional")).strip()
+    return f"{name} - {additional}" if additional else name
+
+
+def _resolve_donor_type(donor_type: str | None = None) -> str:
+    donor_type = cstr(donor_type).strip()
+    if donor_type and frappe.db.exists("Donor Type", donor_type):
+        return donor_type
+    settings_type = frappe.db.get_single_value("Non Profit Settings", "default_donor_type")
+    if settings_type and frappe.db.exists("Donor Type", settings_type):
+        return settings_type
+    existing = frappe.db.get_value("Donor Type", {}, "name", order_by="name asc")
+    if existing:
+        return existing
+    doc = frappe.get_doc({"doctype": "Donor Type", "donor_type": "Individual"})
+    doc.insert(ignore_permissions=True)
+    return doc.name
 
 
 def _link_donor_address_to_customer(donor_name: str, customer: str) -> None:

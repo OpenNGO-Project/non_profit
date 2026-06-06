@@ -6,19 +6,21 @@ frappe.ui.form.on('Membership', {
 		if (frm.doc.__islocal)
 			return;
 
-		!frm.doc.invoice && frm.page.add_action_item(__("Generate Invoice"), () => {
-			frm.call({
-				doc: frm.doc,
-				method: "generate_invoice",
-				args: {save: true},
-				freeze: true,
-				freeze_message: __("Creating Membership Invoice"),
-				callback: function(r) {
-					if (r.invoice)
-						frm.reload_doc();
-				}
+		frappe.meta.has_field(frm.doctype, "invoice") &&
+			!frm.doc.invoice &&
+			frm.page.add_action_item(__("Generate Invoice"), () => {
+				frm.call({
+					doc: frm.doc,
+					method: "generate_invoice",
+					args: {save: true},
+					freeze: true,
+					freeze_message: __("Creating Membership Invoice"),
+					callback: function(r) {
+						if (r.invoice)
+							frm.reload_doc();
+					}
+				});
 			});
-		});
 
 		frappe.db.get_single_value("Non Profit Settings", "send_email").then(val => {
 			if (val) frm.page.add_action_item(__("Send Acknowledgement"), () => {

@@ -214,6 +214,24 @@ class TestMembership(FrappeTestCase):
 
         self.assertFalse(membership.to_date)
 
+    def test_invoice_generation_is_disabled_without_invoice_link_field(self):
+        if frappe.get_meta("Membership").has_field("invoice"):
+            self.skipTest("Legacy Membership.invoice field is installed")
+
+        with open(
+            frappe.get_app_path(
+                "non_profit", "non_profit", "doctype", "membership", "membership.js"
+            )
+        ) as handle:
+            membership_script = handle.read()
+        self.assertIn('frappe.meta.has_field(frm.doctype, "invoice")', membership_script)
+
+        membership = make_membership(self.member)
+        with self.assertRaises(frappe.ValidationError) as error:
+            membership.generate_invoice(save=True)
+
+        self.assertIn("Membership invoice generation is not available", str(error.exception))
+
     def test_ensure_membership_subscription_creates_open_ended_subscription(self):
         from non_profit.non_profit.membership_subscription import (
             ensure_membership_subscription,

@@ -88,16 +88,23 @@ def get_or_create_member_for_customer(
     # Membership Type now belongs only to Membership.
     if not customer:
         frappe.throw(_("Customer is required to create a Member"))
+    if not ignore_permissions:
+        _check_identity_doc_permission("Customer", customer, "write")
 
     existing_member = frappe.db.exists("Member", {"customer": customer})
     if existing_member:
-        return frappe.get_doc("Member", existing_member)
+        member = frappe.get_doc("Member", existing_member)
+        if not ignore_permissions:
+            member.check_permission("read")
+        return member
 
     customer_name = frappe.db.get_value("Customer", customer, "customer_name")
     if not customer_name:
         frappe.throw(_("Customer {0} does not exist").format(frappe.bold(customer)))
 
     member = frappe.new_doc("Member")
+    if not ignore_permissions:
+        frappe.has_permission("Member", "create", throw=True)
     member.customer = customer
     member.insert(ignore_permissions=ignore_permissions)
     return member
@@ -112,10 +119,15 @@ def get_or_create_member_for_contact(
         frappe.throw(_("Contact is required to create a Member"))
     if not frappe.db.exists("Contact", contact):
         frappe.throw(_("Contact {0} does not exist").format(frappe.bold(contact)))
+    if not ignore_permissions:
+        _check_identity_doc_permission("Contact", contact, "write")
 
     linked_member = _member_linked_to_contact(contact)
     if linked_member:
-        return frappe.get_doc("Member", linked_member)
+        member = frappe.get_doc("Member", linked_member)
+        if not ignore_permissions:
+            member.check_permission("read")
+        return member
 
     contact_doc = frappe.get_doc("Contact", contact)
     email = _contact_email(contact_doc)
@@ -123,9 +135,14 @@ def get_or_create_member_for_contact(
         existing_member = frappe.db.exists("Member", {"email_id": email})
         if existing_member:
             _link_contact_to_member(contact, existing_member, ignore_permissions=ignore_permissions)
-            return frappe.get_doc("Member", existing_member)
+            member = frappe.get_doc("Member", existing_member)
+            if not ignore_permissions:
+                member.check_permission("read")
+            return member
 
     member = frappe.new_doc("Member")
+    if not ignore_permissions:
+        frappe.has_permission("Member", "create", throw=True)
     member.member_name = _contact_display_name(contact_doc)
     member.email_id = email
     member.insert(ignore_permissions=ignore_permissions)
@@ -143,12 +160,29 @@ def create_member_and_membership(
     customer = (customer or "").strip()
     membership_type = (membership_type or "").strip()
 
-    if bool(contact) == bool(customer):
-        frappe.throw(_("Select either a Contact or a Customer."))
+    if not contact and not customer:
+        frappe.throw(_("Select a Contact or a Customer."))
     if not membership_type:
         frappe.throw(_("Membership Type is required to create a Membership"))
-
+    frappe.has_permission("Member", "create", throw=True)
+    frappe.has_permission("Membership", "create", throw=True)
+    _check_identity_doc_permission("Membership Type", membership_type, "read")
     if contact:
+        _check_identity_doc_permission("Contact", contact, "write")
+    if customer:
+        _check_identity_doc_permission("Customer", customer, "write")
+
+    if contact and customer:
+        member = get_or_create_member_for_customer(customer)
+        linked_member = _member_linked_to_contact(contact)
+        if linked_member and linked_member != member.name:
+            frappe.throw(
+                _("Contact is already linked to another Member."),
+                frappe.ValidationError,
+            )
+        _link_contact_to_member(contact, member.name)
+        _link_contact_to_customer(contact, customer)
+    elif contact:
         member = get_or_create_member_for_contact(contact)
     else:
         member = get_or_create_member_for_customer(customer)
@@ -181,10 +215,14 @@ def get_or_create_membership_for_member(
     if not member:
         frappe.throw(_("Member is required to create a Membership"))
 
-    frappe.get_doc("Member", member)
+    member_doc = frappe.get_doc("Member", member)
+    if not ignore_permissions:
+        member_doc.check_permission("read")
     membership_type = membership_type or _single_membership_type()
     if not membership_type:
         frappe.throw(_("Membership Type is required to create a Membership"))
+    if not ignore_permissions:
+        _check_identity_doc_permission("Membership Type", membership_type, "read")
 
     reference_date = getdate(from_date or nowdate())
     existing_membership = _active_membership_for_member(
@@ -193,9 +231,14 @@ def get_or_create_membership_for_member(
         reference_date,
     )
     if existing_membership:
-        return frappe.get_doc("Membership", existing_membership)
+        membership = frappe.get_doc("Membership", existing_membership)
+        if not ignore_permissions:
+            membership.check_permission("read")
+        return membership
 
     membership = frappe.new_doc("Membership")
+    if not ignore_permissions:
+        frappe.has_permission("Membership", "create", throw=True)
     membership.member = member
     membership.membership_type = membership_type
     membership.membership_status = membership_status or "Current"
@@ -302,8 +345,41 @@ def _link_contact_to_member(
         return
 
     contact_doc = frappe.get_doc("Contact", contact)
+    if not ignore_permissions:
+        contact_doc.check_permission("write")
     contact_doc.append("links", {"link_doctype": "Member", "link_name": member})
     contact_doc.save(ignore_permissions=ignore_permissions)
+
+
+def _link_contact_to_customer(
+    contact: str,
+    customer: str,
+    *,
+    ignore_permissions: bool = False,
+) -> None:
+    if frappe.db.exists(
+        "Dynamic Link",
+        {
+            "parenttype": "Contact",
+            "parent": contact,
+            "link_doctype": "Customer",
+            "link_name": customer,
+        },
+    ):
+        return
+
+    contact_doc = frappe.get_doc("Contact", contact)
+    if not ignore_permissions:
+        contact_doc.check_permission("write")
+    contact_doc.append("links", {"link_doctype": "Customer", "link_name": customer})
+    contact_doc.save(ignore_permissions=ignore_permissions)
+
+
+def _check_identity_doc_permission(doctype: str, name: str, ptype: str = "read") -> None:
+    doc = frappe.get_doc(doctype, name)
+    doc.check_permission("read")
+    if ptype != "read":
+        doc.check_permission(ptype)
 
 
 def _contact_email(contact_doc) -> str | None:

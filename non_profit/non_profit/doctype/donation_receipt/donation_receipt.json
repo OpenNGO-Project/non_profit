@@ -98,9 +98,9 @@
   {
    "default": "de",
    "fieldname": "language",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "label": "Language",
-   "options": "de\nen\nfr\nit",
+   "options": "Language",
    "reqd": 1
   },
   {
@@ -112,8 +112,7 @@
    "fieldname": "donations",
    "fieldtype": "Table",
    "label": "Donations",
-   "options": "Donation Receipt Item",
-   "reqd": 1
+   "options": "Donation Receipt Item"
   },
   {
    "fieldname": "total_amount",

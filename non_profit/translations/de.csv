@@ -78,7 +78,9 @@ Chapter Members,Sektionsmitglieder
 Chapter member not found.,Sektionsmitglied nicht gefunden.
 Coach,Coach
 Contact Creation Failed,Kontakt konnte nicht erstellt werden
+Contact is required to create a Donor,Zum Erstellen eines Spenders ist ein Kontakt erforderlich
 Contact is required to create a Member,Zum Erstellen eines Mitglieds ist ein Kontakt erforderlich
+Contact is required to create a Volunteer,Zum Erstellen eines Freiwilligen ist ein Kontakt erforderlich
 Contact {0} does not exist,Kontakt {0} existiert nicht
 Contract End,Vertragsende
 Contract Start,Vertragsbeginn
@@ -191,7 +193,6 @@ Non Profit Member,Non-Profit-Mitglied
 Non Profit Settings,Non-Profit-Einstellungen
 Not Certified,Nicht zertifiziert
 Overlapping Membership,Überschneidende Mitgliedschaft
-PAN Details,PAN-Details
 PDF File,PDF-Datei
 Payment Details,Zahlungsdetails
 Payment ID,Zahlungs-ID
@@ -215,6 +216,7 @@ Review Invitation Sent,Bewertungseinladung gesendet
 Sales Invoice created successfully,Verkaufsrechnung erfolgreich erstellt
 Select a valid fiscal year.,Bitte ein gültiges Geschäftsjahr auswählen.
 Select a valid month.,Bitte einen gültigen Monat auswählen.
+Select a Contact or a Customer.,Bitte einen Kontakt oder einen Kunden auswählen.
 Select either a Contact or a Customer.,Bitte entweder einen Kontakt oder einen Kunden auswählen.
 Selected campaign is not available.,Die ausgewählte Kampagne ist nicht verfügbar.
 Send Acknowledgement,Bestätigung senden

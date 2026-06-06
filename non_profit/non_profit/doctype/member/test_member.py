@@ -3,6 +3,7 @@
 
 import json
 import unittest
+from unittest.mock import patch
 
 import frappe
 
@@ -116,6 +117,16 @@ class TestMember(unittest.TestCase):
         )
         self.assertFalse(member_name_field.get("read_only"))
 
+    def test_member_expiry_client_sync_does_not_mark_form_dirty(self):
+        with open(
+            frappe.get_app_path("non_profit", "non_profit", "doctype", "member", "member.js")
+        ) as handle:
+            member_script = handle.read()
+
+        self.assertIn('frappe.meta.has_field(frm.doctype, "membership_expiry_date")', member_script)
+        self.assertIn('"membership_expiry_date",', member_script)
+        self.assertIn("null,\n\t\t\t\ttrue", member_script)
+
     def test_customer_member_helper_creates_open_ended_membership(self):
         membership_type = self._membership_type()
         customer = self._customer()
@@ -154,6 +165,7 @@ class TestMember(unittest.TestCase):
 
         member = frappe.get_doc("Member", result["member"])
         membership = frappe.get_doc("Membership", result["membership"])
+        self.assertIsNone(result["customer"])
         self.assertFalse(member.customer)
         self.assertEqual(member.email_id, email)
         self.assertEqual(membership.member, member.name)
@@ -168,6 +180,12 @@ class TestMember(unittest.TestCase):
                     "link_doctype": "Member",
                     "link_name": member.name,
                 },
+            )
+        )
+        self.assertFalse(
+            frappe.db.exists(
+                "Dynamic Link",
+                {"parenttype": "Contact", "parent": contact.name, "link_doctype": "Customer"},
             )
         )
 
@@ -185,6 +203,50 @@ class TestMember(unittest.TestCase):
         self.assertEqual(member.customer, customer.name)
         self.assertEqual(membership.member, member.name)
         self.assertEqual(membership.membership_type, membership_type)
+
+    def test_create_member_and_membership_requires_create_permission(self):
+        membership_type = self._membership_type()
+        customer = self._customer()
+
+        with patch(
+            "non_profit.non_profit.doctype.member.member.frappe.has_permission",
+            side_effect=frappe.PermissionError,
+        ):
+            with self.assertRaises(frappe.PermissionError):
+                create_member_and_membership(customer=customer.name, membership_type=membership_type)
+
+    def test_dialog_helper_accepts_contact_and_customer_together(self):
+        membership_type = self._membership_type()
+        customer = self._customer()
+        email = f"np-contact-customer-member-{frappe.generate_hash(length=8)}@example.org"
+        contact = frappe.get_doc(
+            {
+                "doctype": "Contact",
+                "first_name": "Combined",
+                "last_name": "Member",
+                "email_ids": [{"email_id": email, "is_primary": 1}],
+            }
+        ).insert(ignore_permissions=True)
+
+        result = create_member_and_membership(
+            contact=contact.name,
+            customer=customer.name,
+            membership_type=membership_type,
+        )
+
+        member = frappe.get_doc("Member", result["member"])
+        self.assertEqual(member.customer, customer.name)
+        self.assertTrue(
+            frappe.db.exists(
+                "Dynamic Link",
+                {
+                    "parenttype": "Contact",
+                    "parent": contact.name,
+                    "link_doctype": "Member",
+                    "link_name": member.name,
+                },
+            )
+        )
 
     def test_member_pan_details_removed_from_schema(self):
         self.assertFalse(frappe.db.exists("Custom Field", "Member-pan_number"))

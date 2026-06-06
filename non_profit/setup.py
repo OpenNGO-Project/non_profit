@@ -86,19 +86,10 @@ data = {"on_setup": "non_profit.setup.setup_non_profit"}
 
 
 def make_custom_fields(update=True):
-    custom_fields = get_custom_fields()
-    create_custom_fields(custom_fields, update=update)
+	custom_fields = get_custom_fields()
+	if custom_fields:
+		create_custom_fields(custom_fields, update=update)
 
 
 def get_custom_fields():
-    custom_fields = {
-        "Donor": [
-            {
-                "fieldname": "pan_number",
-                "label": "PAN Details",
-                "fieldtype": "Data",
-                "insert_after": "customer_name",
-            }
-        ],
-    }
-    return custom_fields
+	return {}

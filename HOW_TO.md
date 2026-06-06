@@ -33,6 +33,10 @@ the standard document APIs.
 ## Donations
 
 Use **Donor** (Spender), **Donation Campaign** (Spendenkampagne), **Donation** (Spende), and **Donation Receipt** (Spendenbescheinigung) for fundraising workflows.
+Donation Campaign forms show a year-selectable donation chart above linked
+donations. The chart is hidden on unsaved campaigns, clears stale chart sections
+when switching between campaigns, and each stacked segment opens the underlying
+paid Donation.
 
 Public donation forms must submit donor name, a valid email, positive amount,
 consent, an allowed frequency, and only active Donation Campaigns. Keep those
@@ -47,21 +51,41 @@ Open a Donor and use **Actions → Create Customer** when the link is missing.
 The helper reuses a Customer already linked to a Member with the same email
 before creating a new Customer, then links Contact and Address rows to both
 Donor and Customer.
+When creating a Donor from Desk, use the Contact/Customer dialog to select a
+Contact, a Customer, or both. Contact-only Donors stay linked to the Contact
+without forcing Customer creation; selecting a Customer links both Contact and
+Customer when both are provided. Sponsor creation uses the same identity flow and
+creates/reuses the backing Donor before opening the Sponsor; Contact links are
+saved through the parent Contact so Frappe validates the child rows correctly.
+These helpers require create permission for the target record and write
+permission on selected Contact/Customer records before links are appended.
+Volunteer creation is Contact-only and deliberately does not create or link a
+Customer.
 Donor email is stored on the linked **Customer** (`Customer.email_id`), not on
 Donor. Donation, Recurring Donation, and Donation Receipt rows keep an email
 snapshot for operations and correspondence. For existing records, run
 `non_profit.non_profit.doctype.donor.donor.backfill_donor_customers` with
 `bench execute` when you intentionally want to create/link Customers for older
 Donors.
+Use the Frappe **Language** selector for Donor preferred language and Donation
+Receipt language. The saved value is still the language code, for example `de`
+or `en`, but operators get the standard enabled-language lookup.
 
 `Donation.thank_you_sent` is a standard field for **Verdankungen**. It is set automatically when `Donation.send_thank_you()` queues an email and can also be used by presentation apps for manual acknowledgement queues. `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` keep the audit trail. This is intentionally separate from `Donation.receipt`, which links to **Donation Receipt** / **Spendenbescheinigung** tax certificates generated yearly or ad hoc.
 
 Yearly Donation Receipt generation is an operator action for users with
 `Non Profit Manager` or `System Manager`. It creates draft receipts for
 submitted, paid Donations in the selected fiscal year that do not already link
-to a receipt; it does not commit mid-request, so Frappe can roll back the whole
-operation if receipt creation fails. The default receipt country is
+to a submitted receipt or another active draft receipt; it does not commit
+mid-request, so Frappe can roll back the whole operation if receipt creation
+fails. The default receipt country is
 `Switzerland` on the form, yearly-generation dialog, and server fallback.
+Donation Receipts may also be saved before donation rows are added. On a draft
+receipt, use **Actions → Spenden aus Geschäftsjahr hinzufügen** after choosing a
+Donor and Fiscal Year to populate all unreceipted paid Donations from that year.
+Submitting a receipt validates that every row is paid, submitted, in the selected
+period, belongs to the receipt Donor, and is not already attached to another
+active receipt.
 
 When a payment gateway authorizes a Donation, `Donation.on_payment_authorized()`
 marks the Donation paid first. If automated Payment Entry creation is enabled
@@ -108,12 +132,17 @@ organisation context; `Membership.company` was removed and must not be used as
 an operator-maintained member company. Membership invoices and subscriptions
 resolve their accounting company from **Non Profit Settings**.
 Membership Type, Status, and validity dates live on **Membership** only; the
-Member form does not store its own Membership Type.
+Member form does not store its own Membership Type. If an older site still has
+the legacy `membership_expiry_date` field on Member, the Desk form refreshes it
+from Membership as a display sync without marking the Member form dirty.
+The legacy **Generate Invoice** action is only shown on sites that still carry a
+`Membership.invoice` link field. Current GoodNPO-style membership billing uses
+Sales Invoice links owned by the presentation app instead.
 
 Operators may edit **Member Name** directly. When it is left blank and a
 Customer is linked, the Member form fills it from that Customer; if the Customer
 has a `name_additional` field, it is appended to the display name. Creating a
-new Member opens a dialog where operators choose either a Contact or a Customer
+new Member opens a dialog where operators choose a Contact, a Customer, or both,
 plus the Membership Type; contact-only members are linked through Contact
 Dynamic Links, not a Contact field on Member. The system creates/reuses the
 Member and creates/reuses the open-ended Membership in one step. From a saved
@@ -137,9 +166,11 @@ If `good_connector` is installed, legacy member registration creates/reuses the
 linked Contact through Good Connector identity matching. Review possible fuzzy
 matches in **GC Potential Duplicate** instead of expecting automatic merges.
 
-Member and Company records do not store PAN/tax-id details. Migrate removes the
-legacy Member PAN custom field, Company PAN/80G fields, and India-specific 80G
-certificate DocTypes instead of only hiding them from the form.
+Donor, Member, and Company records do not store PAN/tax-id details. Migrate
+removes the legacy Donor/Member PAN custom fields, Company PAN/80G fields, and
+India-specific 80G certificate DocTypes instead of only hiding them from the
+form. Payment-note imports also skip PAN/tax-id keys before writing Donor
+comments.
 
 When changing Member or Membership behavior, run the relevant `miki_app` tests too because Miki depends on the shared membership substrate.
 

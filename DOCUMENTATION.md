@@ -28,6 +28,14 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 - `after_migrate = non_profit.non_profit.fundraising_setup.ensure_fundraising_fixtures` refreshes non_profit custom fields and fundraising fixtures.
 - `before_tests = non_profit.non_profit.utils.before_tests` refreshes the same fundraising fixtures after the CI/test setup wizard creates a Company.
 - `doc_events["Membership"]["validate"] = non_profit.non_profit.membership_sync.validate_no_overlap`
+  blocks overlapping active Memberships by default. Callers can set
+  `doc.flags.warn_on_membership_overlap = True` before validation when an
+  overlap should be shown as a warning instead of a hard stop.
+- `Donation Campaign` owns its Desk form chart in the DocType JS. The renderer
+  clears existing chart sections before handling new unsaved forms or async
+  refreshes, so stale data from another campaign cannot remain visible. It only
+  removes its own `non-profit-campaign-chart-section` markup; presentation-app
+  chart sections remain presentation-app-owned.
 - Daily scheduler jobs expire memberships and process recurring donations.
 - `Payment Entry` is extended through `override_doctype_class`.
 
@@ -46,9 +54,22 @@ found" messages. Real Loyalty Program records are left untouched.
 Mutation endpoints must check permissions and let Frappe manage the request
 transaction. `DonationReceipt.generate_yearly_receipts` is restricted to
 `Non Profit Manager` or `System Manager` and creates draft receipts for
-submitted, paid Donations without an existing receipt link. Donation Receipt
-country defaults to `Switzerland` in DocType metadata, the yearly-generation
-dialog, and the backend fallback when no country argument is supplied.
+submitted, paid Donations without an existing receipt link or active draft
+receipt row.
+`get_donations_for_selected_year` is an authenticated, permission-aware helper
+used by the Donation Receipt form action to populate a draft receipt with all
+submitted paid Donations for the selected Donor and Fiscal Year. Donation
+Receipts can be saved before donation rows are added, but submit requires at
+least one Donation and validates that every row is submitted, paid, in the
+receipt period, belongs to the receipt Donor, and is not already linked to
+another active receipt. Donation Receipt country defaults to `Switzerland` in
+DocType metadata, the yearly-generation dialog, and the backend fallback when no
+country argument is supplied.
+`get_campaign_donation_chart(campaign, year=None)` on the Donation Campaign
+controller requires read permission on the Campaign and returns twelve monthly
+buckets for submitted paid donations on that campaign in the selected year.
+Segments are donation-level so the Desk form chart can open the underlying
+Donation directly.
 `DonationReceipt` email sending, chapter staff edits, and grant review
 invitations require write permission on the target document. A logged-in portal
 user may join a published Chapter only as themselves, and may leave only their
@@ -76,6 +97,9 @@ Donor, and Customer-level CRM data resolves through `Donation.donor ->
 Donor.customer`. Donor no longer stores its own email address; donor email is
 read from `Donor.customer -> Customer.email_id` and copied onto Donation /
 Recurring Donation / Donation Receipt rows as an operational snapshot.
+`Donor.preferred_language` and `Donation Receipt.language` are Link fields to
+Frappe's `Language` DocType, matching core language selectors such as
+`User.language`; stored values remain language codes like `de` or `en`.
 `Donor.make_customer_and_link()` and
 `non_profit.non_profit.doctype.donor.donor.get_or_create_customer_for_donor()`
 reuse a Customer from a same-email Member first, then a same-email Customer, and
@@ -86,6 +110,19 @@ is removed from the model. The patch runs after DocType model sync so fresh
 installs have the newer `Donor.customer` column before it queries donor rows;
 `backfill_donor_customers(limit=None)` remains available for explicit repair
 runs.
+
+Desk creation helpers for Member, Donor, and Sponsor accept Contact-only,
+Customer-only, or Contact+Customer selections. Contact-only Donors keep a Contact
+Dynamic Link and no Customer until a Customer is explicitly selected or created.
+Sponsor creation reuses the same Donor identity helper before creating/reusing
+the Sponsor. Contact Dynamic Links are appended through the parent Contact
+document, not inserted as standalone child rows. These helpers explicitly require
+create permission for the target record plus write permission on selected
+Contacts/Customers before they append links or update Customer/Donor identity
+fields. Conflicting Contact+Customer selections are rejected instead of silently
+moving a Contact to another Donor/Member. Volunteer creation intentionally
+accepts Contact only and links the Contact to Volunteer without creating or
+linking a Customer.
 
 `Donation.thank_you_sent` is a standard field on Donation for **Verdankungen**. `Donation.send_thank_you()` queues the configured Email Template, stores `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` when available, and marks this field once the email is queued. Presentation apps such as `ilanga_app` and `good_npo` read this field for pending thank-you queues. `Donation.receipt` remains reserved for **Donation Receipt** / **Spendenbescheinigung** tax certificates, so an immediate thank-you must not populate it.
 
@@ -145,9 +182,11 @@ business/company relation, and any business organisation lookup should resolve
 through
 `Membership.member -> Member.customer -> Customer`.
 
-Member and Company records do not store PAN/tax-id details. The legacy
-`Member-pan_number` custom field and India-specific 80G certificate DocTypes are
-removed by migrate so that PAN data is not retained as hidden database columns.
+Donor, Member, and Company records do not store PAN/tax-id details. The legacy
+`Donor-pan_number` and `Member-pan_number` custom fields plus India-specific
+80G certificate DocTypes are removed by migrate so that PAN data is not retained
+as hidden database columns. Donation gateway note import also filters PAN/tax-id
+keys before creating Donor comments.
 
 The Member dashboard gets its Membership connection from the DocType `links`
 table. It intentionally does not show Bank Account; bank details belong to the
@@ -157,8 +196,17 @@ Member names are operator-editable. When `Member.member_name` is blank and a
 Customer is linked, the controller fills it from `Customer.customer_name` plus
 `Customer.name_additional` when that field exists. Contact-only helper flows
 derive the name from the Contact and link the Contact through Dynamic Link rows.
-The Contact/Customer dialog and helper create or reuse the Member first, then
-create or reuse an open-ended Membership for the selected Membership Type;
+The Member Desk form does not write membership validity dates back onto Member;
+if a legacy `membership_expiry_date` field exists, the client refreshes it from
+the linked Membership without marking the form dirty.
+The legacy manual `Membership.generate_invoice()` path requires the legacy
+`Membership.invoice` link field and is not exposed when that field is absent.
+Current app-specific membership billing should link Sales Invoices through the
+presentation app's own fields, for example `Sales Invoice.good_npo_membership`.
+The Contact/Customer dialog and helper accept Contact, Customer, or both, create
+or reuse the Member first, link the Contact to both Member and Customer when both
+are selected, then create or reuse an open-ended Membership for the selected
+Membership Type;
 presentation apps such as `miki_app` use this for parent-owned business
 memberships.
 

@@ -50,24 +50,40 @@ frappe.ui.form.on('Member', {
 			show_member_creation_dialog(frm);
 		}
 
-		frappe.call({
-			method:"frappe.client.get_value",
-			args:{
-				'doctype':"Membership",
-				'filters':{'member': frm.doc.name},
-				'fieldname':[
-					'to_date'
-				]
-			},
-			callback: function (data) {
-				if(data.message) {
-					frappe.model.set_value(frm.doctype,frm.docname,
-						"membership_expiry_date", data.message.to_date);
-				}
-			}
-		});
+		sync_membership_expiry_date(frm);
 	}
 });
+
+function sync_membership_expiry_date(frm) {
+	if (!frappe.meta.has_field(frm.doctype, "membership_expiry_date")) {
+		return;
+	}
+
+	frappe.call({
+		method: "frappe.client.get_value",
+		args: {
+			doctype: "Membership",
+			filters: {member: frm.doc.name},
+			fieldname: ["to_date"],
+		},
+		callback: function(data) {
+			if (!data.message) {
+				return;
+			}
+			if (frm.doc.membership_expiry_date === data.message.to_date) {
+				return;
+			}
+			frappe.model.set_value(
+				frm.doctype,
+				frm.docname,
+				"membership_expiry_date",
+				data.message.to_date,
+				null,
+				true
+			);
+		},
+	});
+}
 
 function show_member_creation_dialog(frm) {
 	if (frm.__member_creation_dialog_shown) return;
@@ -100,8 +116,8 @@ function show_member_creation_dialog(frm) {
 		primary_action(values) {
 			const contact = values.contact || '';
 			const customer = values.customer || '';
-			if (Boolean(contact) === Boolean(customer)) {
-				frappe.msgprint(__('Select either a Contact or a Customer.'));
+			if (!contact && !customer) {
+				frappe.msgprint(__('Select a Contact or a Customer.'));
 				return;
 			}
 

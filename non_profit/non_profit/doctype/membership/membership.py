@@ -81,7 +81,11 @@ class Membership(Document):
         # `paid` column was dropped in the B2B/B2C schema refactor (a58cc79);
         # payment state lives on the linked Sales Invoice now.
         settings = frappe.get_doc("Non Profit Settings")
-        if settings.allow_invoicing and settings.automate_membership_invoicing:
+        if (
+            self.meta.has_field("invoice")
+            and settings.allow_invoicing
+            and settings.automate_membership_invoicing
+        ):
             self.generate_invoice(
                 with_payment_entry=settings.automate_membership_payment_entries,
                 save=True,
@@ -91,6 +95,14 @@ class Membership(Document):
     def generate_invoice(
         self, save: bool = True, with_payment_entry: bool = False
     ) -> Any:
+        if not self.meta.has_field("invoice"):
+            frappe.throw(
+                _(
+                    "Membership invoice generation is not available on this site. "
+                    "Use the Sales Invoice membership workflow instead."
+                )
+            )
+
         if not (self.currency or self.amount):
             frappe.throw(
                 _(
@@ -98,7 +110,7 @@ class Membership(Document):
                 )
             )
 
-        if self.invoice:
+        if self.get("invoice"):
             frappe.throw(_("An invoice is already linked to this document"))
 
         member = frappe.get_doc("Member", self.member)
@@ -113,7 +125,7 @@ class Membership(Document):
 
         invoice = make_invoice(self, member, plan, settings)
         self.reload()
-        self.invoice = invoice.name
+        self.set("invoice", invoice.name)
 
         if with_payment_entry:
             self.make_payment_entry(settings, invoice)
@@ -194,11 +206,12 @@ class Membership(Document):
             )
         ]
 
-        if self.invoice and settings.send_invoice:
+        linked_invoice = self.get("invoice") if self.meta.has_field("invoice") else None
+        if linked_invoice and settings.send_invoice:
             attachments.append(
                 frappe.attach_print(
                     "Sales Invoice",
-                    self.invoice,
+                    linked_invoice,
                     print_format=settings.inv_print_format,
                 )
             )

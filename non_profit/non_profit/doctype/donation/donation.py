@@ -13,6 +13,8 @@ from non_profit.non_profit.doctype.donor.donor import (
     get_or_create_customer_for_donor,
 )
 
+SENSITIVE_DONOR_NOTE_KEYS = ("pan", "tax_id", "tax id", "tax-number", "tax_number")
+
 
 class Donation(Document):
     def validate(self):
@@ -255,23 +257,39 @@ def get_company_for_donations():
 
 def get_additional_notes(donor, donor_details):
     if isinstance(donor_details.notes, dict):
+        note_lines = []
         for k, v in donor_details.notes.items():
-            notes = "\n".join("{}: {}".format(k, v))
-
             # extract donor name from notes
             if "name" in k.lower():
                 donor.update({"donor_name": donor_details.notes.get(k)})
+            if _is_sensitive_note_key(k):
+                continue
+            note_lines.append("{}: {}".format(k, v))
 
-            # extract pan from notes
-            if "pan" in k.lower():
-                donor.update({"pan_number": donor_details.notes.get(k)})
-
-        donor.add_comment("Comment", notes)
+        if note_lines:
+            donor.add_comment("Comment", "\n".join(note_lines))
 
     elif isinstance(donor_details.notes, str):
-        donor.add_comment("Comment", donor_details.notes)
+        notes = _safe_note_text(donor_details.notes)
+        if notes:
+            donor.add_comment("Comment", notes)
 
     return donor
+
+
+def _is_sensitive_note_key(key: object) -> bool:
+    key = str(key or "").strip().lower()
+    return any(part in key for part in SENSITIVE_DONOR_NOTE_KEYS)
+
+
+def _safe_note_text(notes: str) -> str:
+    safe_lines = []
+    for line in str(notes or "").splitlines():
+        key = line.split(":", 1)[0]
+        if _is_sensitive_note_key(key):
+            continue
+        safe_lines.append(line)
+    return "\n".join(safe_lines).strip()
 
 
 def create_mode_of_payment(method):

@@ -67,6 +67,7 @@ def _make_membership(
     status: str = "Current",
     from_date: str | None = None,
     to_date: str | None = None,
+    warn_on_overlap: bool = False,
 ):
     doc = frappe.new_doc("Membership")
     doc.member = member
@@ -80,6 +81,8 @@ def _make_membership(
         doc.to_date = add_months(nowdate(), 12)
     doc.flags.ignore_mandatory = True
     doc.flags.ignore_permissions = True
+    if warn_on_overlap:
+        doc.flags.warn_on_membership_overlap = True
     doc.insert(ignore_permissions=True)
     return doc
 
@@ -106,6 +109,17 @@ class TestMembershipSync(unittest.TestCase):
                 from_date=add_months(nowdate(), 6),
                 to_date=add_months(nowdate(), 18),
             )
+
+    def test_overlap_warn_flag_allows_same_member_current_period(self):
+        member = _ensure_member(label="Overlap Warning")
+        _make_membership(member, from_date=nowdate(), to_date=add_months(nowdate(), 12))
+        second = _make_membership(
+            member,
+            from_date=add_months(nowdate(), 6),
+            to_date=add_months(nowdate(), 18),
+            warn_on_overlap=True,
+        )
+        self.assertTrue(second.name)
 
     def test_overlap_allows_non_overlapping_periods(self):
         member = _ensure_member(label="Overlap B")
