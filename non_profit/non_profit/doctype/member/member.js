@@ -24,14 +24,6 @@ frappe.ui.form.on('Member', {
 				frappe.set_route('query-report', 'Accounts Receivable', {customer: frm.doc.customer});
 			});
 
-			if (!frm.doc.customer) {
-				frm.page.add_action_item(__('Create Customer'), () => {
-					frm.call('make_customer_and_link').then(() => {
-						frm.reload_doc();
-					});
-				});
-			}
-
 			frm.page.add_action_item(__('Create Membership'), () => {
 				prompt_for_membership_type((membership_type) => {
 					frm.call('create_membership', {membership_type}).then((r) => {

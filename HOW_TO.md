@@ -47,10 +47,10 @@ widget and the server verifies the CAPTCHA token before creating Donor/Donation
 records.
 
 Use **Donor.customer** to connect fundraising contacts to ERPNext Customer data.
-Open a Donor and use **Actions → Create Customer** when the link is missing.
-The helper reuses a Customer already linked to a Member with the same email
-before creating a new Customer, then links Contact and Address rows to both
-Donor and Customer.
+Customer linkage is handled by creation, import, and repair helper flows rather
+than a separate Donor form action. The helper reuses a Customer already linked
+to a Member with the same email before creating a new Customer, then links
+Contact and Address rows to both Donor and Customer.
 When creating a Donor from Desk, use the Contact/Customer dialog to select a
 Contact, a Customer, or both. Contact-only Donors stay linked to the Contact
 without forcing Customer creation; selecting a Customer links both Contact and

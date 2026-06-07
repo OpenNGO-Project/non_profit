@@ -4,7 +4,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.query_builder.functions import GroupConcat
-from frappe.utils import flt, nowdate
+from frappe.utils import flt, getdate, nowdate
 
 from non_profit.non_profit.doctype.donor.donor import get_donor_email
 
@@ -57,6 +57,8 @@ class DonationReceipt(Document):
         if not donation_names:
             frappe.throw(_("Add at least one Donation before submitting the receipt."))
 
+        period_from = getdate(self.period_from) if self.period_from else None
+        period_to = getdate(self.period_to) if self.period_to else None
         seen = set()
         for donation_name in donation_names:
             if donation_name in seen:
@@ -76,9 +78,10 @@ class DonationReceipt(Document):
                 frappe.throw(_("Donation {0} must be submitted.").format(frappe.bold(donation_name)))
             if not donation.paid:
                 frappe.throw(_("Donation {0} must be paid.").format(frappe.bold(donation_name)))
-            if self.period_from and donation.date and donation.date < self.period_from:
+            donation_date = getdate(donation.date) if donation.date else None
+            if period_from and donation_date and donation_date < period_from:
                 frappe.throw(_("Donation {0} is outside the receipt period.").format(frappe.bold(donation_name)))
-            if self.period_to and donation.date and donation.date > self.period_to:
+            if period_to and donation_date and donation_date > period_to:
                 frappe.throw(_("Donation {0} is outside the receipt period.").format(frappe.bold(donation_name)))
             if donation.receipt and donation.receipt != self.name:
                 frappe.throw(_("Donation {0} already has a receipt.").format(frappe.bold(donation_name)))

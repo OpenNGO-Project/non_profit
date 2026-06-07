@@ -62,9 +62,10 @@ submitted paid Donations for the selected Donor and Fiscal Year. Donation
 Receipts can be saved before donation rows are added, but submit requires at
 least one Donation and validates that every row is submitted, paid, in the
 receipt period, belongs to the receipt Donor, and is not already linked to
-another active receipt. Donation Receipt country defaults to `Switzerland` in
-DocType metadata, the yearly-generation dialog, and the backend fallback when no
-country argument is supplied.
+another active receipt. The period comparison normalizes Frappe Date values and
+Desk JSON string dates before validation. Donation Receipt country defaults to
+`Switzerland` in DocType metadata, the yearly-generation dialog, and the backend
+fallback when no country argument is supplied.
 `get_campaign_donation_chart(campaign, year=None)` on the Donation Campaign
 controller requires read permission on the Campaign and returns twelve monthly
 buckets for submitted paid donations on that campaign in the selected year.
@@ -113,7 +114,8 @@ runs.
 
 Desk creation helpers for Member, Donor, and Sponsor accept Contact-only,
 Customer-only, or Contact+Customer selections. Contact-only Donors keep a Contact
-Dynamic Link and no Customer until a Customer is explicitly selected or created.
+Dynamic Link and no Customer until a Customer is explicitly selected through a
+creation/import/repair flow.
 Sponsor creation reuses the same Donor identity helper before creating/reusing
 the Sponsor. Contact Dynamic Links are appended through the parent Contact
 document, not inserted as standalone child rows. These helpers explicitly require

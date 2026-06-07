@@ -22,12 +22,6 @@ frappe.ui.form.on('Donor', {
 				frm.page.add_action_item(__('Accounts Receivable'), function() {
 					frappe.set_route('query-report', 'Accounts Receivable', {customer: frm.doc.customer});
 				});
-			} else {
-				frm.page.add_action_item(__('Create Customer'), () => {
-					frm.call('make_customer_and_link').then(() => {
-						frm.reload_doc();
-					});
-				});
 			}
 
 			erpnext.utils.set_party_dashboard_indicators(frm);

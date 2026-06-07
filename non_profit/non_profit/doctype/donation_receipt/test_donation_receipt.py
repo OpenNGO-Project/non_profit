@@ -157,6 +157,33 @@ class TestDonationReceipt(FrappeTestCase):
         with self.assertRaises(frappe.ValidationError):
             second_receipt.submit()
 
+    def test_receipt_submit_accepts_string_period_dates_from_form_payload(self) -> None:
+        donor = self._donor()
+        fiscal_year = self._fiscal_year()
+        if not fiscal_year:
+            self.skipTest("No active Fiscal Year configured")
+
+        donation = self._donation(donor, fiscal_year, amount=64)
+        fy = frappe.get_doc("Fiscal Year", fiscal_year)
+        receipt = frappe.get_doc(
+            {
+                "doctype": "Donation Receipt",
+                "donor": donor.name,
+                "fiscal_year": fiscal_year,
+                "period_from": str(fy.year_start_date),
+                "period_to": str(fy.year_end_date),
+                "country": self._country(),
+                "language": "de",
+                "donations": [{"donation": donation.name}],
+            }
+        ).insert(ignore_permissions=True)
+
+        receipt.period_from = str(receipt.period_from)
+        receipt.period_to = str(receipt.period_to)
+        receipt.submit()
+
+        self.assertEqual(receipt.docstatus, 1)
+
     def test_yearly_receipt_generation_excludes_existing_draft_rows(self) -> None:
         from non_profit.non_profit.doctype.donation_receipt.donation_receipt import generate_yearly_receipts
 
