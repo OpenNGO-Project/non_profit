@@ -22,13 +22,22 @@ frappe.ui.form.on("Donation Campaign", {
 		if (document.getElementById("non-profit-campaign-chart-styles")) return;
 		$(`<style id="non-profit-campaign-chart-styles">
 			.non-profit-campaign-chart-section {
+				box-sizing: border-box;
+				width: 100%;
+				max-width: 100%;
 				margin-top: 18px;
 				margin-bottom: 0;
 				border: 0;
 				box-shadow: none;
 			}
+			.non-profit-campaign-chart-section .section-body {
+				box-sizing: border-box;
+				width: 100%;
+				max-width: 100%;
+			}
 			.non-profit-campaign-donation-chart {
 				box-sizing: border-box;
+				width: 100%;
 				max-width: 100%;
 				padding: 18px;
 				border: 0;
@@ -276,26 +285,36 @@ frappe.ui.form.on("Donation Campaign", {
 			.on("click.nonProfitCampaignChart", "[data-non-profit-campaign-chart-year-option]", function (event) {
 				event.preventDefault();
 				if (cur_frm?.doctype !== "Donation Campaign") return;
-				cur_frm.non_profit_campaign_chart_year =
+				const selectedYear =
 					Number(this.getAttribute("data-non-profit-campaign-chart-year-option")) ||
 					cur_frm.non_profit_campaign_chart_year;
 				$(this).closest(".non-profit-campaign-chart-year-picker").removeAttr("open");
-				renderCampaignDonationChart(cur_frm);
+				if (selectedYear === cur_frm.non_profit_campaign_chart_year) return;
+				cur_frm.non_profit_campaign_chart_year = selectedYear;
+				renderCampaignDonationChart(cur_frm, {
+					loading: false,
+					scrollTop: window.scrollY,
+				});
 			});
 	}
 
-	window.renderCampaignDonationChart = function (frm) {
+	window.renderCampaignDonationChart = function (frm, options = {}) {
 		frm.non_profit_campaign_chart_request = (frm.non_profit_campaign_chart_request || 0) + 1;
-		renderCampaignDonationChartForRequest(frm, frm.non_profit_campaign_chart_request);
+		renderCampaignDonationChartForRequest(frm, frm.non_profit_campaign_chart_request, 0, options);
 	};
 
-	function renderCampaignDonationChartForRequest(frm, requestId, attempt = 0) {
+	function renderCampaignDonationChartForRequest(frm, requestId, attempt = 0, options = {}) {
 		if (!frm || frm.non_profit_campaign_chart_request !== requestId) return;
-		removeCampaignDonationChart(frm);
+		if (options.loading !== false) {
+			removeCampaignDonationChart(frm);
+		}
 		if (frm.is_new() || !frm.doc?.name) return;
 		if (!frm.dashboard?.links_area?.wrapper) {
 			if (attempt < 20) {
-				window.setTimeout(() => renderCampaignDonationChartForRequest(frm, requestId, attempt + 1), 100);
+				window.setTimeout(
+					() => renderCampaignDonationChartForRequest(frm, requestId, attempt + 1, options),
+					100
+				);
 			}
 			return;
 		}
@@ -316,7 +335,13 @@ frappe.ui.form.on("Donation Campaign", {
 				const section = $(campaignDonationChartHtml(response.message || {}));
 				frm.dashboard.links_area.wrapper.before(section);
 				frm.dashboard.show();
+				restoreScroll(options.scrollTop);
 			});
+	}
+
+	function restoreScroll(scrollTop) {
+		if (typeof scrollTop !== "number") return;
+		window.requestAnimationFrame(() => window.scrollTo(window.scrollX, scrollTop));
 	}
 
 	function removeCampaignDonationChart(frm) {

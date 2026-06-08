@@ -67,6 +67,11 @@ class TestDonationCampaign(FrappeTestCase):
         self.assertIn("grid-template-rows: var(--non-profit-campaign-chart-height) auto", script)
         self.assertIn("height: var(--non-profit-campaign-chart-height)", script)
         self.assertIn("overflow-x: clip", script)
+        self.assertIn("width: 100%", script)
+        self.assertIn(".non-profit-campaign-chart-section .section-body", script)
+        self.assertIn("loading: false", script)
+        self.assertIn("scrollTop: window.scrollY", script)
+        self.assertIn("restoreScroll", script)
 
     def _campaign(self):
         suffix = frappe.generate_hash(length=8)
