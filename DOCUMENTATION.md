@@ -35,7 +35,10 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
   clears existing chart sections before handling new unsaved forms or async
   refreshes, so stale data from another campaign cannot remain visible. It only
   removes its own `non-profit-campaign-chart-section` markup; presentation-app
-  chart sections remain presentation-app-owned.
+  chart sections remain presentation-app-owned. The chart CSS keeps the axis,
+  grid, and stacked bar tracks on one shared plot height and uses shrinkable
+  month columns so the form dashboard does not overflow horizontally on narrow
+  Desk layouts.
 - Daily scheduler jobs expire memberships and process recurring donations.
 - `Payment Entry` is extended through `override_doctype_class`.
 

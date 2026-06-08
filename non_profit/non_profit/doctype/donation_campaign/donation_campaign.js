@@ -28,11 +28,14 @@ frappe.ui.form.on("Donation Campaign", {
 				box-shadow: none;
 			}
 			.non-profit-campaign-donation-chart {
+				box-sizing: border-box;
+				max-width: 100%;
 				padding: 18px;
 				border: 0;
 				border-radius: 8px;
 				background: transparent;
 				box-shadow: none;
+				overflow-x: clip;
 			}
 			.non-profit-campaign-chart-head {
 				display: flex;
@@ -133,12 +136,16 @@ frappe.ui.form.on("Donation Campaign", {
 				text-transform: uppercase;
 			}
 			.non-profit-campaign-chart-plot {
+				--non-profit-campaign-chart-height: 132px;
 				position: relative;
 				display: grid;
 				grid-template-columns: 54px minmax(0, 1fr);
 				gap: 10px;
+				align-items: start;
+				min-width: 0;
+				max-width: 100%;
 			}
-			.non-profit-campaign-chart-axis { position: relative; height: 132px; }
+			.non-profit-campaign-chart-axis { position: relative; height: var(--non-profit-campaign-chart-height); overflow: visible; }
 			.non-profit-campaign-chart-axis span {
 				position: absolute;
 				right: 0;
@@ -147,11 +154,10 @@ frappe.ui.form.on("Donation Campaign", {
 				font-size: 11px;
 				white-space: nowrap;
 			}
-			.non-profit-campaign-chart-axis span:last-child { transform: none; }
 			.non-profit-campaign-chart-grid {
 				position: absolute;
 				inset: 0 0 0 64px;
-				height: 132px;
+				height: var(--non-profit-campaign-chart-height);
 				pointer-events: none;
 			}
 			.non-profit-campaign-chart-grid span {
@@ -162,22 +168,25 @@ frappe.ui.form.on("Donation Campaign", {
 			}
 			.non-profit-campaign-chart-bars {
 				display: grid;
-				grid-template-columns: repeat(12, minmax(18px, 1fr));
+				grid-template-columns: repeat(12, minmax(0, 1fr));
 				gap: 8px;
-				min-height: 168px;
+				min-width: 0;
+				height: calc(var(--non-profit-campaign-chart-height) + 24px);
+				min-height: 0;
 				align-items: end;
 			}
 			.non-profit-campaign-chart-month {
 				display: grid;
-				grid-template-rows: 1fr auto;
+				grid-template-rows: var(--non-profit-campaign-chart-height) auto;
 				gap: 8px;
 				min-width: 0;
-				height: 168px;
+				height: auto;
 			}
 			.non-profit-campaign-chart-bar-track {
 				display: flex;
 				align-items: flex-end;
-				min-height: 132px;
+				height: var(--non-profit-campaign-chart-height);
+				min-height: 0;
 				border-radius: 6px;
 				background: var(--subtle-fg);
 				overflow: visible;

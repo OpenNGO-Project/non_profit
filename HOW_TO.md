@@ -36,7 +36,9 @@ Use **Donor** (Spender), **Donation Campaign** (Spendenkampagne), **Donation** (
 Donation Campaign forms show a year-selectable donation chart above linked
 donations. The chart is hidden on unsaved campaigns, clears stale chart sections
 when switching between campaigns, and each stacked segment opens the underlying
-paid Donation.
+paid Donation. Its axis/grid and bar baseline share the same plot height, and
+month columns shrink inside the form so the chart does not push the Desk page
+sideways on mobile.
 
 Public donation forms must submit donor name, a valid email, positive amount,
 consent, an allowed frequency, and only active Donation Campaigns. Keep those

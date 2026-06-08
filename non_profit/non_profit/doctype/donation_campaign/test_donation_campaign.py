@@ -62,6 +62,11 @@ class TestDonationCampaign(FrappeTestCase):
             "non_profit.non_profit.doctype.donation_campaign.donation_campaign.get_campaign_donation_chart",
             script,
         )
+        self.assertIn("--non-profit-campaign-chart-height: 132px", script)
+        self.assertIn("grid-template-columns: repeat(12, minmax(0, 1fr))", script)
+        self.assertIn("grid-template-rows: var(--non-profit-campaign-chart-height) auto", script)
+        self.assertIn("height: var(--non-profit-campaign-chart-height)", script)
+        self.assertIn("overflow-x: clip", script)
 
     def _campaign(self):
         suffix = frappe.generate_hash(length=8)
