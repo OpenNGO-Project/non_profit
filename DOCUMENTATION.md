@@ -19,6 +19,7 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 
 - **Member** and **Membership** for membership identity, periods, invoicing, and B2B/B2C flows.
 - **Donor**, **Donation**, **Donation Campaign**, **Recurring Donation**, and **Donation Receipt** for fundraising. `Donor.customer` is the canonical ERPNext Customer relation for donor identity; Donation still links to Donor.
+  Donation carries analysis dimensions `cost_center` (fetched from the campaign's cost center when empty) and `project` (both ERPNext doctypes) for downstream fundraising analytics (e.g. the `good_analytics` app).
 - **Sponsor**, **Sponsor Tier**, **Volunteer**, and **Grant Application** for broader NPO operations.
 - **Non Profit Settings** for company, donor type, billing, invoicing, payment account, and email defaults.
 
