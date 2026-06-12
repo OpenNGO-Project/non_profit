@@ -138,6 +138,8 @@ class TestHardenedWhitelistedMethods(FrappeTestCase):
 		)
 		donation.flags.ignore_permissions = True
 		donation.insert()
+		donation.reload()
+		donation.flags.ignore_permissions = False
 
 		readonly = self._read_only_user()
 		previous_user = frappe.session.user
