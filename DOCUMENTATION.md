@@ -80,7 +80,9 @@ Donation directly.
 invitations require write permission on the target document. A logged-in portal
 user may join a published Chapter only as themselves, and may leave only their
 own active Chapter row; editing another user's Chapter row still requires
-Chapter write permission.
+Chapter write permission. Member-supplied `website_url` values are restricted
+to `http(s)://` URLs server-side, and the public chapter page escapes
+member-supplied `website_url` / `introduction` values when rendering.
 
 The development-only `Donation.mock_pay` endpoint is guest-whitelisted but
 POST-only and inert unless both `developer_mode` and
@@ -95,6 +97,17 @@ accepted consent, allowed frequency (`one_off`, `Monthly`, `Quarterly`,
 `good_connector` is installed and a GoodVantage CAPTCHA site key is configured,
 guest submissions must include a valid CAPTCHA response; sites without
 Good Connector remain standalone and skip the optional CAPTCHA gate.
+
+The `donate_confirm` page is key-gated: every Donation gets a random
+`confirmation_key` on insert (`Donation.before_insert`), the donate flow
+redirects with `?donation=<name>&key=<key>`
+(`non_profit.www.donate.donation_confirm_query`), and the page refuses to
+disclose donor name or amount without a matching key — Donation names are a
+sequential series, so the name alone must not unlock the page. Logged-in users
+with Donation read permission can still open the page without a key. Pages that
+build their own confirm redirect must use `donation_confirm_query()`.
+Donations created before the field existed have no key and are therefore not
+guest-viewable.
 
 ## Donation Thank-Yous
 
@@ -165,6 +178,14 @@ of a separate final page so normal document footer behavior does not overlap the
 payment part. Missing creditor configuration is reported before checking the
 optional `qrbill` Python package, so setup errors remain visible even on CI
 images that do not install the QR-bill dependency.
+
+Note: this bench intentionally runs two Swiss QR-bill engines. non_profit's
+`swiss_qrbill.py` (qrbill package, creditor from Non Profit Settings) renders
+Donation slips, while `good_connector.qr_bill` (chqr package, creditor from
+the Company bank account, with QRR/SCOR reference support) renders invoice
+QR pages for miki_app / good_event / good_npo. They cannot share code —
+non_profit is standalone and must not import good_connector. When changing
+payment-relevant QR behavior, check both engines.
 
 ## Membership Compatibility
 
