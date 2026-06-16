@@ -24,11 +24,8 @@
   "end_date",
   "section_payment",
   "mode_of_payment",
-  "payment_gateway",
   "column_break_payment",
-  "campaign",
-  "section_notes",
-  "notes"
+  "campaign"
  ],
  "fields": [
   {
@@ -144,11 +141,6 @@
    "options": "Mode of Payment"
   },
   {
-   "fieldname": "payment_gateway",
-   "fieldtype": "Data",
-   "label": "Payment Gateway"
-  },
-  {
    "fieldname": "column_break_payment",
    "fieldtype": "Column Break"
   },
@@ -157,16 +149,6 @@
    "fieldtype": "Link",
    "label": "Campaign",
    "options": "Donation Campaign"
-  },
-  {
-   "fieldname": "section_notes",
-   "fieldtype": "Section Break",
-   "label": "Notes"
-  },
-  {
-   "fieldname": "notes",
-   "fieldtype": "Text",
-   "label": "Notes"
   }
  ],
  "index_web_pages_for_search": 1,

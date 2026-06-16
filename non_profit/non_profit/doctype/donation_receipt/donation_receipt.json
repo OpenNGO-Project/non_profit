@@ -27,8 +27,6 @@
   "issued_by",
   "column_break_status",
   "email_sent_on",
-  "replaces",
-  "pdf_file",
   "amended_from"
  ],
  "fields": [
@@ -165,19 +163,6 @@
    "fieldname": "email_sent_on",
    "fieldtype": "Date",
    "label": "Email Sent On",
-   "read_only": 1
-  },
-  {
-   "fieldname": "replaces",
-   "fieldtype": "Link",
-   "label": "Replaces",
-   "options": "Donation Receipt",
-   "read_only": 1
-  },
-  {
-   "fieldname": "pdf_file",
-   "fieldtype": "Attach",
-   "label": "PDF File",
    "read_only": 1
   },
   {

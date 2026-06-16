@@ -26,7 +26,6 @@
   "automate_donation_payment_entries",
   "donation_debit_account",
   "donation_payment_account",
-  "default_donation_campaign",
   "default_thank_you_template",
   "default_receipt_country",
   "section_break_27",
@@ -183,12 +182,6 @@
    "label": "Default Donor Type",
    "options": "Donor Type",
    "reqd": 1
-  },
-  {
-   "fieldname": "default_donation_campaign",
-   "fieldtype": "Link",
-   "label": "Default Donation Campaign",
-   "options": "Donation Campaign"
   },
   {
    "fieldname": "default_thank_you_template",
