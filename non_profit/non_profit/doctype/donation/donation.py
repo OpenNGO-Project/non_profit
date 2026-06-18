@@ -68,6 +68,12 @@ class Donation(Document):
 			self._send_thank_you()
 		except Exception:
 			frappe.log_error(title=f"Thank-you dispatch failed for {self.name}")
+		try:
+			from non_profit.non_profit.major_gifts import on_donation_change
+
+			on_donation_change(self)
+		except Exception:
+			frappe.log_error(title=f"Donor roll-up refresh failed for {self.name}")
 
 	def before_print(self, settings=None):
 		from non_profit.non_profit.swiss_qrbill import swiss_qrbill_svg

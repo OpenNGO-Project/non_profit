@@ -28,6 +28,7 @@
   "amount",
   "mode_of_payment",
   "recurring_donation",
+  "major_gift",
   "column_break_12",
   "payment_id",
   "confirmation_key",
@@ -88,6 +89,13 @@
    "label": "Recurring Donation",
    "options": "Recurring Donation",
    "read_only": 1
+  },
+  {
+   "fieldname": "major_gift",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Major Gift",
+   "options": "Major Gift"
   },
   {
    "fieldname": "receipt",

@@ -280,11 +280,51 @@ creates a fresh Contact, and fuzzy matches are sent to the shared duplicate
 review queue instead of being merged automatically. The import is optional so
 the fork remains installable without Good Connector in upstream-style benches.
 
+## Major Gifts
+
+Major-donor cultivation lives here as generic substrate (logic in
+`non_profit/non_profit/major_gifts.py`).
+
+DocTypes:
+
+- **Major Gift** — one cultivation opportunity ("ask") per record. `stage`
+  drives the pipeline (Identification → Qualification → Cultivation →
+  Solicitation → Stewardship, plus terminal **Won** / **Lost**) and is the
+  Kanban field. `ask_amount` / `expected_amount` / `probability` produce a
+  read-only `weighted_amount`; entering a terminal stage stamps `outcome` and
+  `closed_on` and forces probability (Won = 100, Lost = 0). `closed_amount` is
+  the sum of submitted, paid Donations linked back through `Donation.major_gift`.
+  Not submittable.
+- **Donor Interaction** — a touchpoint ("move": Call / Meeting / Email /
+  Letter / Event / Proposal / Note / Other) linked to a Donor and an optional
+  Major Gift. On save/trash it refreshes `Donor.last_interaction_date` and
+  `Major Gift.last_interaction_date` to the latest interaction.
+
+Donor gains `relationship_manager`, `donor_level`
+(Prospect/Grassroots/Annual/Mid-Level/Major), `capacity_rating`, a read-only
+`is_major_donor` flag, and hook-maintained giving roll-ups
+(`total_lifetime_amount`, `gift_count`, `first_gift_date`, `last_gift_date`,
+`last_gift_amount`, `largest_gift_amount`, `last_interaction_date`).
+
+Roll-ups recompute from a Donation's `on_submit` / `on_cancel` / `on_trash`
+(and after `on_payment_authorized`) via `major_gifts.on_donation_change`,
+counting submitted, paid Donations — the same semantics as Donation Campaign
+totals. `is_major_donor` is set when `donor_level == "Major"` or lifetime
+giving reaches `Non Profit Settings.major_donor_threshold`. The
+`backfill_major_gift_donor_rollups` patch (and
+`major_gifts.recompute_all_donor_giving`) backfill existing donors.
+
+Non Profit Settings → **Major Gifts** adds `major_donor_threshold` (auto-flag),
+`stale_interaction_days`, and `lapsed_major_months` as segmentation and
+follow-up thresholds.
+
 ## Test Commands
 
 ```bash
 cd frappe-bench
 bench --site development16.localhost run-tests --app non_profit
+bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.major_gift.test_major_gift
+bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.donor_interaction.test_donor_interaction
 bench --site development16.localhost run-tests --module miki_app.tests.test_end_to_end
 ```
 

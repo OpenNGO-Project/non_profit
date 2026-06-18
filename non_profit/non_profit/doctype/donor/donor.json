@@ -13,6 +13,21 @@
   "donor_type",
   "preferred_language",
   "receipt_delivery",
+  "relationship_section",
+  "relationship_manager",
+  "donor_level",
+  "column_break_rel",
+  "capacity_rating",
+  "is_major_donor",
+  "giving_summary_section",
+  "total_lifetime_amount",
+  "gift_count",
+  "first_gift_date",
+  "largest_gift_amount",
+  "column_break_giving",
+  "last_gift_date",
+  "last_gift_amount",
+  "last_interaction_date",
   "image",
   "customer_section",
   "customer",
@@ -62,6 +77,94 @@
    "fieldtype": "Select",
    "label": "Receipt Delivery",
    "options": "Email\nPost\nBoth"
+  },
+  {
+   "fieldname": "relationship_section",
+   "fieldtype": "Section Break",
+   "label": "Relationship & Cultivation"
+  },
+  {
+   "fieldname": "relationship_manager",
+   "fieldtype": "Link",
+   "label": "Relationship Manager",
+   "options": "User"
+  },
+  {
+   "fieldname": "donor_level",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Donor Level",
+   "options": "\nProspect\nGrassroots\nAnnual\nMid-Level\nMajor"
+  },
+  {
+   "fieldname": "column_break_rel",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "capacity_rating",
+   "fieldtype": "Select",
+   "label": "Capacity Rating",
+   "options": "\nUnrated\nA\nB\nC"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_major_donor",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Major Donor",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "giving_summary_section",
+   "fieldtype": "Section Break",
+   "label": "Giving Summary"
+  },
+  {
+   "fieldname": "total_lifetime_amount",
+   "fieldtype": "Currency",
+   "label": "Lifetime Giving",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gift_count",
+   "fieldtype": "Int",
+   "label": "Gift Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "first_gift_date",
+   "fieldtype": "Date",
+   "label": "First Gift Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "largest_gift_amount",
+   "fieldtype": "Currency",
+   "label": "Largest Gift",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_giving",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_gift_date",
+   "fieldtype": "Date",
+   "label": "Last Gift Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_gift_amount",
+   "fieldtype": "Currency",
+   "label": "Last Gift Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_interaction_date",
+   "fieldtype": "Date",
+   "label": "Last Interaction",
+   "read_only": 1
   },
   {
    "fieldname": "image",
@@ -116,6 +219,14 @@
  "links": [
   {
    "link_doctype": "Donation",
+   "link_fieldname": "donor"
+  },
+  {
+   "link_doctype": "Major Gift",
+   "link_fieldname": "donor"
+  },
+  {
+   "link_doctype": "Donor Interaction",
    "link_fieldname": "donor"
   }
  ],

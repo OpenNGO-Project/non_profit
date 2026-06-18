@@ -27,6 +27,11 @@ doc_events = {
 	"Membership": {
 		"validate": "non_profit.non_profit.membership_sync.validate_no_overlap",
 	},
+	"Donation": {
+		"on_submit": "non_profit.non_profit.major_gifts.on_donation_change",
+		"on_cancel": "non_profit.non_profit.major_gifts.on_donation_change",
+		"on_trash": "non_profit.non_profit.major_gifts.on_donation_change",
+	},
 }
 
 scheduler_events = {
@@ -49,5 +54,6 @@ global_search_doctypes = {
 		{"doctype": "Volunteer Type", "index": 9},
 		{"doctype": "Donor Type", "index": 10},
 		{"doctype": "Membership Type", "index": 11},
+		{"doctype": "Major Gift", "index": 12},
 	]
 }

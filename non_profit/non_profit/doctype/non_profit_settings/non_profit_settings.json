@@ -29,7 +29,12 @@
   "default_thank_you_template",
   "default_receipt_country",
   "section_break_27",
-  "creation_user"
+  "creation_user",
+  "major_gifts_section",
+  "major_donor_threshold",
+  "column_break_mg",
+  "stale_interaction_days",
+  "lapsed_major_months"
  ],
  "fields": [
   {
@@ -207,6 +212,35 @@
    "label": "Creation User",
    "options": "User",
    "reqd": 1
+  },
+  {
+   "fieldname": "major_gifts_section",
+   "fieldtype": "Section Break",
+   "label": "Major Gifts"
+  },
+  {
+   "description": "Donors whose recorded lifetime giving reaches this amount are automatically flagged as major donors.",
+   "fieldname": "major_donor_threshold",
+   "fieldtype": "Currency",
+   "label": "Major Donor Threshold"
+  },
+  {
+   "fieldname": "column_break_mg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "60",
+   "description": "Open major gifts with no logged interaction in this many days are treated as stale.",
+   "fieldname": "stale_interaction_days",
+   "fieldtype": "Int",
+   "label": "Stale Interaction Days"
+  },
+  {
+   "default": "13",
+   "description": "Major donors with no gift within this many months are treated as lapsed.",
+   "fieldname": "lapsed_major_months",
+   "fieldtype": "Int",
+   "label": "Lapsed Major Months"
   }
  ],
  "index_web_pages_for_search": 1,

@@ -8,3 +8,4 @@ non_profit.patches.backfill_donor_customers_from_email
 non_profit.patches.remove_member_pan_details
 non_profit.patches.remove_donor_pan_details
 non_profit.patches.remove_membership_company
+non_profit.patches.backfill_major_gift_donor_rollups

@@ -1,0 +1,253 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-06-18 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "donor",
+  "donor_name",
+  "relationship_manager",
+  "stage",
+  "column_break_main",
+  "campaign",
+  "currency",
+  "amounts_section",
+  "ask_amount",
+  "expected_amount",
+  "probability",
+  "weighted_amount",
+  "column_break_amounts",
+  "target_close_date",
+  "next_action",
+  "next_action_date",
+  "last_interaction_date",
+  "closure_section",
+  "outcome",
+  "closed_on",
+  "closed_amount",
+  "column_break_closure",
+  "lost_reason",
+  "notes_section",
+  "description"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "NPO-MG-.YYYY.-",
+   "reqd": 1
+  },
+  {
+   "fieldname": "donor",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Donor",
+   "options": "Donor",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "donor.donor_name",
+   "fieldname": "donor_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Donor Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "relationship_manager",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Relationship Manager",
+   "options": "User"
+  },
+  {
+   "default": "Identification",
+   "fieldname": "stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Stage",
+   "options": "Identification\nQualification\nCultivation\nSolicitation\nStewardship\nWon\nLost",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Campaign",
+   "options": "Donation Campaign"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency"
+  },
+  {
+   "fieldname": "amounts_section",
+   "fieldtype": "Section Break",
+   "label": "Ask & Pipeline"
+  },
+  {
+   "fieldname": "ask_amount",
+   "fieldtype": "Currency",
+   "label": "Ask Amount",
+   "options": "currency"
+  },
+  {
+   "description": "Defaults to the ask amount; used for the weighted pipeline value.",
+   "fieldname": "expected_amount",
+   "fieldtype": "Currency",
+   "label": "Expected Amount",
+   "options": "currency"
+  },
+  {
+   "fieldname": "probability",
+   "fieldtype": "Percent",
+   "label": "Probability (%)"
+  },
+  {
+   "description": "Expected amount weighted by probability.",
+   "fieldname": "weighted_amount",
+   "fieldtype": "Currency",
+   "label": "Weighted Amount",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_amounts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "target_close_date",
+   "fieldtype": "Date",
+   "in_standard_filter": 1,
+   "label": "Target Close Date"
+  },
+  {
+   "fieldname": "next_action",
+   "fieldtype": "Small Text",
+   "label": "Next Action"
+  },
+  {
+   "fieldname": "next_action_date",
+   "fieldtype": "Date",
+   "in_standard_filter": 1,
+   "label": "Next Action Date"
+  },
+  {
+   "fieldname": "last_interaction_date",
+   "fieldtype": "Date",
+   "label": "Last Interaction",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "closure_section",
+   "fieldtype": "Section Break",
+   "label": "Outcome"
+  },
+  {
+   "fieldname": "outcome",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Outcome",
+   "options": "\nWon\nLost",
+   "read_only": 1
+  },
+  {
+   "fieldname": "closed_on",
+   "fieldtype": "Date",
+   "label": "Closed On",
+   "read_only": 1
+  },
+  {
+   "description": "Sum of submitted, paid Donations linked to this Major Gift.",
+   "fieldname": "closed_amount",
+   "fieldtype": "Currency",
+   "label": "Closed Amount",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_closure",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.outcome=='Lost'",
+   "fieldname": "lost_reason",
+   "fieldtype": "Small Text",
+   "label": "Lost Reason"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Strategy & Notes"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "Strategy / Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [
+  {
+   "link_doctype": "Donor Interaction",
+   "link_fieldname": "major_gift"
+  },
+  {
+   "link_doctype": "Donation",
+   "link_fieldname": "major_gift"
+  }
+ ],
+ "modified": "2026-06-18 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Non Profit",
+ "name": "Major Gift",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Non Profit Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "donor_name",
+ "track_changes": 1
+}
