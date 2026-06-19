@@ -25,14 +25,15 @@
   "next_action_date",
   "next_action_task",
   "last_interaction_date",
+  "notes_section",
+  "description",
+  "outcome_tab",
   "closure_section",
   "outcome",
   "closed_on",
   "closed_amount",
   "column_break_closure",
-  "lost_reason",
-  "notes_section",
-  "description"
+  "lost_reason"
  ],
  "fields": [
   {
@@ -163,10 +164,13 @@
    "read_only": 1
   },
   {
-   "collapsible": 1,
-   "fieldname": "closure_section",
-   "fieldtype": "Section Break",
+   "fieldname": "outcome_tab",
+   "fieldtype": "Tab Break",
    "label": "Outcome"
+  },
+  {
+   "fieldname": "closure_section",
+   "fieldtype": "Section Break"
   },
   {
    "fieldname": "outcome",
@@ -201,7 +205,6 @@
    "label": "Lost Reason"
   },
   {
-   "collapsible": 1,
    "fieldname": "notes_section",
    "fieldtype": "Section Break",
    "label": "Strategy & Notes"
@@ -213,16 +216,7 @@
   }
  ],
  "index_web_pages_for_search": 1,
- "links": [
-  {
-   "link_doctype": "Donor Interaction",
-   "link_fieldname": "major_gift"
-  },
-  {
-   "link_doctype": "Donation",
-   "link_fieldname": "major_gift"
-  }
- ],
+ "links": [],
  "modified": "2026-06-18 23:30:00.000000",
  "modified_by": "Administrator",
  "module": "Non Profit",

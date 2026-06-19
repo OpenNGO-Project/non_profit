@@ -167,3 +167,135 @@ def recompute_all_donor_giving() -> int:
 	for donor in donors:
 		recompute_donor_giving(donor)
 	return len(donors)
+
+
+# --- Workflow ------------------------------------------------------------
+
+WORKFLOW_NAME = "Major Gift Pipeline"
+WORKFLOW_STATE_STYLES = {
+	"Identification": "Primary",
+	"Qualification": "Info",
+	"Cultivation": "Info",
+	"Solicitation": "Warning",
+	"Stewardship": "Warning",
+	"Won": "Success",
+	"Lost": "Danger",
+}
+# (from_state, action, to_state)
+WORKFLOW_TRANSITIONS = (
+	("Identification", "Qualify", "Qualification"),
+	("Qualification", "Cultivate", "Cultivation"),
+	("Cultivation", "Solicit", "Solicitation"),
+	("Solicitation", "Move to Stewardship", "Stewardship"),
+	("Cultivation", "Mark Won", "Won"),
+	("Solicitation", "Mark Won", "Won"),
+	("Stewardship", "Mark Won", "Won"),
+	("Cultivation", "Mark Lost", "Lost"),
+	("Solicitation", "Mark Lost", "Lost"),
+	("Stewardship", "Mark Lost", "Lost"),
+	("Won", "Reopen", "Stewardship"),
+	("Lost", "Reopen", "Qualification"),
+)
+# Preference order for the single role that may act on the workflow; the first
+# one that exists on the site is used (Administrator can always transition).
+WORKFLOW_ROLES = ("Non Profit Manager", "System Manager")
+
+
+def ensure_major_gift_workflow() -> None:
+	"""Create or refresh the Major Gift pipeline Workflow (idempotent).
+
+	Uses the existing ``stage`` Select as the workflow state field, so pipeline
+	stages double as workflow states and the form gets role-gated transition
+	buttons. Allowed roles are filtered to those that exist on the site.
+	"""
+	if not frappe.db.exists("DocType", "Major Gift"):
+		return
+	edit_role = next((role for role in WORKFLOW_ROLES if frappe.db.exists("Role", role)), None)
+	if not edit_role:
+		return
+
+	for state, style in WORKFLOW_STATE_STYLES.items():
+		if not frappe.db.exists("Workflow State", state):
+			frappe.get_doc(
+				{"doctype": "Workflow State", "workflow_state_name": state, "style": style}
+			).insert(ignore_permissions=True)
+
+	for _from_state, action, _to_state in WORKFLOW_TRANSITIONS:
+		if not frappe.db.exists("Workflow Action Master", action):
+			frappe.get_doc(
+				{"doctype": "Workflow Action Master", "workflow_action_name": action}
+			).insert(ignore_permissions=True)
+
+	workflow = (
+		frappe.get_doc("Workflow", WORKFLOW_NAME)
+		if frappe.db.exists("Workflow", WORKFLOW_NAME)
+		else frappe.new_doc("Workflow")
+	)
+	workflow.workflow_name = WORKFLOW_NAME
+	workflow.document_type = "Major Gift"
+	workflow.workflow_state_field = "stage"
+	workflow.is_active = 1
+	workflow.send_email_alert = 0
+
+	# One row per state / transition (not per role) so the stage list is not
+	# duplicated. Transitions are gated to a single role; Administrator bypasses
+	# role checks, so seeding/tests still walk the pipeline.
+	workflow.set("states", [])
+	for state in WORKFLOW_STATE_STYLES:
+		workflow.append("states", {"state": state, "doc_status": "0", "allow_edit": edit_role})
+
+	workflow.set("transitions", [])
+	for from_state, action, to_state in WORKFLOW_TRANSITIONS:
+		workflow.append(
+			"transitions",
+			{
+				"state": from_state,
+				"action": action,
+				"next_state": to_state,
+				"allowed": edit_role,
+				"allow_self_approval": 1,
+			},
+		)
+
+	workflow.flags.ignore_permissions = True
+	workflow.save()
+
+
+# Programmatic stage advancement. The active Workflow blocks inserting a Major
+# Gift directly into a non-initial stage, so seeders/tests create at the first
+# stage and walk forward through single-step transitions.
+STAGE_WALK = {
+	"Identification": ["Identification"],
+	"Qualification": ["Qualification"],
+	"Cultivation": ["Qualification", "Cultivation"],
+	"Solicitation": ["Qualification", "Cultivation", "Solicitation"],
+	"Stewardship": ["Qualification", "Cultivation", "Solicitation", "Stewardship"],
+	"Won": ["Qualification", "Cultivation", "Won"],
+	"Lost": ["Qualification", "Cultivation", "Lost"],
+}
+
+
+def advance_major_gift_to_stage(doc, target_stage: str):
+	"""Move a Major Gift to ``target_stage``.
+
+	With the pipeline Workflow active a stage is only reachable through
+	single-step transitions, so walk forward one valid transition at a time.
+	Falls back to a direct set when no workflow is installed. Runs as the
+	current user (Administrator, during seeding/tests, has every role).
+	"""
+	from frappe.model.workflow import get_workflow_name
+
+	if doc.stage == target_stage:
+		return doc
+	if not get_workflow_name(doc.doctype):
+		doc.stage = target_stage
+		doc.flags.ignore_permissions = True
+		doc.save(ignore_permissions=True)
+		return doc
+	for state in STAGE_WALK.get(target_stage, [target_stage]):
+		if doc.stage == state:
+			continue
+		doc.stage = state
+		doc.flags.ignore_permissions = True
+		doc.save(ignore_permissions=True)
+	return doc

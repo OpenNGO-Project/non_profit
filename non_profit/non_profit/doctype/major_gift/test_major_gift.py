@@ -128,15 +128,17 @@ class TestMajorGift(IntegrationTestCase):
 	# --- helpers -----------------------------------------------------------
 
 	def _major_gift(self, stage: str, ask_amount: float):
+		from non_profit.non_profit.major_gifts import advance_major_gift_to_stage
+
 		donor = self._donor()
-		return frappe.get_doc(
+		gift = frappe.get_doc(
 			{
 				"doctype": "Major Gift",
 				"donor": donor.name,
-				"stage": stage,
 				"ask_amount": ask_amount,
 			}
 		).insert(ignore_permissions=True)
+		return advance_major_gift_to_stage(gift, stage)
 
 	def _donation(self, donor: str, amount: float, major_gift: str | None = None):
 		donation = frappe.get_doc(

@@ -21,8 +21,10 @@ class MajorGift(Document):
 		self._refresh_closed_amount()
 
 	def _apply_stage_defaults(self):
+		# Probability is a deterministic function of the pipeline stage, so a
+		# Major Gift created via the workflow walk lands on the right value.
+		self.probability = STAGE_PROBABILITY.get(self.stage, 0)
 		if self.stage in TERMINAL_STAGES:
-			self.probability = 100 if self.stage == "Won" else 0
 			self.outcome = self.stage
 			if not self.closed_on:
 				self.closed_on = getdate()
@@ -30,9 +32,6 @@ class MajorGift(Document):
 			self.outcome = None
 			self.closed_on = None
 			self.lost_reason = None
-			# Seed a stage default only when the user has not set one yet.
-			if not flt(self.probability):
-				self.probability = STAGE_PROBABILITY.get(self.stage, 0)
 
 	def _refresh_closed_amount(self):
 		if self.is_new():
