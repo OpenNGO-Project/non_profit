@@ -190,6 +190,26 @@ need write permission on the Chapter. Grant review invitations require write
 permission on the Grant Application and an Assessment Manager before the status is moved to
 **In Progress**.
 
+## Major Gifts — Next Actions
+
+A **Major Gift** is one cultivation "ask"; a **Donor Interaction** logs a
+touchpoint. The "next action" on either is tracked as a real **Task**, not a
+text note:
+
+1. Open a Major Gift (or Donor Interaction) and choose **Actions → Set Next
+   Action**.
+2. Enter the action, a due date, and who to assign it to (defaults to the gift's
+   Relationship Manager / the interaction's Staff), then **Create Task**.
+
+The Task is created, assigned (the assignee gets it in their To-Do list), and
+linked back. The record's read-only **Next Action**, **Next Action Date**, and
+**Next Action Task** fields always reflect the earliest *open* linked Task, and
+update automatically when you complete or reschedule that Task (mark the Task
+**Completed** and the next action advances to the next open Task, or clears).
+All linked Tasks are listed under the form's **Connections** tab. A next action
+added on a Donor Interaction that belongs to a Major Gift also shows on that
+gift. Requires write access to the gift/interaction (Non Profit Manager/Member).
+
 ## Smoke Checks
 
 ```bash

@@ -4,7 +4,7 @@
 
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import nowdate
+from frappe.utils import add_days, getdate, nowdate
 
 
 class TestMajorGift(IntegrationTestCase):
@@ -52,6 +52,78 @@ class TestMajorGift(IntegrationTestCase):
 		self._donation(donor=donor.name, amount=1500)
 		donor.reload()
 		self.assertTrue(donor.is_major_donor)
+
+	def test_set_next_action_creates_links_and_assigns_task(self) -> None:
+		from non_profit.non_profit.next_actions import set_next_action
+
+		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
+		frappe.db.set_value("Major Gift", gift.name, "relationship_manager", "Administrator")
+
+		result = set_next_action("Major Gift", gift.name, "Call the donor", nowdate())
+
+		task = frappe.get_doc("Task", result["task"])
+		self.assertEqual(task.subject, "Call the donor")
+		self.assertEqual(task.major_gift, gift.name)
+		self.assertTrue(
+			frappe.db.exists(
+				"ToDo",
+				{"reference_type": "Task", "reference_name": task.name, "allocated_to": "Administrator"},
+			)
+		)
+
+		gift.reload()
+		self.assertEqual(gift.next_action, "Call the donor")
+		self.assertEqual(getdate(gift.next_action_date), getdate(nowdate()))
+		self.assertEqual(gift.next_action_task, task.name)
+
+	def test_next_action_tracks_earliest_open_task_and_completion(self) -> None:
+		from non_profit.non_profit.next_actions import create_next_action_task
+
+		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
+		create_next_action_task("Major Gift", gift.name, "Later step", add_days(nowdate(), 10))
+		create_next_action_task("Major Gift", gift.name, "Sooner step", add_days(nowdate(), 2))
+
+		gift.reload()
+		self.assertEqual(gift.next_action, "Sooner step")
+		self.assertEqual(getdate(gift.next_action_date), getdate(add_days(nowdate(), 2)))
+
+		# Completing the earliest task advances the rollup to the next open one.
+		sooner_task = frappe.get_doc("Task", gift.next_action_task)
+		sooner_task.status = "Completed"
+		sooner_task.save(ignore_permissions=True)
+		gift.reload()
+		self.assertEqual(gift.next_action, "Later step")
+
+	def test_completing_all_tasks_clears_next_action(self) -> None:
+		from non_profit.non_profit.next_actions import create_next_action_task
+
+		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
+		create_next_action_task("Major Gift", gift.name, "Only step", nowdate())
+		gift.reload()
+		task = frappe.get_doc("Task", gift.next_action_task)
+		task.status = "Completed"
+		task.save(ignore_permissions=True)
+		gift.reload()
+		self.assertFalse(gift.next_action)
+		self.assertFalse(gift.next_action_task)
+
+	def test_patch_converts_legacy_next_action(self) -> None:
+		from non_profit.patches.convert_next_actions_to_tasks import execute
+
+		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
+		# Simulate legacy free-text data (the field is now read-only/derived).
+		frappe.db.set_value(
+			"Major Gift",
+			gift.name,
+			{"next_action": "Legacy follow-up", "next_action_date": nowdate()},
+			update_modified=False,
+		)
+		execute()
+		gift.reload()
+		self.assertTrue(gift.next_action_task)
+		task = frappe.get_doc("Task", gift.next_action_task)
+		self.assertEqual(task.subject, "Legacy follow-up")
+		self.assertEqual(task.major_gift, gift.name)
 
 	# --- helpers -----------------------------------------------------------
 

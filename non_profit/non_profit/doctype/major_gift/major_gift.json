@@ -23,6 +23,7 @@
   "target_close_date",
   "next_action",
   "next_action_date",
+  "next_action_task",
   "last_interaction_date",
   "closure_section",
   "outcome",
@@ -135,15 +136,25 @@
    "label": "Target Close Date"
   },
   {
+   "description": "Derived from the earliest open linked Task. Use Actions → Set Next Action.",
    "fieldname": "next_action",
    "fieldtype": "Small Text",
-   "label": "Next Action"
+   "label": "Next Action",
+   "read_only": 1
   },
   {
    "fieldname": "next_action_date",
    "fieldtype": "Date",
    "in_standard_filter": 1,
-   "label": "Next Action Date"
+   "label": "Next Action Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "next_action_task",
+   "fieldtype": "Link",
+   "label": "Next Action Task",
+   "options": "Task",
+   "read_only": 1
   },
   {
    "fieldname": "last_interaction_date",
@@ -212,7 +223,7 @@
    "link_fieldname": "major_gift"
   }
  ],
- "modified": "2026-06-18 09:00:00.000000",
+ "modified": "2026-06-18 23:30:00.000000",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Major Gift",

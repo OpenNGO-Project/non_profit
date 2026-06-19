@@ -7,9 +7,12 @@
 - Keep generic Member, Membership, Donor, Donation, Receipt, Campaign, Sponsor, Volunteer, and Grant behavior here.
 - Do not put client-specific UI, seeding, or branding in this app. Use `ilanga_app`, `good_npo`, or a client app for that.
 - Miki depends on the membership substrate. If you change Member/Membership semantics, update `miki_app` in the same change.
-- Legacy Member registration should use `good_connector.identity_matching`
-  when that app is installed, but keep the import optional so this fork remains
-  standalone outside Goodvantage benches.
+- This app targets the Goodvantage bench and may depend on the ecosystem where
+  it helps (ERPNext is a required app, so its `Task` doctype is always present;
+  `good_connector` and friends are available). Do NOT bend the design to stay
+  "standalone outside Goodvantage benches" — that constraint no longer applies.
+  Defensive/optional imports (e.g. `good_connector.identity_matching` for legacy
+  Member registration) are still fine as good practice, not as a hard mandate.
 - Keep `HOW_TO.md` and `DOCUMENTATION.md` current when hooks, doctypes, public helpers, setup, scheduled jobs, or operational behavior change.
 - All custom DocTypes must have Python controllers.
 - All new `@frappe.whitelist()` functions need type hints.

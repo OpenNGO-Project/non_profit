@@ -300,6 +300,32 @@ DocTypes:
   Major Gift. On save/trash it refreshes `Donor.last_interaction_date` and
   `Major Gift.last_interaction_date` to the latest interaction.
 
+### Next Actions (linked Tasks)
+
+A "next action" on a Major Gift or Donor Interaction is a real ERPNext **Task**,
+not free text. Logic lives in `non_profit/non_profit/next_actions.py`. Each Task
+back-links to its parent through the `Task.major_gift` / `Task.donor_interaction`
+custom fields (added in `non_profit.setup.get_custom_fields`, created on
+install/migrate). A Task created from a Donor Interaction that belongs to a Major
+Gift sets both links, so it also surfaces on the gift.
+
+The parents' `next_action` (Small Text), `next_action_date` (Date), and
+`next_action_task` (Link → Task) fields are **read-only and derived** from the
+earliest *open* linked Task (`status not in Completed/Cancelled/Template`,
+ordered by `exp_end_date`). They are recomputed by `refresh_next_action`, which
+runs from `set_next_action` and from the `Task` `on_update`/`on_trash` doc_event
+(`on_task_change`) — so completing or rescheduling a Task updates the rollup.
+Keeping the `next_action*` fieldnames means the pipeline list, reports, and the
+overdue/stale scheduler keep working off them.
+
+Operators use **Actions → Set Next Action** on either form (whitelisted
+`non_profit.non_profit.next_actions.set_next_action`, gated by parent write
+permission): it prompts for the action, due date, and assignee (defaulting to the
+gift's `relationship_manager` / interaction's `staff`), then creates, assigns
+(standard Frappe assignment), and links the Task. The form **Connections** tab
+lists all linked Tasks. The `convert_next_actions_to_tasks` patch migrates any
+pre-existing free-text `next_action` values into Tasks.
+
 Donor gains `relationship_manager`, `donor_level`
 (Prospect/Grassroots/Annual/Mid-Level/Major), `capacity_rating`, a read-only
 `is_major_donor` flag, and hook-maintained giving roll-ups

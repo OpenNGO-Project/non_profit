@@ -92,4 +92,23 @@ def make_custom_fields(update=True):
 
 
 def get_custom_fields():
-	return {}
+	return {
+		"Task": [
+			{
+				"fieldname": "major_gift",
+				"label": "Major Gift",
+				"fieldtype": "Link",
+				"options": "Major Gift",
+				"insert_after": "project",
+				"no_copy": 1,
+			},
+			{
+				"fieldname": "donor_interaction",
+				"label": "Donor Interaction",
+				"fieldtype": "Link",
+				"options": "Donor Interaction",
+				"insert_after": "major_gift",
+				"no_copy": 1,
+			},
+		]
+	}

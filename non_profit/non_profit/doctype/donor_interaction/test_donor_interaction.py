@@ -40,6 +40,29 @@ class TestDonorInteraction(IntegrationTestCase):
 		self.assertEqual(interaction.staff, "Administrator")
 		self.assertTrue(interaction.interaction_date)
 
+	def test_set_next_action_rolls_up_to_major_gift(self) -> None:
+		from non_profit.non_profit.next_actions import set_next_action
+
+		donor = self._donor()
+		gift = frappe.get_doc({"doctype": "Major Gift", "donor": donor.name, "stage": "Solicitation"}).insert(
+			ignore_permissions=True
+		)
+		interaction = self._interaction(donor.name, "2026-02-20 10:00:00", major_gift=gift.name)
+
+		result = set_next_action("Donor Interaction", interaction.name, "Send proposal", "2026-03-01")
+
+		task = frappe.get_doc("Task", result["task"])
+		self.assertEqual(task.donor_interaction, interaction.name)
+		self.assertEqual(task.major_gift, gift.name)
+
+		interaction.reload()
+		self.assertEqual(interaction.next_action, "Send proposal")
+		self.assertEqual(interaction.next_action_task, task.name)
+		# The interaction's task also surfaces as the gift's next action.
+		gift.reload()
+		self.assertEqual(gift.next_action, "Send proposal")
+		self.assertEqual(gift.next_action_task, task.name)
+
 	# --- helpers -----------------------------------------------------------
 
 	def _interaction(

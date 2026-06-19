@@ -32,6 +32,10 @@ doc_events = {
 		"on_cancel": "non_profit.non_profit.major_gifts.on_donation_change",
 		"on_trash": "non_profit.non_profit.major_gifts.on_donation_change",
 	},
+	"Task": {
+		"on_update": "non_profit.non_profit.next_actions.on_task_change",
+		"on_trash": "non_profit.non_profit.next_actions.on_task_change",
+	},
 }
 
 scheduler_events = {

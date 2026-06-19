@@ -4,8 +4,7 @@
 """Major-gift cultivation helpers.
 
 Donor giving roll-ups, major-donor flagging, and Major Gift pipeline roll-ups.
-Kept generic (no client- or presentation-layer assumptions) so the fork stays
-usable outside Goodvantage benches.
+Kept generic — no client- or presentation-layer assumptions.
 """
 
 import frappe
