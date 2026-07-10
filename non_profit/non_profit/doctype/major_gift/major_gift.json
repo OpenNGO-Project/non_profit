@@ -250,6 +250,7 @@
    "write": 1
   }
  ],
+ "search_fields": "donor_name",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],

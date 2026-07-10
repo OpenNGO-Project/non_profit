@@ -29,9 +29,9 @@ bench --site development16.localhost run-tests --app non_profit
 bench --site development16.localhost run-tests --module miki_app.tests.test_end_to_end
 ```
 
-## List-View Search (open suggestion, 2026-07-10)
+## List-View Search (applied 2026-07-10)
 
-Per the bench-root convention (list views searchable by human title/name) —
+Applied per the bench-root convention (list views searchable by human title/name) —
 these doctypes have a `title_field` (auto standard filter) but no or partial
 `search_fields`, so Link typeahead only matches the serial ID:
 

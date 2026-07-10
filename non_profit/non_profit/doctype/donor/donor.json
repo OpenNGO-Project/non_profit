@@ -251,6 +251,7 @@
  ],
  "quick_entry": 1,
  "restrict_to_domain": "Non Profit",
+ "search_fields": "donor_name",
  "sort_field": "modified",
  "sort_order": "DESC",
  "title_field": "donor_name",
