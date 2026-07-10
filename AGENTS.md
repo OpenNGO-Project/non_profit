@@ -28,3 +28,18 @@ cd frappe-bench
 bench --site development16.localhost run-tests --app non_profit
 bench --site development16.localhost run-tests --module miki_app.tests.test_end_to_end
 ```
+
+## List-View Search (open suggestion, 2026-07-10)
+
+Per the bench-root convention (list views searchable by human title/name) —
+these doctypes have a `title_field` (auto standard filter) but no or partial
+`search_fields`, so Link typeahead only matches the serial ID:
+
+- `Donor`: `search_fields: donor_name`.
+- `Member`: `search_fields: member_name,email_id`.
+- `Donor Interaction`: `search_fields: subject,donor_name`.
+- `Major Gift`: `search_fields: donor_name`.
+- `Grant Application`: `search_fields: applicant_name,email`.
+- `Volunteer`: `search_fields: volunteer_name`.
+- Already complete: Donation, Donation Campaign, Donation Receipt,
+  Recurring Donation, Sponsor, Membership. Field-named masters need nothing.
