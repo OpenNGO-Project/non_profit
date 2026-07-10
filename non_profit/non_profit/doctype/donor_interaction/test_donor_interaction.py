@@ -27,9 +27,7 @@ class TestDonorInteraction(IntegrationTestCase):
 
 	def test_interaction_syncs_to_major_gift(self) -> None:
 		donor = self._donor()
-		gift = frappe.get_doc({"doctype": "Major Gift", "donor": donor.name, "stage": "Cultivation"}).insert(
-			ignore_permissions=True
-		)
+		gift = self._major_gift(donor.name, "Cultivation")
 		self._interaction(donor.name, "2026-02-20 10:00:00", major_gift=gift.name)
 		gift.reload()
 		self.assertEqual(getdate(gift.last_interaction_date), getdate("2026-02-20"))
@@ -44,9 +42,7 @@ class TestDonorInteraction(IntegrationTestCase):
 		from non_profit.non_profit.next_actions import set_next_action
 
 		donor = self._donor()
-		gift = frappe.get_doc({"doctype": "Major Gift", "donor": donor.name, "stage": "Solicitation"}).insert(
-			ignore_permissions=True
-		)
+		gift = self._major_gift(donor.name, "Solicitation")
 		interaction = self._interaction(donor.name, "2026-02-20 10:00:00", major_gift=gift.name)
 
 		result = set_next_action("Donor Interaction", interaction.name, "Send proposal", "2026-03-01")
@@ -64,6 +60,12 @@ class TestDonorInteraction(IntegrationTestCase):
 		self.assertEqual(gift.next_action_task, task.name)
 
 	# --- helpers -----------------------------------------------------------
+
+	def _major_gift(self, donor: str, stage: str):
+		from non_profit.non_profit.major_gifts import advance_major_gift_to_stage
+
+		gift = frappe.get_doc({"doctype": "Major Gift", "donor": donor}).insert(ignore_permissions=True)
+		return advance_major_gift_to_stage(gift, stage)
 
 	def _interaction(
 		self,
