@@ -208,7 +208,7 @@ update automatically when you complete or reschedule that Task (mark the Task
 **Completed** and the next action advances to the next open Task, or clears).
 All linked Tasks are listed under the form's **Connections** tab. A next action
 added on a Donor Interaction that belongs to a Major Gift also shows on that
-gift. Requires write access to the gift/interaction (Non Profit Manager/Member).
+gift. Requires write access to the gift/interaction (Non Profit Manager).
 
 ## Smoke Checks
 

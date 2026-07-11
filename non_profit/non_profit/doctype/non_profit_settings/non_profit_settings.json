@@ -230,14 +230,14 @@
   },
   {
    "default": "60",
-   "description": "Open major gifts with no logged interaction in this many days are treated as stale.",
+   "description": "Reserved — not yet wired. Intended threshold (days) for flagging open major gifts with no recent logged interaction.",
    "fieldname": "stale_interaction_days",
    "fieldtype": "Int",
    "label": "Stale Interaction Days"
   },
   {
    "default": "13",
-   "description": "Major donors with no gift within this many months are treated as lapsed.",
+   "description": "Reserved — not yet wired. Intended threshold (months) for flagging lapsed major donors.",
    "fieldname": "lapsed_major_months",
    "fieldtype": "Int",
    "label": "Lapsed Major Months"

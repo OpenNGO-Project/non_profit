@@ -41,6 +41,35 @@ class TestDonation(unittest.TestCase):
 		donation.reload()
 		self.assertEqual(donation.paid, 0)
 
+	def test_payment_entry_paid_flip_recomputes_donor_lifetime_total(self):
+		donor = create_unique_donor()
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"company": frappe.get_cached_value("Non Profit Settings", None, "company"),
+				"donor": donor.name,
+				"donor_name": donor.donor_name,
+				"email": get_donor_email(donor),
+				"date": get_active_fiscal_year_date(),
+				"amount": 250,
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+
+		# Submitted but unpaid: no lifetime giving recorded yet.
+		donor.reload()
+		self.assertEqual(frappe.utils.flt(donor.total_lifetime_amount), 0)
+
+		# Submitting a Payment Entry flips `paid` via db.set_value (fires no doc
+		# hooks); the donor roll-up must still be recomputed off that flag.
+		donation.create_payment_entry(date=get_active_fiscal_year_date())
+		donation.reload()
+		self.assertEqual(donation.paid, 1)
+
+		donor.reload()
+		self.assertEqual(frappe.utils.flt(donor.total_lifetime_amount), 250)
+		self.assertEqual(donor.gift_count, 1)
+
 	def test_payment_entry_clearance_marks_donation_reconciled(self):
 		donation, payment_entry = create_donation_with_payment_entry()
 		clearance_date = get_active_fiscal_year_date()

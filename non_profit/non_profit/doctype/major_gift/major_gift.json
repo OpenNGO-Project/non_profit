@@ -114,9 +114,11 @@
    "options": "currency"
   },
   {
+   "description": "Read-only: derived from the pipeline stage.",
    "fieldname": "probability",
    "fieldtype": "Percent",
-   "label": "Probability (%)"
+   "label": "Probability (%)",
+   "read_only": 1
   },
   {
    "description": "Expected amount weighted by probability.",

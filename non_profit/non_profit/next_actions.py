@@ -7,8 +7,8 @@ A moves-management "next action" is an ERPNext ``Task`` linked back to its
 parent through the ``Task.major_gift`` / ``Task.donor_interaction`` custom
 fields (created in ``non_profit.setup``). Each parent's read-only
 ``next_action`` / ``next_action_date`` / ``next_action_task`` fields are
-*derived* from the earliest open linked Task, so the pipeline list, reports, and
-the overdue/stale scheduler keep working off those fieldnames.
+*derived* from the earliest open linked Task, so the pipeline list and reports
+keep working off those fieldnames.
 """
 
 import frappe

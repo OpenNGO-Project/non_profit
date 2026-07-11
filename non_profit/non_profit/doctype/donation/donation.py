@@ -33,6 +33,15 @@ class Donation(Document):
 				self.create_donor_for_website_user()
 			else:
 				frappe.throw(_("Please select a Donor"))
+		self._validate_major_gift_donor()
+
+	def _validate_major_gift_donor(self):
+		# A linked Major Gift must belong to the same Donor as this Donation.
+		if not self.major_gift or not self.donor:
+			return
+		gift_donor = frappe.db.get_value("Major Gift", self.major_gift, "donor")
+		if gift_donor and gift_donor != self.donor:
+			frappe.throw(_("Major Gift {0} belongs to a different donor.").format(self.major_gift))
 
 	def create_donor_for_website_user(self):
 		donor_name = find_donor_by_email(frappe.session.user)

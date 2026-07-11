@@ -130,6 +130,7 @@ def get_donation_payment_entry(
 	pe.payment_type = "Receive"
 	pe.company = doc.company
 	pe.cost_center = doc.get("cost_center")
+	pe.project = doc.get("project")
 	pe.posting_date = getdate()
 	pe.mode_of_payment = doc.get("mode_of_payment")
 	pe.party_type = "Donor"
@@ -183,14 +184,27 @@ def sync_donation_paid_state(donation_name: str) -> None:
 	if not frappe.db.exists("Donation", donation_name):
 		return
 
-	donation_amount, current_paid = frappe.db.get_value(
+	donation_amount, current_paid, donor, major_gift = frappe.db.get_value(
 		"Donation",
 		donation_name,
-		["amount", "paid"],
+		["amount", "paid", "donor", "major_gift"],
 	)
 	paid = 1 if _submitted_donation_payment_total(donation_name) >= flt(donation_amount) else 0
 	if int(current_paid or 0) != paid:
 		frappe.db.set_value("Donation", donation_name, "paid", paid, update_modified=False)
+		# The paid flag feeds paid-only roll-ups (Donor lifetime giving +
+		# major-donor flag, Major Gift closed amount). db.set_value fires no doc
+		# hooks, so refresh them here — the same recompute the Donation
+		# submit/cancel/trash ``on_donation_change`` hook performs.
+		from non_profit.non_profit.major_gifts import (
+			recompute_donor_giving,
+			recompute_major_gift_closed,
+		)
+
+		if donor:
+			recompute_donor_giving(donor)
+		if major_gift:
+			recompute_major_gift_closed(major_gift)
 
 
 def _submitted_donation_payment_total(donation_name: str) -> float:

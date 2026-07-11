@@ -29,6 +29,31 @@ class TestMajorGift(IntegrationTestCase):
 		self.assertTrue(gift.closed_on)
 		self.assertEqual(gift.weighted_amount, 5000)
 
+	def test_advance_from_mid_pipeline_stage_moves_forward_only(self) -> None:
+		from non_profit.non_profit.major_gifts import advance_major_gift_to_stage
+
+		# A gift already advanced past Qualification must reach a terminal stage
+		# without any (illegal, workflow-rejected) backward transition.
+		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
+		self.assertEqual(gift.stage, "Cultivation")
+
+		advance_major_gift_to_stage(gift, "Won")
+
+		gift.reload()
+		self.assertEqual(gift.stage, "Won")
+		self.assertEqual(gift.outcome, "Won")
+
+	def test_advance_marks_lost_from_early_stage(self) -> None:
+		from non_profit.non_profit.major_gifts import advance_major_gift_to_stage
+
+		# Early disqualification: Mark Lost is reachable directly from
+		# Qualification (no need to route through Cultivation).
+		gift = self._major_gift(stage="Qualification", ask_amount=2000)
+		advance_major_gift_to_stage(gift, "Lost")
+		gift.reload()
+		self.assertEqual(gift.stage, "Lost")
+		self.assertEqual(gift.outcome, "Lost")
+
 	def test_closed_amount_sums_linked_paid_donations(self) -> None:
 		gift = self._major_gift(stage="Solicitation", ask_amount=8000)
 		self._donation(donor=gift.donor, amount=3000, major_gift=gift.name)

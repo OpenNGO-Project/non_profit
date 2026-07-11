@@ -7,12 +7,15 @@ Donor giving roll-ups, major-donor flagging, and Major Gift pipeline roll-ups.
 Kept generic — no client- or presentation-layer assumptions.
 """
 
+from collections import deque
+
 import frappe
 from frappe.query_builder.functions import Count, Max, Min, Sum
 from frappe.utils import flt, getdate
 
-# Default win probability per pipeline stage (percent). Applied to a Major Gift
-# only when it has no explicit probability yet; terminal stages are forced.
+# Win probability per pipeline stage (percent). ``probability`` is read-only and
+# always re-derived from the stage on validate (terminal stages force 100 / 0),
+# so it stays in lock-step with the pipeline.
 STAGE_PROBABILITY = {
 	"Identification": 10,
 	"Qualification": 25,
@@ -169,6 +172,26 @@ def recompute_all_donor_giving() -> int:
 	return len(donors)
 
 
+def recompute_all_major_gift_closed() -> int:
+	"""Recompute the closed amount for every Major Gift."""
+	gifts = frappe.get_all("Major Gift", pluck="name")
+	for gift in gifts:
+		recompute_major_gift_closed(gift)
+	return len(gifts)
+
+
+def reconcile_fundraising_rollups() -> None:
+	"""Daily reconciliation job (registered in ``hooks.py`` ``scheduler_events``).
+
+	Rebuilds every Donor giving roll-up and Major Gift closed amount so changes
+	made outside the Donation doc-event hooks retro-apply: a ``Donation.paid``
+	flag flipped through the Payment Entry flow (``db.set_value``, no hooks) and
+	an edited ``Non Profit Settings.major_donor_threshold``.
+	"""
+	recompute_all_donor_giving()
+	recompute_all_major_gift_closed()
+
+
 # --- Workflow ------------------------------------------------------------
 
 WORKFLOW_NAME = "Major Gift Pipeline"
@@ -190,6 +213,11 @@ WORKFLOW_TRANSITIONS = (
 	("Cultivation", "Mark Won", "Won"),
 	("Solicitation", "Mark Won", "Won"),
 	("Stewardship", "Mark Won", "Won"),
+	# Early disqualification: a gift can be marked Lost from any open stage,
+	# including Identification / Qualification (no need to route through
+	# Cultivation first).
+	("Identification", "Mark Lost", "Lost"),
+	("Qualification", "Mark Lost", "Lost"),
 	("Cultivation", "Mark Lost", "Lost"),
 	("Solicitation", "Mark Lost", "Lost"),
 	("Stewardship", "Mark Lost", "Lost"),
@@ -200,18 +228,53 @@ WORKFLOW_TRANSITIONS = (
 # one that exists on the site is used (Administrator can always transition).
 WORKFLOW_ROLES = ("Non Profit Manager", "System Manager")
 
+# Global-default key holding the hash of the shipped Workflow definition this
+# site last built. The Workflow is rebuilt only when that hash changes, so
+# operator edits (roles, extra transitions, ``is_active=0``) survive a migrate.
+WORKFLOW_VERSION_KEY = "non_profit_major_gift_workflow_version"
+
+
+def _workflow_definition_hash(edit_role: str) -> str:
+	"""Stable hash of the shipped states / transitions / role, so a rebuild is
+	triggered exactly when we change the definition (not on every migrate)."""
+	import hashlib
+	import json
+
+	payload = json.dumps(
+		{
+			"states": list(WORKFLOW_STATE_STYLES.items()),
+			"transitions": list(WORKFLOW_TRANSITIONS),
+			"role": edit_role,
+		},
+		sort_keys=True,
+	)
+	return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
 
 def ensure_major_gift_workflow() -> None:
-	"""Create or refresh the Major Gift pipeline Workflow (idempotent).
+	"""Create or version-refresh the Major Gift pipeline Workflow (idempotent).
 
 	Uses the existing ``stage`` Select as the workflow state field, so pipeline
 	stages double as workflow states and the form gets role-gated transition
 	buttons. Allowed roles are filtered to those that exist on the site.
+
+	The Workflow is (re)built only when it is missing or the shipped definition
+	changed since this site last built it — an unconditional rebuild every
+	migrate would revert operator edits (roles, transitions, ``is_active``).
 	"""
 	if not frappe.db.exists("DocType", "Major Gift"):
 		return
 	edit_role = next((role for role in WORKFLOW_ROLES if frappe.db.exists("Role", role)), None)
 	if not edit_role:
+		return
+
+	definition_hash = _workflow_definition_hash(edit_role)
+	if (
+		frappe.db.exists("Workflow", WORKFLOW_NAME)
+		and frappe.db.get_default(WORKFLOW_VERSION_KEY) == definition_hash
+	):
+		# Already built from the current shipped definition — leave it (and any
+		# operator edits) untouched.
 		return
 
 	for state, style in WORKFLOW_STATE_STYLES.items():
@@ -222,9 +285,9 @@ def ensure_major_gift_workflow() -> None:
 
 	for _from_state, action, _to_state in WORKFLOW_TRANSITIONS:
 		if not frappe.db.exists("Workflow Action Master", action):
-			frappe.get_doc(
-				{"doctype": "Workflow Action Master", "workflow_action_name": action}
-			).insert(ignore_permissions=True)
+			frappe.get_doc({"doctype": "Workflow Action Master", "workflow_action_name": action}).insert(
+				ignore_permissions=True
+			)
 
 	workflow = (
 		frappe.get_doc("Workflow", WORKFLOW_NAME)
@@ -259,29 +322,56 @@ def ensure_major_gift_workflow() -> None:
 
 	workflow.flags.ignore_permissions = True
 	workflow.save()
+	frappe.db.set_default(WORKFLOW_VERSION_KEY, definition_hash)
 
 
 # Programmatic stage advancement. The active Workflow blocks inserting a Major
-# Gift directly into a non-initial stage, so seeders/tests create at the first
-# stage and walk forward through single-step transitions.
-STAGE_WALK = {
-	"Identification": ["Identification"],
-	"Qualification": ["Qualification"],
-	"Cultivation": ["Qualification", "Cultivation"],
-	"Solicitation": ["Qualification", "Cultivation", "Solicitation"],
-	"Stewardship": ["Qualification", "Cultivation", "Solicitation", "Stewardship"],
-	"Won": ["Qualification", "Cultivation", "Won"],
-	"Lost": ["Qualification", "Cultivation", "Lost"],
-}
+# Gift directly into a non-initial stage and rejects any backward move, so
+# seeders/tests create at the first stage and walk forward one legal transition
+# at a time. The walk is derived from WORKFLOW_TRANSITIONS (single source of
+# truth) and always starts at the gift's current stage, so advancing an
+# already-progressed gift never emits a backward step.
+
+
+def _forward_stage_path(from_stage: str, to_stage: str) -> list[str] | None:
+	"""Shortest forward path of stages from ``from_stage`` to ``to_stage``.
+
+	Walks the transition graph with the ``Reopen`` transitions removed, so a path
+	never routes backward through a terminal stage. Returns the successive stages
+	to move through (excluding ``from_stage``, ending at ``to_stage``), or
+	``None`` when ``to_stage`` is not forward-reachable.
+	"""
+	if from_stage == to_stage:
+		return []
+	adjacency: dict[str, list[str]] = {}
+	for source, action, dest in WORKFLOW_TRANSITIONS:
+		if action == "Reopen":
+			continue
+		adjacency.setdefault(source, []).append(dest)
+
+	queue: deque[list[str]] = deque([[from_stage]])
+	seen = {from_stage}
+	while queue:
+		path = queue.popleft()
+		for dest in adjacency.get(path[-1], []):
+			if dest in seen:
+				continue
+			if dest == to_stage:
+				return [*path[1:], dest]
+			seen.add(dest)
+			queue.append([*path, dest])
+	return None
 
 
 def advance_major_gift_to_stage(doc, target_stage: str):
-	"""Move a Major Gift to ``target_stage``.
+	"""Move a Major Gift forward to ``target_stage``.
 
 	With the pipeline Workflow active a stage is only reachable through
-	single-step transitions, so walk forward one valid transition at a time.
-	Falls back to a direct set when no workflow is installed. Runs as the
-	current user (Administrator, during seeding/tests, has every role).
+	single-step transitions and backward moves are rejected, so walk forward one
+	valid transition at a time starting from the gift's *current* stage. Falls
+	back to a direct set when no workflow is installed (or the target is not
+	forward-reachable, e.g. a manual reopen). Runs as the current user
+	(Administrator, during seeding/tests, has every role).
 	"""
 	from frappe.model.workflow import get_workflow_name
 
@@ -292,9 +382,13 @@ def advance_major_gift_to_stage(doc, target_stage: str):
 		doc.flags.ignore_permissions = True
 		doc.save(ignore_permissions=True)
 		return doc
-	for state in STAGE_WALK.get(target_stage, [target_stage]):
-		if doc.stage == state:
-			continue
+
+	path = _forward_stage_path(doc.stage, target_stage)
+	if path is None:
+		# Not forward-reachable (e.g. reopening a closed gift): let the workflow
+		# validate the single direct transition.
+		path = [target_stage]
+	for state in path:
 		doc.stage = state
 		doc.flags.ignore_permissions = True
 		doc.save(ignore_permissions=True)

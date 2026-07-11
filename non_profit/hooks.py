@@ -42,6 +42,7 @@ scheduler_events = {
 	"daily": [
 		"non_profit.non_profit.doctype.membership.membership.set_expired_status",
 		"non_profit.non_profit.doctype.recurring_donation.recurring_donation.process_recurring_donations",
+		"non_profit.non_profit.major_gifts.reconcile_fundraising_rollups",
 	],
 }
 

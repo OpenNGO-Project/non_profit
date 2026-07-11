@@ -82,9 +82,13 @@ def _handle_submission(form):
 	if str(consent or "").lower() not in {"1", "true", "yes", "on"}:
 		frappe.throw(_("Please agree to the storage of your data."))
 
+	# `amount_raw` is a form value (str, or a list for a repeated param). Coerce
+	# to str so float() can only raise ValueError — a single except clause stays
+	# valid on Python <3.14 (a PEP 758 `except TypeError, ValueError:` tuple,
+	# which the shared py314 ruff formatter emits, would be a SyntaxError there).
 	try:
-		amount = float(amount_raw)
-	except TypeError, ValueError:
+		amount = float(str(amount_raw))
+	except ValueError:
 		frappe.throw(_("Invalid amount"))
 
 	if amount <= 0:

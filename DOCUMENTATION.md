@@ -298,7 +298,37 @@ DocTypes:
 - **Donor Interaction** — a touchpoint ("move": Call / Meeting / Email /
   Letter / Event / Proposal / Note / Other) linked to a Donor and an optional
   Major Gift. On save/trash it refreshes `Donor.last_interaction_date` and
-  `Major Gift.last_interaction_date` to the latest interaction.
+  `Major Gift.last_interaction_date` to the latest interaction. A linked Major
+  Gift (on either Donation or Donor Interaction) must belong to the same Donor.
+
+### Pipeline Workflow
+
+A **Major Gift Pipeline** Workflow (built by `major_gifts.ensure_major_gift_workflow`
+on `after_migrate`) drives the `stage` field. It is code-owned:
+
+- **States** are the seven `stage` values (Identification, Qualification,
+  Cultivation, Solicitation, Stewardship, Won, Lost), all at `doc_status = 0`
+  (Major Gift is not submittable).
+- **Transitions** advance one step down the pipeline (Qualify → Cultivate →
+  Solicit → Move to Stewardship), plus **Mark Won** (from Cultivation /
+  Solicitation / Stewardship), **Mark Lost** (from *any* open stage, so an early
+  prospect can be disqualified without routing through Cultivation), and
+  **Reopen** (Won → Stewardship, Lost → Qualification).
+- **Single role.** Every transition is gated to one role — the first of
+  `Non Profit Manager`, `System Manager` that exists on the site — with
+  `allow_self_approval`. Administrator bypasses role checks, so seeding/tests
+  still walk the pipeline.
+
+The definition is **hash-stamped** (`WORKFLOW_VERSION_KEY` global default): the
+Workflow is rebuilt only when the shipped states/transitions/role change, so a
+migrate never reverts operator edits (roles, extra transitions, `is_active=0`).
+
+`major_gifts.advance_major_gift_to_stage(doc, target_stage)` moves a gift
+forward programmatically. Because the active Workflow rejects backward moves, it
+computes the shortest **forward** path (derived from the transition graph,
+excluding Reopen) from the gift's *current* stage and saves one legal
+single-step transition at a time — safe to call on a gift already partway
+through the pipeline.
 
 ### Next Actions (linked Tasks)
 
@@ -315,8 +345,8 @@ earliest *open* linked Task (`status not in Completed/Cancelled/Template`,
 ordered by `exp_end_date`). They are recomputed by `refresh_next_action`, which
 runs from `set_next_action` and from the `Task` `on_update`/`on_trash` doc_event
 (`on_task_change`) — so completing or rescheduling a Task updates the rollup.
-Keeping the `next_action*` fieldnames means the pipeline list, reports, and the
-overdue/stale scheduler keep working off them.
+Keeping the `next_action*` fieldnames means the pipeline list and reports keep
+working off them.
 
 Operators use **Actions → Set Next Action** on either form (whitelisted
 `non_profit.non_profit.next_actions.set_next_action`, gated by parent write
@@ -336,13 +366,18 @@ Roll-ups recompute from a Donation's `on_submit` / `on_cancel` / `on_trash`
 (and after `on_payment_authorized`) via `major_gifts.on_donation_change`,
 counting submitted, paid Donations — the same semantics as Donation Campaign
 totals. `is_major_donor` is set when `donor_level == "Major"` or lifetime
-giving reaches `Non Profit Settings.major_donor_threshold`. The
+giving reaches `Non Profit Settings.major_donor_threshold`. When a Donation's
+`paid` flag flips through the Payment Entry flow (`custom_doctype/payment_entry.py`,
+a `db.set_value` that fires no doc hooks), the donor + linked-gift roll-ups are
+recomputed inline off that flag. A daily `major_gifts.reconcile_fundraising_rollups`
+scheduler job rebuilds every Donor roll-up and Major Gift closed amount, so
+out-of-band changes and edits to `major_donor_threshold` retro-apply. The
 `backfill_major_gift_donor_rollups` patch (and
 `major_gifts.recompute_all_donor_giving`) backfill existing donors.
 
-Non Profit Settings → **Major Gifts** adds `major_donor_threshold` (auto-flag),
-`stale_interaction_days`, and `lapsed_major_months` as segmentation and
-follow-up thresholds.
+Non Profit Settings → **Major Gifts** adds `major_donor_threshold` (auto-flag).
+`stale_interaction_days` and `lapsed_major_months` are reserved — defined but
+not yet wired to any behavior.
 
 ## Test Commands
 

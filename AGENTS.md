@@ -42,4 +42,5 @@ these doctypes have a `title_field` (auto standard filter) but no or partial
 - `Grant Application`: `search_fields: applicant_name,email`.
 - `Volunteer`: `search_fields: volunteer_name`.
 - Already complete: Donation, Donation Campaign, Donation Receipt,
-  Recurring Donation, Sponsor, Membership. Field-named masters need nothing.
+  Recurring Donation, Sponsor, Membership. Prompt-/field-named masters need
+  nothing (Chapter, Volunteer Type, …).
