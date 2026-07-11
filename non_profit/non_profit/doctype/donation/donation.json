@@ -65,7 +65,8 @@
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Campaign",
-   "options": "Donation Campaign"
+   "options": "Donation Campaign",
+   "search_index": 1
   },
   {
    "fetch_from": "campaign.cost_center",
@@ -112,7 +113,8 @@
    "fieldname": "date",
    "fieldtype": "Date",
    "label": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "fieldname": "payment_details_section",
