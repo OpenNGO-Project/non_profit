@@ -125,6 +125,21 @@ class TestMember(unittest.TestCase):
 		self.assertIn('"membership_expiry_date",', member_script)
 		self.assertIn("null,\n\t\t\t\ttrue", member_script)
 
+	def test_member_list_uses_native_creation_dialog_action(self):
+		with open(
+			frappe.get_app_path("non_profit", "non_profit", "doctype", "member", "member_list.js")
+		) as handle:
+			member_list_script = handle.read()
+		with open(
+			frappe.get_app_path("non_profit", "non_profit", "doctype", "member", "member.js")
+		) as handle:
+			member_form_script = handle.read()
+
+		self.assertIn("primary_action()", member_list_script)
+		self.assertIn("show_member_creation_dialog();", member_list_script)
+		self.assertNotIn("show_member_creation_dialog", member_form_script)
+		self.assertNotIn("__member_creation_dialog_shown", member_form_script)
+
 	def test_customer_member_helper_creates_open_ended_membership(self):
 		membership_type = self._membership_type()
 		customer = self._customer()

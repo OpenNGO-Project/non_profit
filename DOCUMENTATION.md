@@ -132,7 +132,11 @@ installs have the newer `Donor.customer` column before it queries donor rows;
 runs.
 
 Desk creation helpers for Member, Donor, and Sponsor accept Contact-only,
-Customer-only, or Contact+Customer selections. Contact-only Donors keep a Contact
+Customer-only, or Contact+Customer selections. The Member list uses Frappe's
+native `listview_settings.primary_action` hook to open its combined Member and
+Membership creation dialog directly; each Add action creates a fresh dialog,
+and cancelling it leaves the user on the list instead of an unsaved Member form.
+Contact-only Donors keep a Contact
 Dynamic Link and no Customer until a Customer is explicitly selected through a
 creation/import/repair flow.
 Sponsor creation reuses the same Donor identity helper before creating/reusing
