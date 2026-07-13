@@ -248,7 +248,8 @@ assumption from this fork, so report queries must not reference it.
 
 Memberships can be open-ended: callers that intentionally want no expiry set
 `membership.flags.keep_to_date_open = True` before insert. This bypasses the
-default billing-cycle `to_date` fill in the Membership controller.
+default billing-cycle `to_date` fill in the Membership controller. The fieldname
+remains `to_date`; its Desk label is **Membership Until**.
 
 Recurring billing is opt-in per **Membership Type** with the **Is
 Subscription** checkbox. Leave it disabled for declaration or data-collection

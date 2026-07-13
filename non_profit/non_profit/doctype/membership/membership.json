@@ -73,7 +73,7 @@
    "fieldname": "to_date",
    "fieldtype": "Date",
    "in_list_view": 1,
-   "label": "To",
+   "label": "Membership Until",
    "description": "Leave empty for a perpetual (non-expiring) membership."
   },
   {

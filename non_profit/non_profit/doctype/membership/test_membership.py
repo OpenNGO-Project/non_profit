@@ -126,6 +126,15 @@ class TestNonProfitSetup(FrappeTestCase):
 		self.assertTrue(frappe.has_permission("List Filter", "read", user=user.name))
 
 
+class TestMembershipMetadata(FrappeTestCase):
+	def test_to_date_has_field_specific_translated_label(self):
+		to_date = frappe.get_meta("Membership").get_field("to_date")
+
+		self.assertEqual(to_date.label, "Membership Until")
+		self.assertEqual(frappe._(to_date.label, lang="de"), "Mitgliedschaft bis")
+		self.assertEqual(frappe._("Membership Details", lang="de"), "Mitgliedschaften")
+
+
 class TestMembership(FrappeTestCase):
 	def setUp(self):
 		frappe.db.delete("Customer")

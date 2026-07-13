@@ -152,8 +152,8 @@ Member and creates/reuses the open-ended Membership in one step. From a saved
 Member, use **Actions → Create Membership** to create or open the active
 open-ended Membership for that Member and chosen Membership Type.
 
-Leave **To** empty for a perpetual/open-ended membership. If code creates the
-Membership and must intentionally keep **To** blank, set
+Leave **Membership Until** empty for a perpetual/open-ended membership. If code
+creates the Membership and must intentionally keep **Membership Until** blank, set
 `membership.flags.keep_to_date_open = True` before insert.
 
 Only enable **Is Subscription** on **Membership Type** when memberships of that
@@ -163,7 +163,7 @@ that are billed after a separate declaration process. To bill an open-ended
 membership through ERPNext subscriptions, use
 `non_profit.non_profit.membership_subscription.ensure_membership_subscription`;
 it only creates a Subscription for subscription-enabled Membership Types, links
-`Membership.subscription`, and leaves the Membership **To** field open.
+`Membership.subscription`, and leaves **Membership Until** open.
 
 If `good_connector` is installed, legacy member registration creates/reuses the
 linked Contact through Good Connector identity matching. Review possible fuzzy
