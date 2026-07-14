@@ -151,15 +151,21 @@ linking a Customer.
 
 `Donation.thank_you_sent` is a standard field on Donation for **Verdankungen**. `Donation.send_thank_you()` queues the configured Email Template, stores `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` when available, and marks this field once the email is queued. Presentation apps such as `ilanga_app` and `good_npo` read this field for pending thank-you queues. `Donation.receipt` remains reserved for **Donation Receipt** / **Spendenbescheinigung** tax certificates, so an immediate thank-you must not populate it.
 
-`Donation.on_payment_authorized()` sets `paid = 1` before optional accounting
-side effects. Automated Payment Entry failures are logged with the Donation
-name and do not prevent thank-you dispatch. This keeps hosted-checkout payment
-callbacks from being rolled back by single-company account settings on
-multi-demo sites.
-The `Payment Entry` override also syncs Donation references: submitting a
-Payment Entry with a `Donation` reference marks that Donation paid when the
-submitted allocation total covers the Donation amount, and cancellation
-recalculates the flag from the remaining submitted Payment Entries.
+`Donation.on_payment_authorized()` temporarily sets `paid = 1`, then creates the
+configured Payment Entry when automatic creation is enabled. If Payment Entry
+creation or submission fails, the base controller resets `paid`, logs the
+accounting error, and raises; thank-you dispatch therefore runs only after the
+enabled accounting step succeeds in this app.
+The `Payment Entry` override also syncs Donation references. Reference details
+and the Create Payment Entry helper expose only the Donation amount not already
+allocated by submitted Payment Entries. A fully allocated Donation cannot create
+another Payment Entry. Final submission locks all referenced Donation rows in
+name order and rejects a cumulative allocation above the Donation amount, so a
+stale or concurrent draft cannot post a second settlement. Donation references
+must use the Donation company and its expected Donor receivable account: the
+configured Donation Debit Account when it belongs to that company, otherwise
+ERPNext's company-specific Donor party account. Cancellation recalculates the
+paid flag from the remaining submitted Payment Entries.
 Bank reconciliation stays separate from payment success. `Donation.reconciled`,
 `reconciled_on`, and `reconciled_payment_entry` are read-only mirrors of
 submitted Donation Payment Entries whose `clearance_date` has been set by
@@ -172,6 +178,24 @@ change ERPNext's bank reconciliation rules.
 Global `Non Profit Settings` accounts are applied only when the configured
 Account belongs to the Donation company, so one company's legacy settings do
 not overwrite another company's party or bank accounts.
+
+### Donation Accounting Audit
+
+The read-only bench helper below reports submitted Donation references whose
+cumulative allocations exceed the Donation amount, whose Payment Entry company
+differs from the Donation company, or whose Donor-side account differs from the
+currently expected account:
+
+```bash
+bench --site development16.localhost execute non_profit.non_profit.custom_doctype.payment_entry.audit_donation_payment_entry_invariants
+```
+
+The helper is not whitelisted and does not update Donations, Payment Entries, or
+ledger rows. Every result requires manual accounting review. Correct historical
+entries through normal ERPNext cancellation/reversal and replacement workflows;
+do not directly edit submitted Payment Entries or GL/Payment Ledger rows. Because
+the account check uses current Donation/account configuration, confirm historical
+configuration before deciding that a reported account difference needs reversal.
 
 ### Donation QR Slips
 

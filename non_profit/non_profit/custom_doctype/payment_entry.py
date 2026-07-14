@@ -22,6 +22,11 @@ class NonProfitPaymentEntry(PaymentEntry):
 	reconciliation state in sync. Everything else defers to super().
 	"""
 
+	def validate(self):
+		if self.get("_action") == "submit":
+			_lock_referenced_donations(self)
+		super().validate()
+
 	def on_submit(self):
 		super().on_submit()
 		sync_donation_accounting_state_for_payment_entry(self)
@@ -45,6 +50,12 @@ class NonProfitPaymentEntry(PaymentEntry):
 		if self.party_type == "Donor":
 			return ("Donation",)
 		return super().get_valid_reference_doctypes()
+
+	def validate_reference_documents(self):
+		super().validate_reference_documents()
+		_validate_donation_reference_accounts(self)
+		if self.get("_action") == "submit":
+			_validate_donation_allocation_totals(self)
 
 	def set_missing_ref_details(
 		self,
@@ -71,6 +82,7 @@ class NonProfitPaymentEntry(PaymentEntry):
 				self.party_account_currency,
 				self.party_type,
 				self.party,
+				self.name if not self.is_new() else None,
 			)
 
 			# Only update exchange rate when the reference is Journal Entry
@@ -113,14 +125,25 @@ def get_donation_payment_entry(
 
 	doc = frappe.get_doc(dt, dn)
 
-	party_account = get_party_account("Donor", doc.get("donor"), doc.company)
+	party_account = _expected_donation_party_account(doc)
 	party_account_currency = doc.get("party_account_currency") or get_account_currency(party_account)
-	grand_total = outstanding_amount = flt(party_amount) or flt(doc.amount)
+	grand_total = flt(doc.amount)
+	outstanding_amount = _donation_outstanding_amount(doc.name)
+	if outstanding_amount <= 0:
+		frappe.throw(_("Donation {0} is fully allocated.").format(doc.name))
+
+	payment_amount = flt(party_amount) or outstanding_amount
+	if payment_amount > outstanding_amount:
+		frappe.throw(
+			_("Payment amount cannot exceed the remaining outstanding amount of {0}.").format(
+				outstanding_amount
+			)
+		)
 
 	# bank or cash
 	bank = get_bank_cash_account(doc, bank_account)
 
-	paid_amount = abs(outstanding_amount)
+	paid_amount = abs(payment_amount)
 	if party_account_currency == bank.account_currency:
 		received_amount = paid_amount
 	else:
@@ -155,7 +178,7 @@ def get_donation_payment_entry(
 			"due_date": doc.get("due_date"),
 			"total_amount": grand_total,
 			"outstanding_amount": outstanding_amount,
-			"allocated_amount": outstanding_amount,
+			"allocated_amount": payment_amount,
 		},
 	)
 
@@ -207,10 +230,10 @@ def sync_donation_paid_state(donation_name: str) -> None:
 			recompute_major_gift_closed(major_gift)
 
 
-def _submitted_donation_payment_total(donation_name: str) -> float:
+def _submitted_donation_payment_total(donation_name: str, exclude_payment_entry: str | None = None) -> float:
 	payment_entry = frappe.qb.DocType("Payment Entry")
 	payment_reference = frappe.qb.DocType("Payment Entry Reference")
-	total = (
+	query = (
 		frappe.qb.from_(payment_reference)
 		.inner_join(payment_entry)
 		.on(payment_entry.name == payment_reference.parent)
@@ -218,8 +241,79 @@ def _submitted_donation_payment_total(donation_name: str) -> float:
 		.where(payment_entry.docstatus == 1)
 		.where(payment_reference.reference_doctype == "Donation")
 		.where(payment_reference.reference_name == donation_name)
-	).run()[0][0]
+	)
+	if exclude_payment_entry:
+		query = query.where(payment_entry.name != exclude_payment_entry)
+	total = query.run()[0][0]
 	return flt(total)
+
+
+def _donation_outstanding_amount(donation_name: str, exclude_payment_entry: str | None = None) -> float:
+	amount = flt(frappe.db.get_value("Donation", donation_name, "amount"))
+	allocated = _submitted_donation_payment_total(donation_name, exclude_payment_entry)
+	return max(amount - allocated, 0)
+
+
+def _expected_donation_party_account(donation) -> str:
+	configured_account = frappe.db.get_single_value("Non Profit Settings", "donation_debit_account")
+	if (
+		configured_account
+		and frappe.db.get_value("Account", configured_account, "company") == donation.company
+	):
+		return configured_account
+	return get_party_account("Donor", donation.donor, donation.company)
+
+
+def _donation_reference_names(payment_entry) -> list[str]:
+	return sorted(
+		{
+			row.reference_name
+			for row in payment_entry.get("references")
+			if row.reference_doctype == "Donation" and row.reference_name and flt(row.allocated_amount)
+		}
+	)
+
+
+def _lock_referenced_donations(payment_entry) -> None:
+	for donation_name in _donation_reference_names(payment_entry):
+		frappe.db.get_value("Donation", donation_name, "name", for_update=True)
+
+
+def _validate_donation_reference_accounts(payment_entry) -> None:
+	for donation_name in _donation_reference_names(payment_entry):
+		donation = frappe.get_doc("Donation", donation_name)
+		if payment_entry.company != donation.company:
+			frappe.throw(
+				_("Donation {0} belongs to company {1}, but the Payment Entry company is {2}.").format(
+					donation.name, donation.company, payment_entry.company
+				)
+			)
+
+		expected_account = _expected_donation_party_account(donation)
+		if payment_entry.party_account != expected_account:
+			frappe.throw(
+				_("Donation {0} requires Donor party account {1}, but the Payment Entry uses {2}.").format(
+					donation.name, expected_account, payment_entry.party_account
+				)
+			)
+
+
+def _validate_donation_allocation_totals(payment_entry) -> None:
+	current_allocations = {}
+	for row in payment_entry.get("references"):
+		if row.reference_doctype == "Donation" and row.reference_name and flt(row.allocated_amount):
+			current_allocations[row.reference_name] = current_allocations.get(row.reference_name, 0) + flt(
+				row.allocated_amount
+			)
+
+	for donation_name in sorted(current_allocations):
+		donation_amount = flt(frappe.db.get_value("Donation", donation_name, "amount"))
+		already_allocated = _submitted_donation_payment_total(donation_name, payment_entry.name)
+		if already_allocated + current_allocations[donation_name] > donation_amount:
+			remaining = max(donation_amount - already_allocated, 0)
+			frappe.throw(
+				_("Donation {0} has only {1} remaining outstanding.").format(donation_name, remaining)
+			)
 
 
 def sync_donation_reconciliation_state_for_payment_entry(payment_entry) -> None:
@@ -330,6 +424,7 @@ def get_payment_reference_details(
 	party_account_currency: str,
 	party_type: str | None = None,
 	party: str | None = None,
+	current_payment_entry: str | None = None,
 ) -> dict[str, Any]:
 	# Caller-controlled doctype + name: enforce read permission before
 	# returning amounts/outstanding values from the referenced document.
@@ -347,8 +442,97 @@ def get_payment_reference_details(
 		{
 			"due_date": ref_doc.get("due_date"),
 			"total_amount": amount,
-			"outstanding_amount": amount,
+			"outstanding_amount": _donation_outstanding_amount(reference_name, current_payment_entry),
 			"exchange_rate": 1,
 			"bill_no": None,
 		}
 	)
+
+
+def audit_donation_payment_entry_invariants() -> dict[str, Any]:
+	"""Report submitted Donation allocation/accounting inconsistencies without changing data."""
+	payment_entry = frappe.qb.DocType("Payment Entry")
+	payment_reference = frappe.qb.DocType("Payment Entry Reference")
+	donation = frappe.qb.DocType("Donation")
+	rows = (
+		frappe.qb.from_(payment_reference)
+		.inner_join(payment_entry)
+		.on(payment_entry.name == payment_reference.parent)
+		.inner_join(donation)
+		.on(donation.name == payment_reference.reference_name)
+		.select(
+			payment_entry.name.as_("payment_entry"),
+			payment_entry.company.as_("payment_entry_company"),
+			payment_entry.payment_type,
+			payment_entry.paid_from,
+			payment_entry.paid_to,
+			payment_reference.reference_name.as_("donation"),
+			payment_reference.allocated_amount,
+			donation.amount.as_("donation_amount"),
+			donation.company.as_("donation_company"),
+			donation.donor,
+		)
+		.where(payment_entry.docstatus == 1)
+		.where(payment_reference.reference_doctype == "Donation")
+		.orderby(payment_reference.reference_name)
+		.orderby(payment_entry.name)
+	).run(as_dict=True)
+
+	donation_totals = {}
+	company_mismatches = []
+	party_account_mismatches = []
+	for row in rows:
+		total = donation_totals.setdefault(
+			row.donation,
+			{
+				"donation": row.donation,
+				"donation_amount": flt(row.donation_amount),
+				"submitted_allocation": 0,
+				"payment_entries": [],
+			},
+		)
+		total["submitted_allocation"] += flt(row.allocated_amount)
+		total["payment_entries"].append(row.payment_entry)
+
+		if row.payment_entry_company != row.donation_company:
+			company_mismatches.append(
+				{
+					"donation": row.donation,
+					"payment_entry": row.payment_entry,
+					"donation_company": row.donation_company,
+					"payment_entry_company": row.payment_entry_company,
+				}
+			)
+
+		expected_account = _expected_donation_party_account(
+			frappe._dict(company=row.donation_company, donor=row.donor)
+		)
+		party_account = row.paid_from if row.payment_type == "Receive" else row.paid_to
+		if party_account != expected_account:
+			party_account_mismatches.append(
+				{
+					"donation": row.donation,
+					"payment_entry": row.payment_entry,
+					"payment_type": row.payment_type,
+					"expected_party_account": expected_account,
+					"payment_entry_party_account": party_account,
+				}
+			)
+
+	overallocated_donations = []
+	for total in donation_totals.values():
+		if total["submitted_allocation"] > total["donation_amount"]:
+			total["excess_allocation"] = total["submitted_allocation"] - total["donation_amount"]
+			overallocated_donations.append(total)
+
+	return {
+		"summary": {
+			"submitted_donation_references": len(rows),
+			"overallocated_donations": len(overallocated_donations),
+			"company_mismatches": len(company_mismatches),
+			"party_account_mismatches": len(party_account_mismatches),
+		},
+		"overallocated_donations": overallocated_donations,
+		"company_mismatches": company_mismatches,
+		"party_account_mismatches": party_account_mismatches,
+	}

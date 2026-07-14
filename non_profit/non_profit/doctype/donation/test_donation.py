@@ -5,7 +5,12 @@ from unittest.mock import patch
 
 import erpnext
 import frappe
+from frappe.tests import IntegrationTestCase
 
+from non_profit.non_profit.custom_doctype.payment_entry import (
+	get_donation_payment_entry,
+	get_payment_reference_details,
+)
 from non_profit.non_profit.doctype.donation.donation import create_gateway_donation
 from non_profit.non_profit.doctype.donor.donor import (
 	get_donor_email,
@@ -19,15 +24,19 @@ class TestDonation(unittest.TestCase):
 
 		create_donor_type()
 		settings = frappe.get_doc("Non Profit Settings")
-		settings.company = company
-		settings.donation_company = company
-		settings.default_donor_type = "_Test Donor"
-		settings.automate_donation_payment_entries = 1
-		settings.donation_debit_account = receivable_account
-		settings.donation_payment_account = cash_account
-		settings.creation_user = "Administrator"
-		settings.flags.ignore_permissions = True
-		settings.save()
+		values = {
+			"company": company,
+			"donation_company": company,
+			"default_donor_type": "_Test Donor",
+			"automate_donation_payment_entries": 1,
+			"donation_debit_account": receivable_account,
+			"donation_payment_account": cash_account,
+			"creation_user": "Administrator",
+		}
+		if any(settings.get(field) != value for field, value in values.items()):
+			settings.update(values)
+			settings.flags.ignore_permissions = True
+			settings.save()
 
 	def test_payment_entry_for_donations_marks_paid_and_clears_on_cancel(self):
 		donation, payment_entry = create_donation_with_payment_entry()
@@ -290,6 +299,127 @@ class TestDonation(unittest.TestCase):
 		self.assertFalse(donation.receipt)
 
 
+class TestDonationPaymentEntryInvariants(IntegrationTestCase):
+	def setUp(self):
+		company, receivable_account, cash_account = get_company_and_accounts()
+		create_donor_type()
+		create_mode_of_payment(company)
+
+		settings = frappe.get_doc("Non Profit Settings")
+		values = {
+			"company": company,
+			"donation_company": company,
+			"default_donor_type": "_Test Donor",
+			"automate_donation_payment_entries": 1,
+			"donation_debit_account": receivable_account,
+			"donation_payment_account": cash_account,
+			"creation_user": "Administrator",
+		}
+		if any(settings.get(field) != value for field, value in values.items()):
+			settings.update(values)
+			settings.flags.ignore_permissions = True
+			settings.save()
+
+	def test_second_allocation_uses_remaining_outstanding(self):
+		donation = create_submitted_donation(100)
+		first_payment = insert_donation_payment_entry(donation, party_amount=40)
+		first_payment.submit()
+
+		details = get_payment_reference_details(
+			"Donation", donation.name, first_payment.paid_from_account_currency
+		)
+		self.assertEqual(frappe.utils.flt(details.total_amount), 100)
+		self.assertEqual(frappe.utils.flt(details.outstanding_amount), 60)
+		current_details = get_payment_reference_details(
+			"Donation",
+			donation.name,
+			first_payment.paid_from_account_currency,
+			current_payment_entry=first_payment.name,
+		)
+		self.assertEqual(frappe.utils.flt(current_details.outstanding_amount), 100)
+
+		second_payment = get_donation_payment_entry("Donation", donation.name)
+		self.assertEqual(frappe.utils.flt(second_payment.references[0].outstanding_amount), 60)
+		self.assertEqual(frappe.utils.flt(second_payment.references[0].allocated_amount), 60)
+		prepare_donation_payment_entry(second_payment)
+		second_payment.insert()
+		second_payment.submit()
+
+		donation.reload()
+		self.assertEqual(donation.paid, 1)
+
+	def test_stale_draft_is_rejected_after_another_payment_submits(self):
+		donation = create_submitted_donation(100)
+		stale_payment = insert_donation_payment_entry(donation)
+		winning_payment = insert_donation_payment_entry(donation)
+		winning_payment.submit()
+
+		with self.assertRaises(frappe.ValidationError):
+			stale_payment.submit()
+
+	def test_fully_allocated_donation_payment_helper_is_rejected(self):
+		donation = create_submitted_donation(100)
+		payment_entry = insert_donation_payment_entry(donation)
+		payment_entry.submit()
+
+		with self.assertRaisesRegex(frappe.ValidationError, "fully allocated"):
+			get_donation_payment_entry("Donation", donation.name)
+
+	def test_donation_company_mismatch_is_rejected(self):
+		donation = create_submitted_donation(100)
+		payment_entry = get_donation_payment_entry("Donation", donation.name)
+		other_company = frappe.get_all(
+			"Company",
+			filters={
+				"name": ["!=", donation.company],
+				"default_receivable_account": ["is", "set"],
+				"default_cash_account": ["is", "set"],
+			},
+			fields=["name", "default_receivable_account", "default_cash_account"],
+			order_by="name",
+			limit=1,
+		)[0]
+		payment_entry.company = other_company.name
+		payment_entry.paid_from = other_company.default_receivable_account
+		payment_entry.paid_to = other_company.default_cash_account
+		payment_entry.paid_from_account_currency = frappe.db.get_value(
+			"Account", payment_entry.paid_from, "account_currency"
+		)
+		payment_entry.paid_to_account_currency = frappe.db.get_value(
+			"Account", payment_entry.paid_to, "account_currency"
+		)
+		prepare_donation_payment_entry(payment_entry)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "belongs to company"):
+			payment_entry.insert()
+
+	def test_wrong_donor_receivable_account_is_rejected(self):
+		donation = create_submitted_donation(100)
+		payment_entry = get_donation_payment_entry("Donation", donation.name)
+		expected_account = payment_entry.paid_from
+		wrong_account = get_alternate_receivable_account(donation.company, expected_account)
+		payment_entry.paid_from = wrong_account
+		payment_entry.paid_from_account_currency = frappe.db.get_value(
+			"Account", wrong_account, "account_currency"
+		)
+		prepare_donation_payment_entry(payment_entry)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "requires Donor party account"):
+			payment_entry.insert()
+
+	def test_valid_single_allocation_and_cancellation(self):
+		donation = create_submitted_donation(100)
+		payment_entry = insert_donation_payment_entry(donation)
+		payment_entry.submit()
+
+		donation.reload()
+		self.assertEqual(donation.paid, 1)
+
+		payment_entry.cancel()
+		donation.reload()
+		self.assertEqual(donation.paid, 0)
+
+
 def get_company_and_accounts():
 	company_name = erpnext.get_default_company()
 	company = frappe.get_doc("Company", company_name)
@@ -375,6 +505,74 @@ def create_unique_donor():
 	)
 	donor_doc.reload()
 	return donor_doc
+
+
+def create_submitted_donation(amount=100):
+	donor = frappe.get_doc(
+		{
+			"doctype": "Donor",
+			"donor_name": f"_Test Payment Donor {frappe.generate_hash(length=8)}",
+			"donor_type": "_Test Donor",
+		}
+	).insert()
+	company = frappe.get_cached_value("Non Profit Settings", None, "donation_company")
+	donation = frappe.get_doc(
+		{
+			"doctype": "Donation",
+			"company": company,
+			"donor": donor.name,
+			"donor_name": donor.donor_name,
+			"email": get_donor_email(donor),
+			"date": get_active_fiscal_year_date(),
+			"amount": amount,
+			"mode_of_payment": "Debit Card",
+		}
+	).insert(ignore_permissions=True)
+	donation.submit()
+	return donation
+
+
+def prepare_donation_payment_entry(payment_entry):
+	payment_entry.reference_no = f"_Test Donation Payment {frappe.generate_hash(length=8)}"
+	payment_entry.reference_date = get_active_fiscal_year_date()
+	payment_entry.flags.ignore_mandatory = True
+	return payment_entry
+
+
+def insert_donation_payment_entry(donation, party_amount=None):
+	payment_entry = get_donation_payment_entry("Donation", donation.name, party_amount=party_amount)
+	prepare_donation_payment_entry(payment_entry)
+	payment_entry.insert()
+	return payment_entry
+
+
+def get_alternate_receivable_account(company, expected_account):
+	account = frappe.db.get_value(
+		"Account",
+		{
+			"company": company,
+			"account_type": "Receivable",
+			"is_group": 0,
+			"name": ["!=", expected_account],
+		},
+		"name",
+	)
+	if account:
+		return account
+
+	expected = frappe.get_doc("Account", expected_account)
+	account = frappe.get_doc(
+		{
+			"doctype": "Account",
+			"account_name": f"_Test Donation Receivable {frappe.generate_hash(length=6)}",
+			"account_type": "Receivable",
+			"account_currency": expected.account_currency,
+			"company": company,
+			"parent_account": expected.parent_account,
+			"root_type": "Asset",
+		}
+	).insert()
+	return account.name
 
 
 def create_mode_of_payment(company):

@@ -159,8 +159,6 @@ class Donation(Document):
 			pe = get_donation_payment_entry(dt=self.doctype, dn=self.name)
 		finally:
 			frappe.flags.ignore_account_permission = previous_ignore_account_permission
-		if _account_belongs_to_company(settings.donation_debit_account, self.company):
-			pe.paid_from = settings.donation_debit_account
 		if _account_belongs_to_company(settings.donation_payment_account, self.company):
 			pe.paid_to = settings.donation_payment_account
 		pe.posting_date = date or getdate()

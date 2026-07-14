@@ -91,14 +91,33 @@ period, belongs to the receipt Donor, and is not already attached to another
 active receipt.
 
 When a payment gateway authorizes a Donation, `Donation.on_payment_authorized()`
-marks the Donation paid first. If automated Payment Entry creation is enabled
-but account configuration is incomplete, the accounting failure is logged and
-does not roll back the paid state or thank-you dispatch.
+marks the Donation paid and, when enabled, creates the configured automatic
+Payment Entry. If Payment Entry creation or submission fails, the base
+`non_profit` controller resets the paid flag, logs the error, and raises; it does
+not send the thank-you from that failed authorization attempt.
 
 When an operator uses **Create Payment Entry** from a submitted unpaid Donation,
-submitting the Payment Entry marks the Donation paid. Cancelling the Payment
-Entry recalculates the Donation paid flag from the remaining submitted Payment
-Entries for that Donation.
+the draft shows only the amount left after submitted allocations. A second
+partial allocation can settle the remainder, but fully allocated Donations and
+stale drafts are rejected. Submission also requires the Payment Entry company
+to match the Donation company and the Donor side to use the configured Donation
+Debit Account for that company, or the derived Donor party account when no
+company-valid Donation Debit Account is configured. Cancelling the Payment Entry
+recalculates the Donation paid flag from the remaining submitted Payment Entries.
+
+Audit historical Donation accounting invariants without changing data:
+
+```bash
+cd frappe-bench
+bench --site development16.localhost execute non_profit.non_profit.custom_doctype.payment_entry.audit_donation_payment_entry_invariants
+```
+
+Review every reported over-allocation, company mismatch, or Donor-account
+mismatch manually with Accounting. Use normal ERPNext cancellation/reversal and
+replacement documents; never repair submitted Payment Entries or ledger rows by
+direct database updates. The audit compares against current account
+configuration, so verify the configuration effective at the original posting
+date before correcting historical entries.
 
 The seeded **Donation Slip CH** Print Format renders the donation summary first
 and places the Swiss QR-bill at the bottom of a separate final page. QR data is
