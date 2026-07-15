@@ -13,6 +13,8 @@ import frappe
 from frappe.query_builder.functions import Count, Max, Min, Sum
 from frappe.utils import flt, getdate
 
+ROLLUP_UPDATE_CHUNK_SIZE = 100
+
 # Win probability per pipeline stage (percent). ``probability`` is read-only and
 # always re-derived from the stage on validate (terminal stages force 100 / 0),
 # so it stays in lock-step with the pipeline.
@@ -166,18 +168,133 @@ def recompute_all_donor_giving() -> int:
 
 	Used by the install/migrate backfill patch and the daily reconciliation job.
 	"""
-	donors = frappe.get_all("Donor", pluck="name")
+	donors = frappe.get_all(
+		"Donor",
+		fields=[
+			"name",
+			"donor_level",
+			"total_lifetime_amount",
+			"gift_count",
+			"first_gift_date",
+			"last_gift_date",
+			"last_gift_amount",
+			"largest_gift_amount",
+			"is_major_donor",
+		],
+		limit_page_length=0,
+	)
+	donation = frappe.qb.DocType("Donation")
+	aggregates = {
+		row.donor: row
+		for row in (
+			frappe.qb.from_(donation)
+			.select(
+				donation.donor,
+				Sum(donation.amount).as_("total"),
+				Count(donation.name).as_("count"),
+				Min(donation.date).as_("first_date"),
+				Max(donation.date).as_("last_date"),
+				Max(donation.amount).as_("largest"),
+			)
+			.where(donation.donor.isnotnull())
+			.where(donation.docstatus == 1)
+			.where(donation.paid == 1)
+			.groupby(donation.donor)
+		).run(as_dict=True)
+	}
+	last_gift_amounts = _latest_gift_amounts()
+	threshold = flt(frappe.db.get_single_value("Non Profit Settings", "major_donor_threshold"))
+	updates = {}
 	for donor in donors:
-		recompute_donor_giving(donor)
+		aggregate = aggregates.get(donor.name) or {}
+		total = flt(aggregate.get("total"))
+		desired = {
+			"total_lifetime_amount": total,
+			"gift_count": int(aggregate.get("count") or 0),
+			"first_gift_date": getdate(aggregate.get("first_date")) if aggregate.get("first_date") else None,
+			"last_gift_date": getdate(aggregate.get("last_date")) if aggregate.get("last_date") else None,
+			"last_gift_amount": flt(last_gift_amounts.get(donor.name)),
+			"largest_gift_amount": flt(aggregate.get("largest")),
+			"is_major_donor": 1 if donor.donor_level == "Major" or (threshold and total >= threshold) else 0,
+		}
+		if _donor_rollup_changed(donor, desired):
+			updates[donor.name] = desired
+
+	frappe.db.bulk_update(
+		"Donor",
+		updates,
+		chunk_size=ROLLUP_UPDATE_CHUNK_SIZE,
+		update_modified=False,
+	)
 	return len(donors)
 
 
 def recompute_all_major_gift_closed() -> int:
 	"""Recompute the closed amount for every Major Gift."""
-	gifts = frappe.get_all("Major Gift", pluck="name")
-	for gift in gifts:
-		recompute_major_gift_closed(gift)
+	gifts = frappe.get_all("Major Gift", fields=["name", "closed_amount"], limit_page_length=0)
+	donation = frappe.qb.DocType("Donation")
+	totals = {
+		row.major_gift: flt(row.total)
+		for row in (
+			frappe.qb.from_(donation)
+			.select(donation.major_gift, Sum(donation.amount).as_("total"))
+			.where(donation.major_gift.isnotnull())
+			.where(donation.docstatus == 1)
+			.where(donation.paid == 1)
+			.groupby(donation.major_gift)
+		).run(as_dict=True)
+	}
+	updates = {
+		gift.name: {"closed_amount": totals.get(gift.name, 0.0)}
+		for gift in gifts
+		if flt(gift.closed_amount) != totals.get(gift.name, 0.0)
+	}
+	frappe.db.bulk_update(
+		"Major Gift",
+		updates,
+		chunk_size=ROLLUP_UPDATE_CHUNK_SIZE,
+		update_modified=False,
+	)
 	return len(gifts)
+
+
+def _latest_gift_amounts() -> dict[str, float]:
+	donation = frappe.qb.DocType("Donation")
+	latest_date = frappe.qb.DocType("Donation")
+	latest_dates = (
+		frappe.qb.from_(latest_date)
+		.select(latest_date.donor, Max(latest_date.date).as_("last_date"))
+		.where(latest_date.donor.isnotnull())
+		.where(latest_date.docstatus == 1)
+		.where(latest_date.paid == 1)
+		.groupby(latest_date.donor)
+	).as_("latest_dates")
+	rows = (
+		frappe.qb.from_(donation)
+		.inner_join(latest_dates)
+		.on((latest_dates.donor == donation.donor) & (latest_dates.last_date == donation.date))
+		.select(donation.donor, donation.amount)
+		.where(donation.docstatus == 1)
+		.where(donation.paid == 1)
+		.orderby(donation.donor)
+		.orderby(donation.modified, order=frappe.qb.desc)
+	).run(as_dict=True)
+	amounts: dict[str, float] = {}
+	for row in rows:
+		amounts.setdefault(row.donor, flt(row.amount))
+	return amounts
+
+
+def _donor_rollup_changed(donor: frappe._dict, desired: dict) -> bool:
+	for field, value in desired.items():
+		current = donor.get(field)
+		if field in {"total_lifetime_amount", "last_gift_amount", "largest_gift_amount"}:
+			current = flt(current)
+		elif field in {"first_gift_date", "last_gift_date"}:
+			current = getdate(current) if current else None
+		if current != value:
+			return True
+	return False
 
 
 def reconcile_fundraising_rollups() -> None:

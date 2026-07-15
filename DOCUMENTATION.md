@@ -61,7 +61,13 @@ Mutation endpoints must check permissions and let Frappe manage the request
 transaction. `DonationReceipt.generate_yearly_receipts` is restricted to
 `Non Profit Manager` or `System Manager` and creates draft receipts for
 submitted, paid Donations without an existing receipt link or active draft
-receipt row.
+receipt row. Validation, submit, selected-year lookup, and yearly generation
+share one bulk context loader for Donation fields and active Donation Receipt
+Item ownership. Active ownership is resolved by joining receipt items to
+non-cancelled receipts, so draft/submitted exclusion semantics remain intact
+without per-row reads. Yearly generation groups the loaded rows in Python rather
+than using database-specific `GroupConcat`; submit/cancel receipt-link writes are
+set-based and cancellation clears only Donations still owned by that receipt.
 `get_donations_for_selected_year` is an authenticated, permission-aware helper
 used by the Donation Receipt form action to populate a draft receipt with all
 submitted paid Donations for the selected Donor and Fiscal Year. Donation
@@ -402,7 +408,12 @@ recomputed inline off that flag. A daily `major_gifts.reconcile_fundraising_roll
 scheduler job rebuilds every Donor roll-up and Major Gift closed amount, so
 out-of-band changes and edits to `major_donor_threshold` retro-apply. The
 `backfill_major_gift_donor_rollups` patch (and
-`major_gifts.recompute_all_donor_giving`) backfill existing donors.
+`major_gifts.recompute_all_donor_giving`) backfill existing donors. All-record
+reconciliation uses grouped Donation aggregates plus a set-based latest-gift
+lookup that preserves `date desc, modified desc`. It compares the desired values
+with stored Donor/Major Gift fields and sends only changed rows through chunked
+`frappe.db.bulk_update`; the single-record hook APIs remain the synchronous path
+for individual Donation changes.
 
 Non Profit Settings → **Major Gifts** adds `major_donor_threshold` (auto-flag).
 `stale_interaction_days` and `lapsed_major_months` are reserved — defined but

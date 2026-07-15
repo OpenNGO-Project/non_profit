@@ -2,6 +2,8 @@
 # For license information, please see license.txt
 
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, getdate, nowdate
@@ -77,6 +79,24 @@ class TestMajorGift(IntegrationTestCase):
 		self._donation(donor=donor.name, amount=1500)
 		donor.reload()
 		self.assertTrue(donor.is_major_donor)
+
+	def test_all_record_reconciliation_has_bounded_query_count_and_skips_unchanged_rows(self) -> None:
+		from non_profit.non_profit.major_gifts import reconcile_fundraising_rollups
+
+		donor = self._donor()
+		self._donation(donor=donor.name, amount=250)
+		gift = self._major_gift(stage="Solicitation", ask_amount=1000)
+		self._donation(donor=gift.donor, amount=400, major_gift=gift.name)
+		reconcile_fundraising_rollups()
+		donor_modified = frappe.db.get_value("Donor", donor.name, "modified")
+		gift_modified = frappe.db.get_value("Major Gift", gift.name, "modified")
+
+		with patch.object(frappe.db, "sql", wraps=frappe.db.sql) as sql:
+			reconcile_fundraising_rollups()
+
+		self.assertLessEqual(sql.call_count, 6)
+		self.assertEqual(frappe.db.get_value("Donor", donor.name, "modified"), donor_modified)
+		self.assertEqual(frappe.db.get_value("Major Gift", gift.name, "modified"), gift_modified)
 
 	def test_set_next_action_creates_links_and_assigns_task(self) -> None:
 		from non_profit.non_profit.next_actions import set_next_action

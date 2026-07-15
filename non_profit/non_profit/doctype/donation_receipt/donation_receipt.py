@@ -3,7 +3,6 @@ from typing import Any
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.query_builder.functions import GroupConcat
 from frappe.utils import flt, getdate, nowdate
 
 from non_profit.non_profit.doctype.donor.donor import get_donor_email
@@ -15,23 +14,37 @@ class DonationReceipt(Document):
 	def validate(self):
 		if self.donor:
 			self.email = get_donor_email(self.donor) or self.email
-		self._fill_donation_rows()
+		preloaded_context = self.flags.pop("donation_receipt_context_for_validate", None)
+		self.flags.pop("donation_receipt_context", None)
+		if preloaded_context:
+			donation_names = tuple(row.donation for row in self.donations or [] if row.donation)
+			self.flags.donation_receipt_context = {
+				"signature": (donation_names, self.name),
+				"context": preloaded_context,
+			}
+		self._fill_donation_rows(self._get_donation_context())
 		self._compute_total()
 		if self.fiscal_year and not self.period_from:
 			fy = frappe.get_doc("Fiscal Year", self.fiscal_year)
 			self.period_from = fy.year_start_date
 			self.period_to = fy.year_end_date
 
-	def _fill_donation_rows(self):
+	def _get_donation_context(self) -> dict[str, Any]:
+		donation_names = tuple(row.donation for row in self.donations or [] if row.donation)
+		signature = (donation_names, self.name)
+		cached = self.flags.get("donation_receipt_context")
+		if cached and cached["signature"] == signature:
+			return cached["context"]
+
+		context = _load_donation_receipt_context(list(donation_names), current_receipt=self.name)
+		self.flags.donation_receipt_context = {"signature": signature, "context": context}
+		return context
+
+	def _fill_donation_rows(self, context: dict[str, Any]):
 		for row in self.donations or []:
 			if not row.donation:
 				continue
-			donation = frappe.db.get_value(
-				"Donation",
-				row.donation,
-				["date", "amount"],
-				as_dict=True,
-			)
+			donation = context["donations"].get(row.donation)
 			if not donation:
 				continue
 			row.donation_date = donation.date
@@ -59,17 +72,13 @@ class DonationReceipt(Document):
 
 		period_from = getdate(self.period_from) if self.period_from else None
 		period_to = getdate(self.period_to) if self.period_to else None
+		context = self._get_donation_context()
 		seen = set()
 		for donation_name in donation_names:
 			if donation_name in seen:
 				frappe.throw(_("Donation {0} is listed more than once.").format(frappe.bold(donation_name)))
 			seen.add(donation_name)
-			donation = frappe.db.get_value(
-				"Donation",
-				donation_name,
-				["donor", "docstatus", "paid", "date", "receipt"],
-				as_dict=True,
-			)
+			donation = context["donations"].get(donation_name)
 			if not donation:
 				frappe.throw(_("Donation {0} does not exist.").format(frappe.bold(donation_name)))
 			if donation.donor != self.donor:
@@ -89,7 +98,7 @@ class DonationReceipt(Document):
 				)
 			if donation.receipt and donation.receipt != self.name:
 				frappe.throw(_("Donation {0} already has a receipt.").format(frappe.bold(donation_name)))
-			other_receipt = _active_receipt_for_donation(donation_name, self.name)
+			other_receipt = context["active_receipts"].get(donation_name)
 			if other_receipt:
 				frappe.throw(
 					_("Donation {0} is already linked to receipt {1}.").format(
@@ -98,15 +107,20 @@ class DonationReceipt(Document):
 				)
 
 	def _mark_donations(self):
-		for row in self.donations or []:
-			if row.donation:
-				frappe.db.set_value("Donation", row.donation, "receipt", self.name)
+		donation_names = list({row.donation for row in self.donations or [] if row.donation})
+		if donation_names:
+			frappe.db.set_value("Donation", {"name": ["in", donation_names]}, "receipt", self.name)
 
 	def on_cancel(self):
 		self.status = "Cancelled"
-		for row in self.donations or []:
-			if row.donation and frappe.db.get_value("Donation", row.donation, "receipt") == self.name:
-				frappe.db.set_value("Donation", row.donation, "receipt", None)
+		donation_names = list({row.donation for row in self.donations or [] if row.donation})
+		if donation_names:
+			frappe.db.set_value(
+				"Donation",
+				{"name": ["in", donation_names], "receipt": self.name},
+				"receipt",
+				None,
+			)
 
 	@frappe.whitelist()
 	def send_to_donor(self) -> bool:
@@ -138,42 +152,50 @@ def generate_yearly_receipts(
 	country = country or _default_receipt_country()
 	fy = frappe.get_doc("Fiscal Year", fiscal_year)
 	start, end = fy.year_start_date, fy.year_end_date
-	donation = frappe.qb.DocType("Donation")
-	rows = (
-		frappe.qb.from_(donation)
-		.select(
-			donation.donor,
-			GroupConcat(donation.name).as_("donation_names"),
-		)
-		.where(donation.docstatus == 1)
-		.where(donation.paid == 1)
-		.where((donation.date >= start) & (donation.date <= end))
-		.where(donation.donor.isnotnull())
-		.where((donation.receipt.isnull()) | (donation.receipt == ""))
-		.groupby(donation.donor)
-	).run(as_dict=True)
+	context = _load_donation_receipt_context(
+		filters={
+			"docstatus": 1,
+			"paid": 1,
+			"date": ["between", [start, end]],
+			"donor": ["is", "set"],
+		},
+		or_filters=[
+			["Donation", "receipt", "is", "not set"],
+			["Donation", "receipt", "=", ""],
+		],
+		order_by="donor asc, date asc, creation asc",
+	)
+	donations_by_donor: dict[str, list[frappe._dict]] = {}
+	for donation in context["donations"].values():
+		if donation.name not in context["active_receipts"]:
+			donations_by_donor.setdefault(donation.donor, []).append(donation)
+
 	created = []
-	for row in rows:
-		if not row.donor:
-			continue
-		donation_names = [n for n in (row.donation_names or "").split(",") if n]
-		linked_donations = _donations_linked_to_active_receipts(donation_names)
-		donation_names = [name for name in donation_names if name not in linked_donations]
-		if not donation_names:
-			continue
+	for donor, donations in donations_by_donor.items():
 		receipt = frappe.get_doc(
 			{
 				"doctype": "Donation Receipt",
-				"donor": row.donor,
+				"donor": donor,
 				"fiscal_year": fiscal_year,
 				"period_from": start,
 				"period_to": end,
 				"country": country,
 				"language": language,
-				"donations": [_donation_receipt_row(n) for n in donation_names],
+				"donations": [
+					{
+						"donation": donation.name,
+						"donation_date": donation.date,
+						"amount": donation.amount,
+					}
+					for donation in donations
+				],
 			}
 		)
 		receipt.flags.ignore_permissions = True
+		receipt.flags.donation_receipt_context_for_validate = {
+			"donations": {donation.name: donation for donation in donations},
+			"active_receipts": {},
+		}
 		receipt.insert()
 		created.append(receipt.name)
 	return {"created": len(created), "receipts": created}
@@ -192,8 +214,7 @@ def get_donations_for_selected_year(fiscal_year: str, donor: str) -> dict[str, A
 	frappe.has_permission("Donation", "read", throw=True)
 
 	fy = frappe.get_doc("Fiscal Year", fiscal_year)
-	donations = frappe.get_list(
-		"Donation",
+	context = _load_donation_receipt_context(
 		filters={
 			"docstatus": 1,
 			"paid": 1,
@@ -206,82 +227,105 @@ def get_donations_for_selected_year(fiscal_year: str, donor: str) -> dict[str, A
 		],
 		fields=["name", "date", "amount"],
 		order_by="date asc, creation asc",
-		limit_page_length=0,
+		permission_aware=True,
 	)
-	linked_donations = _donations_linked_to_active_receipts([donation.name for donation in donations])
 	rows = [
 		{
 			"donation": donation.name,
 			"donation_date": donation.date,
 			"amount": donation.amount,
 		}
-		for donation in donations
-		if donation.name not in linked_donations
+		for donation in context["donations"].values()
+		if donation.name not in context["active_receipts"]
 	]
 	return {"count": len(rows), "donations": rows}
 
 
 def _active_receipt_for_donation(donation_name: str, current_receipt: str | None = None) -> str | None:
-	receipt_names = frappe.get_all(
-		"Donation Receipt Item",
-		filters={
-			"donation": donation_name,
-			"parenttype": "Donation Receipt",
-			"parent": ["!=", current_receipt or ""],
-		},
-		pluck="parent",
-	)
-	if not receipt_names:
-		return None
-	return frappe.db.get_value(
-		"Donation Receipt",
-		{"name": ["in", receipt_names], "docstatus": ["<", 2]},
-		"name",
-	)
+	return _active_receipts_by_donation([donation_name], current_receipt).get(donation_name)
 
 
 def _donations_linked_to_active_receipts(donation_names: list[str]) -> set[str]:
-	donation_names = [name for name in donation_names if name]
-	if not donation_names:
-		return set()
-	rows = frappe.get_all(
-		"Donation Receipt Item",
-		filters={
-			"donation": ["in", donation_names],
-			"parenttype": "Donation Receipt",
-		},
-		fields=["donation", "parent"],
-		limit_page_length=0,
-	)
-	receipt_names = sorted({row.parent for row in rows if row.parent})
-	if not receipt_names:
-		return set()
-	active_receipts = set(
-		frappe.get_all(
-			"Donation Receipt",
-			filters={"name": ["in", receipt_names], "docstatus": ["<", 2]},
-			pluck="name",
-			limit_page_length=0,
-		)
-	)
-	return {row.donation for row in rows if row.parent in active_receipts}
+	return set(_active_receipts_by_donation(donation_names))
 
 
 def _donation_receipt_row(donation_name: str) -> dict[str, Any]:
-	donation = (
-		frappe.db.get_value(
-			"Donation",
-			donation_name,
-			["date", "amount"],
-			as_dict=True,
-		)
-		or {}
-	)
+	donation = _load_donation_receipt_context([donation_name])["donations"].get(donation_name) or {}
 	return {
 		"donation": donation_name,
 		"donation_date": donation.get("date"),
 		"amount": donation.get("amount"),
 	}
+
+
+def _load_donation_receipt_context(
+	donation_names: list[str] | None = None,
+	*,
+	filters: dict[str, Any] | None = None,
+	or_filters: list[list[Any]] | None = None,
+	fields: list[str] | None = None,
+	order_by: str | None = None,
+	current_receipt: str | None = None,
+	permission_aware: bool = False,
+) -> dict[str, Any]:
+	donation_names = list(dict.fromkeys(name for name in donation_names or [] if name))
+	if donation_names == [] and filters is None:
+		return {"donations": {}, "active_receipts": {}}
+
+	donation_filters = dict(filters or {})
+	if donation_names:
+		donation_filters["name"] = ["in", donation_names]
+	donation_fields = list(
+		dict.fromkeys(
+			fields or ["name", "donor", "docstatus", "paid", "date", "amount", "receipt", "creation"]
+		)
+	)
+	for required_field in ("name", "donor", "docstatus", "paid", "date", "amount", "receipt"):
+		if required_field not in donation_fields:
+			donation_fields.append(required_field)
+
+	get_rows = frappe.get_list if permission_aware else frappe.get_all
+	rows = get_rows(
+		"Donation",
+		filters=donation_filters,
+		or_filters=or_filters,
+		fields=donation_fields,
+		order_by=order_by,
+		limit_page_length=0,
+	)
+	donations = {row.name: row for row in rows}
+	return {
+		"donations": donations,
+		"active_receipts": _active_receipts_by_donation(list(donations), current_receipt),
+	}
+
+
+def _active_receipts_by_donation(
+	donation_names: list[str], current_receipt: str | None = None
+) -> dict[str, str]:
+	donation_names = list(dict.fromkeys(name for name in donation_names if name))
+	if not donation_names:
+		return {}
+
+	item = frappe.qb.DocType("Donation Receipt Item")
+	receipt = frappe.qb.DocType("Donation Receipt")
+	query = (
+		frappe.qb.from_(item)
+		.inner_join(receipt)
+		.on(receipt.name == item.parent)
+		.select(item.donation, item.parent)
+		.where(item.parenttype == "Donation Receipt")
+		.where(item.donation.isin(donation_names))
+		.where(receipt.docstatus < 2)
+		.orderby(item.parent)
+	)
+	if current_receipt:
+		query = query.where(item.parent != current_receipt)
+
+	active_receipts: dict[str, str] = {}
+	for row in query.run(as_dict=True):
+		active_receipts.setdefault(row.donation, row.parent)
+	return active_receipts
 
 
 def _default_receipt_country() -> str:

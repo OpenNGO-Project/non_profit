@@ -88,7 +88,9 @@ receipt, use **Actions → Spenden aus Geschäftsjahr hinzufügen** after choosi
 Donor and Fiscal Year to populate all unreceipted paid Donations from that year.
 Submitting a receipt validates that every row is paid, submitted, in the selected
 period, belongs to the receipt Donor, and is not already attached to another
-active receipt.
+active receipt. Large yearly runs load eligible Donations and active receipt
+ownership in batches; the operator workflow and all validation rules are the
+same as for an individual receipt.
 
 When a payment gateway authorizes a Donation, `Donation.on_payment_authorized()`
 marks the Donation paid and, when enabled, creates the configured automatic
@@ -228,6 +230,11 @@ update automatically when you complete or reschedule that Task (mark the Task
 All linked Tasks are listed under the form's **Connections** tab. A next action
 added on a Donor Interaction that belongs to a Major Gift also shows on that
 gift. Requires write access to the gift/interaction (Non Profit Manager).
+
+The daily fundraising reconciliation repairs Donor giving summaries and Major
+Gift closed amounts from submitted, paid Donations. It processes all records in
+grouped batches and writes only changed summaries; the fields and latest-gift
+policy shown to operators are unchanged.
 
 ## Smoke Checks
 

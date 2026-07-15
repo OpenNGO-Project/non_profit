@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -198,6 +200,23 @@ class TestDonationReceipt(FrappeTestCase):
 
 		self.assertGreaterEqual(first["created"], 1)
 		self.assertEqual(second["created"], 0)
+
+	def test_bulk_context_query_count_does_not_scale_with_donation_rows(self) -> None:
+		from non_profit.non_profit.doctype.donation_receipt.donation_receipt import (
+			_load_donation_receipt_context,
+		)
+
+		donor = self._donor()
+		fiscal_year = self._fiscal_year()
+		if not fiscal_year:
+			self.skipTest("No active Fiscal Year configured")
+		donations = [self._donation(donor, fiscal_year, amount=amount) for amount in (10, 20, 30)]
+
+		with patch.object(frappe.db, "sql", wraps=frappe.db.sql) as sql:
+			context = _load_donation_receipt_context([donation.name for donation in donations])
+
+		self.assertEqual(set(context["donations"]), {donation.name for donation in donations})
+		self.assertLessEqual(sql.call_count, 2)
 
 	def _donor(self):
 		donor_type = self._donor_type()
