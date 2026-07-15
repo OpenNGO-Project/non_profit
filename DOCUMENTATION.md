@@ -137,6 +137,16 @@ installs have the newer `Donor.customer` column before it queries donor rows;
 `backfill_donor_customers(limit=None)` remains available for explicit repair
 runs.
 
+`non_profit.non_profit.donor_identity.resolve_donor_customer_identity()` is the
+policy-capable orchestration service for public/presentation callers. Non Profit
+owns email normalization, Member-aware Customer lookup, Donor/Customer linking,
+and Contact/Address continuity; callers provide only presentation values,
+existing-Donor handling, insertion strategy, and ambiguity policy. Good NPO uses
+safe rejection: when more than one Donor or Customer resolves to an email, staff
+must resolve the identity instead of a guest request choosing one arbitrarily.
+The older `find_donor_by_email()` and `get_or_create_customer_for_donor()`
+dotted paths remain supported.
+
 Desk creation helpers for Member, Donor, and Sponsor accept Contact-only,
 Customer-only, or Contact+Customer selections. The Member list uses Frappe's
 native `listview_settings.primary_action` hook to open its combined Member and
@@ -157,11 +167,15 @@ linking a Customer.
 
 `Donation.thank_you_sent` is a standard field on Donation for **Verdankungen**. `Donation.send_thank_you()` queues the configured Email Template, stores `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` when available, and marks this field once the email is queued. Presentation apps such as `ilanga_app` and `good_npo` read this field for pending thank-you queues. `Donation.receipt` remains reserved for **Donation Receipt** / **Spendenbescheinigung** tax certificates, so an immediate thank-you must not populate it.
 
-`Donation.on_payment_authorized()` temporarily sets `paid = 1`, then creates the
+`Donation.on_payment_authorized()` is the authoritative payment state machine.
+It ignores statuses other than `Authorized` / `Completed`, temporarily sets
+`paid = 1`, then creates the
 configured Payment Entry when automatic creation is enabled. If Payment Entry
 creation or submission fails, the base controller resets `paid`, logs the
-accounting error, and raises; thank-you dispatch therefore runs only after the
-enabled accounting step succeeds in this app.
+accounting error, and raises. Only after accounting succeeds does it call the
+narrow `_dispatch_payment_thank_you()` policy seam; presentation extensions may
+replace the message policy but do not override settlement. Donation itself owns
+all `thank_you_sent*` audit writes through `_mark_thank_you_sent()`.
 The `Payment Entry` override also syncs Donation references. Reference details
 and the Create Payment Entry helper expose only the Donation amount not already
 allocated by submitted Payment Entries. A fully allocated Donation cannot create
@@ -266,6 +280,14 @@ The legacy manual `Membership.generate_invoice()` path requires the legacy
 `Membership.invoice` link field and is not exposed when that field is absent.
 Current app-specific membership billing should link Sales Invoices through the
 presentation app's own fields, for example `Sales Invoice.good_npo_membership`.
+Legacy Membership invoice/Payment Entry implementations and Donation
+gateway-object helpers now live in `non_profit.non_profit.legacy_payments`.
+Their historical controller/module dotted paths remain thin compatibility
+facades and emit warnings through the `non_profit.compatibility` logger. Do not
+remove those facades earlier than 90 days after warning telemetry is deployed,
+and then only after one complete release cycle reports zero calls. New
+integrations must use current Sales Invoice, Subscription, Payment Entry, and
+Donation authorization services.
 The Contact/Customer dialog and helper accept Contact, Customer, or both, create
 or reuse the Member first, link the Contact to both Member and Customer when both
 are selected, then create or reuse an open-ended Membership for the selected

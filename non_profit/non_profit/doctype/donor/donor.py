@@ -182,7 +182,12 @@ def get_or_create_donor_for_contact(
 	return donor
 
 
-def get_or_create_customer_for_donor(donor, email: str | None = None) -> str:
+def get_or_create_customer_for_donor(
+	donor,
+	email: str | None = None,
+	*,
+	customer_values_provider=None,
+) -> str:
 	if isinstance(donor, str):
 		donor = frappe.get_doc("Donor", donor)
 	email = _normalize_email(email, validate=True) or _legacy_donor_email(donor)
@@ -193,7 +198,7 @@ def get_or_create_customer_for_donor(donor, email: str | None = None) -> str:
 
 	customer = _customer_for_email(email)
 	if not customer:
-		customer = _create_customer_for_donor(donor)
+		customer = _create_customer_for_donor(donor, values_provider=customer_values_provider)
 
 	if donor.get("customer") != customer:
 		frappe.db.set_value("Donor", donor.name, "customer", customer, update_modified=False)
@@ -204,16 +209,40 @@ def get_or_create_customer_for_donor(donor, email: str | None = None) -> str:
 
 
 def find_donor_by_email(email: str | None) -> str | None:
+	donors = find_donors_by_email(email)
+	return donors[0] if donors else None
+
+
+def find_donors_by_email(email: str | None) -> list[str]:
+	donors, _customers = find_donor_customer_candidates(email)
+	return donors
+
+
+def find_donor_customer_candidates(email: str | None) -> tuple[list[str], list[str]]:
 	email = _normalize_email(email, validate=True)
 	if not email:
-		return None
+		return [], []
 
-	for customer in _customers_for_email(email):
-		donor = frappe.db.get_value("Donor", {"customer": customer}, "name", order_by="modified desc")
-		if donor:
-			return donor
+	customers = _customers_for_email(email)
+	donor_rows = (
+		frappe.get_all(
+			"Donor",
+			filters={"customer": ["in", customers]},
+			fields=["name", "customer"],
+			order_by="modified desc",
+		)
+		if customers
+		else []
+	)
+	donors_by_customer = {}
+	for row in donor_rows:
+		donors_by_customer.setdefault(row.customer, []).append(row.name)
+	donors = [donor for customer in customers for donor in donors_by_customer.get(customer, [])]
 
-	return _legacy_donor_name_for_email(email)
+	for legacy_donor in _legacy_donor_names_for_email(email):
+		if legacy_donor not in donors:
+			donors.append(legacy_donor)
+	return donors, customers
 
 
 def get_donor_email(donor) -> str | None:
@@ -277,7 +306,11 @@ def _customers_for_email(email: str | None) -> list[str]:
 			order_by="modified desc",
 		)
 		for member in members:
-			if member.customer and frappe.db.exists("Customer", member.customer):
+			if (
+				member.customer
+				and member.customer not in seen
+				and frappe.db.exists("Customer", member.customer)
+			):
 				customers.append(member.customer)
 				seen.add(member.customer)
 
@@ -323,18 +356,28 @@ def _legacy_donor_email(donor) -> str | None:
 	return _normalize_email(value)
 
 
-def _legacy_donor_name_for_email(email: str) -> str | None:
+def _legacy_donor_names_for_email(email: str) -> list[str]:
 	if not frappe.db.has_column("Donor", "email"):
-		return None
-	return frappe.db.get_value("Donor", {"email": email}, "name", order_by="modified desc")
+		return []
+	return frappe.get_all(
+		"Donor",
+		filters={"email": email},
+		pluck="name",
+		order_by="modified desc",
+	)
 
 
-def _create_customer_for_donor(donor) -> str:
-	customer = frappe.new_doc("Customer")
-	customer.customer_name = donor.donor_name
-	customer.customer_type = "Individual"
-	customer.customer_group = _default_customer_group()
-	customer.territory = _default_territory()
+def _create_customer_for_donor(donor, *, values_provider=None) -> str:
+	values = {
+		"doctype": "Customer",
+		"customer_name": donor.donor_name,
+		"customer_type": "Individual",
+		"customer_group": _default_customer_group(),
+		"territory": _default_territory(),
+	}
+	if values_provider and (provided := values_provider(dict(values))):
+		values.update(provided)
+	customer = frappe.get_doc(values)
 	customer.flags.ignore_mandatory = True
 	customer.insert(ignore_permissions=True)
 	return customer.name

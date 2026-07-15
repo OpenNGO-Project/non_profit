@@ -2,6 +2,7 @@
 # See license.txt
 
 import unittest
+from unittest.mock import patch
 
 import erpnext
 import frappe
@@ -228,10 +229,50 @@ class TestMembership(FrappeTestCase):
 		self.assertIn('frappe.meta.has_field(frm.doctype, "invoice")', membership_script)
 
 		membership = make_membership(self.member)
-		with self.assertRaises(frappe.ValidationError) as error:
-			membership.generate_invoice(save=True)
+		with patch("non_profit.non_profit.legacy_payments.frappe.logger") as logger:
+			with self.assertRaises(frappe.ValidationError) as error:
+				membership.generate_invoice(save=True)
 
 		self.assertIn("Membership invoice generation is not available", str(error.exception))
+		logger.return_value.warning.assert_called_once()
+
+	def test_legacy_private_invoice_facade_logs_and_delegates(self):
+		membership = make_membership(self.member)
+		invoice = object()
+		with (
+			patch(
+				"non_profit.non_profit.legacy_payments.generate_membership_invoice",
+				return_value=invoice,
+			) as generate_invoice,
+			patch("non_profit.non_profit.legacy_payments.log_legacy_payment_usage") as log_usage,
+		):
+			result = membership._generate_invoice(save=False, with_payment_entry=True)
+
+		self.assertIs(result, invoice)
+		generate_invoice.assert_called_once_with(membership, save=False, with_payment_entry=True)
+		log_usage.assert_called_once_with(
+			"non_profit.non_profit.doctype.membership.membership.Membership._generate_invoice",
+			membership.name,
+		)
+
+	def test_legacy_payment_entry_restores_account_permission_flag_on_failure(self):
+		from non_profit.non_profit.legacy_payments import make_membership_payment_entry
+
+		membership = make_membership(self.member)
+		settings = frappe._dict(membership_payment_account="Legacy Cash")
+		invoice = frappe._dict(name="SINV-LEGACY", grand_total=100)
+		original_flag = getattr(frappe.flags, "ignore_account_permission", False)
+		frappe.flags.ignore_account_permission = False
+		try:
+			with patch(
+				"erpnext.accounts.doctype.payment_entry.payment_entry.get_payment_entry",
+				side_effect=RuntimeError("legacy payment failure"),
+			):
+				with self.assertRaises(RuntimeError):
+					make_membership_payment_entry(membership, settings, invoice)
+			self.assertFalse(frappe.flags.ignore_account_permission)
+		finally:
+			frappe.flags.ignore_account_permission = original_flag
 
 	def test_ensure_membership_subscription_creates_open_ended_subscription(self):
 		from non_profit.non_profit.membership_subscription import (

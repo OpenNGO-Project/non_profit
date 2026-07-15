@@ -70,6 +70,12 @@ snapshot for operations and correspondence. For existing records, run
 `non_profit.non_profit.doctype.donor.donor.backfill_donor_customers` with
 `bench execute` when you intentionally want to create/link Customers for older
 Donors.
+Public/presentation integrations should resolve a Donor and linked Customer
+through
+`non_profit.non_profit.donor_identity.resolve_donor_customer_identity()` rather
+than copying email lookup and Customer creation. Use
+`ambiguous_email_policy="reject"` for guest-facing flows so duplicate Donor or
+Customer identities are sent to staff review instead of being merged arbitrarily.
 Use the Frappe **Language** selector for Donor preferred language and Donation
 Receipt language. The saved value is still the language code, for example `de`
 or `en`, but operators get the standard enabled-language lookup.
@@ -96,7 +102,16 @@ When a payment gateway authorizes a Donation, `Donation.on_payment_authorized()`
 marks the Donation paid and, when enabled, creates the configured automatic
 Payment Entry. If Payment Entry creation or submission fails, the base
 `non_profit` controller resets the paid flag, logs the error, and raises; it does
-not send the thank-you from that failed authorization attempt.
+not send the thank-you from that failed authorization attempt. Presentation apps
+customize only the post-accounting thank-you dispatch seam; they do not replace
+the settlement state machine or the Donation-owned thank-you audit write.
+
+Legacy `Membership.generate_invoice()` / Membership Payment Entry methods and
+Donation gateway-object helpers remain callable for compatibility, but every use
+is written to the `non_profit.compatibility` logger. Treat those warnings as the
+telemetry for migration planning; do not build new callers on these methods.
+Compatibility facades remain for at least 90 days after telemetry deployment
+and one complete release cycle with zero calls before removal is considered.
 
 When an operator uses **Create Payment Entry** from a submitted unpaid Donation,
 the draft shows only the amount left after submitted allocations. A second

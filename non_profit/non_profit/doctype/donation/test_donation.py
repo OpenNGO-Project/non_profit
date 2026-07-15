@@ -123,7 +123,7 @@ class TestDonation(unittest.TestCase):
 		self.assertFalse(donation.reconciled_on)
 		self.assertFalse(donation.reconciled_payment_entry)
 
-	def test_payment_authorization_keeps_paid_state_when_payment_entry_fails(self):
+	def test_payment_authorization_reverts_paid_state_when_payment_entry_fails(self):
 		donor = create_donor()
 		donation = frappe.get_doc(
 			{
@@ -151,6 +151,54 @@ class TestDonation(unittest.TestCase):
 		donation.reload()
 		self.assertEqual(donation.paid, 0)
 		log_error.assert_called()
+
+	def test_payment_authorization_keeps_base_accounting_and_dispatch_order(self):
+		donation = frappe.new_doc("Donation")
+		calls = []
+		with (
+			patch.object(donation, "db_set") as db_set,
+			patch.object(donation, "load_from_db"),
+			patch.object(donation, "create_payment_entry", side_effect=lambda: calls.append("accounting")),
+			patch.object(
+				donation,
+				"_dispatch_payment_thank_you",
+				side_effect=lambda: calls.append("thank_you"),
+			),
+			patch(
+				"non_profit.non_profit.major_gifts.on_donation_change",
+				side_effect=lambda _donation: calls.append("rollup"),
+			),
+		):
+			donation.on_payment_authorized("Completed")
+
+		self.assertEqual(calls, ["accounting", "thank_you", "rollup"])
+		db_set.assert_called_once_with("paid", 1)
+
+	def test_unsuccessful_payment_status_does_not_change_donation(self):
+		donation = frappe.new_doc("Donation")
+		with (
+			patch.object(donation, "db_set") as db_set,
+			patch.object(donation, "create_payment_entry") as create_payment_entry,
+		):
+			donation.on_payment_authorized("Failed")
+
+		db_set.assert_not_called()
+		create_payment_entry.assert_not_called()
+
+	def test_legacy_mode_of_payment_facade_logs_and_preserves_none_return(self):
+		from non_profit.non_profit.doctype.donation.donation import create_mode_of_payment
+
+		with (
+			patch("non_profit.non_profit.legacy_payments.create_gateway_mode_of_payment") as create,
+			patch("non_profit.non_profit.legacy_payments.log_legacy_payment_usage") as log_usage,
+		):
+			result = create_mode_of_payment("Legacy Card")
+
+		self.assertIsNone(result)
+		create.assert_called_once_with("Legacy Card")
+		log_usage.assert_called_once_with(
+			"non_profit.non_profit.doctype.donation.donation.create_mode_of_payment"
+		)
 
 	def test_payment_entry_restores_account_permission_flag_on_failure(self):
 		donor = create_donor()

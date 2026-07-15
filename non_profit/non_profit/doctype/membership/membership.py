@@ -71,105 +71,69 @@ class Membership(Document):
 				self.to_date = add_months(self.from_date, 1)
 
 	def on_payment_authorized(self, status_changed_to=None):
-		if status_changed_to not in ("Completed", "Authorized"):
-			return
-		self.load_from_db()
-		# `paid` column was dropped in the B2B/B2C schema refactor (a58cc79);
-		# payment state lives on the linked Sales Invoice now.
-		settings = frappe.get_doc("Non Profit Settings")
-		if (
-			self.meta.has_field("invoice")
-			and settings.allow_invoicing
-			and settings.automate_membership_invoicing
-		):
-			self._generate_invoice(
-				with_payment_entry=settings.automate_membership_payment_entries,
-				save=True,
-			)
+		from non_profit.non_profit.legacy_payments import (
+			authorize_membership_payment,
+			log_legacy_payment_usage,
+		)
+
+		log_legacy_payment_usage(
+			"non_profit.non_profit.doctype.membership.membership.Membership.on_payment_authorized",
+			self.name,
+		)
+		return authorize_membership_payment(self, status_changed_to)
 
 	@frappe.whitelist()
 	def generate_invoice(self, save: bool = True, with_payment_entry: bool = False) -> Any:
 		# run_doc_method only enforces read permission; creating and
 		# submitting a Sales Invoice is a write-level action.
 		self.check_permission("write")
-		return self._generate_invoice(save=save, with_payment_entry=with_payment_entry)
-
-	def _generate_invoice(self, save: bool = True, with_payment_entry: bool = False) -> Any:
-		if not self.meta.has_field("invoice"):
-			frappe.throw(
-				_(
-					"Membership invoice generation is not available on this site. "
-					"Use the Sales Invoice membership workflow instead."
-				)
-			)
-
-		if not (self.currency or self.amount):
-			frappe.throw(
-				_("The payment for this membership is not paid. To generate invoice fill the payment details")
-			)
-
-		if self.get("invoice"):
-			frappe.throw(_("An invoice is already linked to this document"))
-
-		member = frappe.get_doc("Member", self.member)
-		if not member.customer:
-			frappe.throw(_("No customer linked to member {0}").format(frappe.bold(self.member)))
-
-		plan = frappe.get_doc("Membership Type", self.membership_type)
-		settings = frappe.get_doc("Non Profit Settings")
-		self.validate_membership_type_and_settings(plan, settings)
-
-		invoice = make_invoice(self, member, plan, settings)
-		self.reload()
-		self.set("invoice", invoice.name)
-
-		if with_payment_entry:
-			self.make_payment_entry(settings, invoice)
-
-		if save:
-			self.save()
-
-		return invoice
-
-	def validate_membership_type_and_settings(self, plan, settings):
-		settings_link = get_link_to_form("Non Profit Settings", "Non Profit Settings")
-
-		if not settings.membership_debit_account:
-			frappe.throw(_("You need to set <b>Debit Account</b> in {0}").format(settings_link))
-
-		if not settings.company:
-			frappe.throw(
-				_("You need to set <b>Default Company</b> for invoicing in {0}").format(settings_link)
-			)
-
-		if not plan.linked_item:
-			frappe.throw(
-				_("Please set a Linked Item for the Membership Type {0}").format(
-					get_link_to_form("Membership Type", self.membership_type)
-				)
-			)
-
-	def make_payment_entry(self, settings, invoice):
-		if not settings.membership_payment_account:
-			frappe.throw(
-				_("You need to set <b>Payment Account</b> for Membership in {0}").format(
-					get_link_to_form("Non Profit Settings", "Non Profit Settings")
-				)
-			)
-
-		from erpnext.accounts.doctype.payment_entry.payment_entry import (
-			get_payment_entry,
+		from non_profit.non_profit.legacy_payments import (
+			generate_membership_invoice,
+			log_legacy_payment_usage,
 		)
 
-		frappe.flags.ignore_account_permission = True
-		pe = get_payment_entry(dt="Sales Invoice", dn=invoice.name, bank_amount=invoice.grand_total)
-		frappe.flags.ignore_account_permission = False
-		pe.paid_to = settings.membership_payment_account
-		pe.reference_no = self.name
-		pe.reference_date = getdate()
-		pe.flags.ignore_mandatory = True
-		pe.save()
-		pe.submit()
+		log_legacy_payment_usage(
+			"non_profit.non_profit.doctype.membership.membership.Membership.generate_invoice",
+			self.name,
+		)
+		return generate_membership_invoice(self, save=save, with_payment_entry=with_payment_entry)
+
+	def _generate_invoice(self, save: bool = True, with_payment_entry: bool = False) -> Any:
+		from non_profit.non_profit.legacy_payments import (
+			generate_membership_invoice,
+			log_legacy_payment_usage,
+		)
+
+		log_legacy_payment_usage(
+			"non_profit.non_profit.doctype.membership.membership.Membership._generate_invoice",
+			self.name,
+		)
+		return generate_membership_invoice(self, save=save, with_payment_entry=with_payment_entry)
+
+	def validate_membership_type_and_settings(self, plan, settings):
+		from non_profit.non_profit.legacy_payments import (
+			log_legacy_payment_usage,
+			validate_membership_invoice_settings,
+		)
+
+		log_legacy_payment_usage(
+			"non_profit.non_profit.doctype.membership.membership."
+			"Membership.validate_membership_type_and_settings",
+			self.name,
+		)
+		return validate_membership_invoice_settings(self, plan, settings)
+
+	def make_payment_entry(self, settings, invoice):
+		from non_profit.non_profit.legacy_payments import (
+			log_legacy_payment_usage,
+			make_membership_payment_entry,
+		)
+
+		log_legacy_payment_usage(
+			"non_profit.non_profit.doctype.membership.membership.Membership.make_payment_entry",
+			self.name,
+		)
+		return make_membership_payment_entry(self, settings, invoice)
 
 	@frappe.whitelist()
 	def send_acknowlement(self) -> None:
@@ -234,29 +198,30 @@ class Membership(Document):
 			frappe.sendmail(**email_args)
 
 	def generate_and_send_invoice(self):
-		self._generate_invoice(save=False)
+		from non_profit.non_profit.legacy_payments import (
+			generate_membership_invoice,
+			log_legacy_payment_usage,
+		)
+
+		log_legacy_payment_usage(
+			"non_profit.non_profit.doctype.membership.membership.Membership.generate_and_send_invoice",
+			self.name,
+		)
+		generate_membership_invoice(self, save=False)
 		self._send_acknowlement()
 
 
 def make_invoice(membership, member, plan, settings):
-	invoice = frappe.get_doc(
-		{
-			"doctype": "Sales Invoice",
-			"customer": member.customer,
-			"debit_to": settings.membership_debit_account,
-			"currency": membership.currency,
-			"company": settings.company,
-			"is_pos": 0,
-			"items": [{"item_code": plan.linked_item, "rate": membership.amount, "qty": 1}],
-		}
+	from non_profit.non_profit.legacy_payments import (
+		log_legacy_payment_usage,
+		make_membership_invoice,
 	)
-	invoice.set_missing_values()
-	invoice.insert()
-	invoice.submit()
 
-	frappe.msgprint(_("Sales Invoice created successfully"))
-
-	return invoice
+	log_legacy_payment_usage(
+		"non_profit.non_profit.doctype.membership.membership.make_invoice",
+		membership.name,
+	)
+	return make_membership_invoice(membership, member, plan, settings)
 
 
 def get_company_for_memberships():

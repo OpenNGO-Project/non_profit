@@ -84,6 +84,96 @@ class TestDonor(FrappeTestCase):
 		donor.reload()
 		self.assertEqual(donor.customer, customer.name)
 
+	def test_policy_identity_service_rejects_ambiguous_donor_email(self) -> None:
+		from non_profit.non_profit.donor_identity import resolve_donor_customer_identity
+
+		email = f"ambiguous-donor-{frappe.generate_hash(length=8)}@example.org"
+		donor_type = self._donor_type()
+		for suffix in ("One", "Two"):
+			customer = self._customer(f"Ambiguous Donor {suffix}")
+			frappe.db.set_value("Customer", customer.name, "email_id", email, update_modified=False)
+			frappe.get_doc(
+				{
+					"doctype": "Donor",
+					"donor_name": f"Ambiguous Donor {suffix}",
+					"donor_type": donor_type,
+					"customer": customer.name,
+				}
+			).insert(ignore_permissions=True)
+
+		with self.assertRaises(frappe.ValidationError):
+			resolve_donor_customer_identity(
+				donor_name="Ambiguous Donor",
+				email=email,
+				donor_type=donor_type,
+				ambiguous_email_policy="reject",
+			)
+
+	def test_policy_identity_service_rejects_ambiguous_customer_email(self) -> None:
+		from non_profit.non_profit.donor_identity import resolve_donor_customer_identity
+
+		email = f"ambiguous-customer-{frappe.generate_hash(length=8)}@example.org"
+		for suffix in ("One", "Two"):
+			customer = self._customer(f"Ambiguous Customer {suffix}")
+			frappe.db.set_value("Customer", customer.name, "email_id", email, update_modified=False)
+
+		with self.assertRaises(frappe.ValidationError):
+			resolve_donor_customer_identity(
+				donor_name="Ambiguous Customer",
+				email=email,
+				donor_type=self._donor_type(),
+				ambiguous_email_policy="reject",
+			)
+
+	def test_policy_identity_service_deduplicates_member_customer_candidates(self) -> None:
+		from non_profit.non_profit.donor_identity import resolve_donor_customer_identity
+
+		email = f"shared-member-customer-{frappe.generate_hash(length=8)}@example.org"
+		customer = self._customer("Shared Member Customer")
+		for suffix in ("One", "Two"):
+			frappe.get_doc(
+				{
+					"doctype": "Member",
+					"member_name": f"Shared Member {suffix}",
+					"email_id": email,
+					"customer": customer.name,
+				}
+			).insert(ignore_permissions=True)
+
+		donor, resolved_customer = resolve_donor_customer_identity(
+			donor_name="Shared Member",
+			email=email,
+			donor_type=self._donor_type(),
+			ambiguous_email_policy="reject",
+		)
+
+		self.assertEqual(resolved_customer, customer.name)
+		self.assertEqual(donor.customer, customer.name)
+
+	def test_policy_identity_service_applies_creation_providers(self) -> None:
+		from non_profit.non_profit.donor_identity import resolve_donor_customer_identity
+
+		email = f"policy-provider-{frappe.generate_hash(length=8)}@example.org"
+		inserted_values = {}
+
+		def insert_donor(values: dict):
+			inserted_values.update(values)
+			return frappe.get_doc(values).insert(ignore_permissions=True)
+
+		donor, customer = resolve_donor_customer_identity(
+			donor_name="Policy Provider",
+			email=email,
+			donor_type=self._donor_type(),
+			donor_values_provider=lambda values: {**values, "receipt_delivery": "Email"},
+			customer_values_provider=lambda values: {**values, "email_id": email},
+			donor_inserter=insert_donor,
+		)
+
+		self.assertEqual(inserted_values["receipt_delivery"], "Email")
+		self.assertEqual(donor.receipt_delivery, "Email")
+		self.assertEqual(donor.customer, customer)
+		self.assertEqual(frappe.db.get_value("Customer", customer, "email_id"), email)
+
 	def test_donor_pan_details_removed_from_schema_and_setup(self) -> None:
 		from non_profit.setup import get_custom_fields
 

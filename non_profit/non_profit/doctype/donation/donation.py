@@ -5,15 +5,13 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import cint, flt, get_link_to_form, getdate, now_datetime
+from frappe.utils import cint, get_link_to_form, getdate, now_datetime
 
 from non_profit.non_profit.doctype.donor.donor import (
 	find_donor_by_email,
 	get_donor_email,
 	get_or_create_customer_for_donor,
 )
-
-SENSITIVE_DONOR_NOTE_KEYS = ("pan", "tax_id", "tax id", "tax-number", "tax_number")
 
 
 class Donation(Document):
@@ -61,7 +59,9 @@ class Donation(Document):
 		if self.get("__islocal"):
 			self.donor = donor_name
 
-	def on_payment_authorized(self, *args, **kwargs):
+	def on_payment_authorized(self, status_changed_to: str | None = None, *args, **kwargs):
+		if status_changed_to not in (None, "Authorized", "Completed"):
+			return
 		self.db_set("paid", 1)
 		self.load_from_db()
 		try:
@@ -74,9 +74,12 @@ class Donation(Document):
 			)
 			raise
 		try:
-			self._send_thank_you()
+			self._dispatch_payment_thank_you()
 		except Exception:
-			frappe.log_error(title=f"Thank-you dispatch failed for {self.name}")
+			frappe.log_error(
+				title=f"Thank-you dispatch failed for {self.name}",
+				message=frappe.get_traceback(),
+			)
 		try:
 			from non_profit.non_profit.major_gifts import on_donation_change
 
@@ -117,6 +120,10 @@ class Donation(Document):
 		)
 		self._mark_thank_you_sent(email_queue=email_queue)
 		return True
+
+	def _dispatch_payment_thank_you(self) -> bool:
+		"""Policy seam for presentation apps; settlement remains owned above."""
+		return self._send_thank_you()
 
 	@frappe.whitelist()
 	def mark_thank_you_sent(self) -> bool:
@@ -214,101 +221,66 @@ def authorize_mock_donation_payment(donation: str) -> dict[str, str]:
 
 
 def create_gateway_donation(donor, payment):
-	if not frappe.db.exists("Mode of Payment", payment.method):
-		create_mode_of_payment(payment.method)
+	from non_profit.non_profit import legacy_payments
 
-	company = get_company_for_donations()
-	donation = frappe.get_doc(
-		{
-			"doctype": "Donation",
-			"company": company,
-			"donor": donor.name,
-			"donor_name": donor.donor_name,
-			"email": get_donor_email(donor),
-			"date": getdate(),
-			"amount": flt(payment.amount),
-			"mode_of_payment": payment.method,
-			"payment_id": payment.id,
-		}
-	).insert(ignore_mandatory=True)
-
-	donation.submit()
-	return donation
+	legacy_payments.log_legacy_payment_usage(
+		"non_profit.non_profit.doctype.donation.donation.create_gateway_donation",
+		getattr(donor, "name", None),
+	)
+	return legacy_payments.create_gateway_donation(donor, payment)
 
 
 def get_donor(email):
-	donor = find_donor_by_email(email)
-	return frappe.get_doc("Donor", donor) if donor else None
+	from non_profit.non_profit import legacy_payments
+
+	legacy_payments.log_legacy_payment_usage("non_profit.non_profit.doctype.donation.donation.get_donor")
+	return legacy_payments.get_gateway_donor(email)
 
 
 @frappe.whitelist()
 def create_donor(payment: dict) -> str:
-	donor_details = frappe._dict(payment)
 	frappe.only_for(("Non Profit Manager", "Non Profit Member", "System Manager"))
-	donor_type = frappe.db.get_single_value("Non Profit Settings", "default_donor_type")
+	from non_profit.non_profit import legacy_payments
 
-	donor = frappe.new_doc("Donor")
-	donor.update(
-		{
-			"donor_name": donor_details.email,
-			"donor_type": donor_type,
-			"contact": donor_details.contact,
-		}
-	)
-
-	if donor_details.get("notes"):
-		donor = get_additional_notes(donor, donor_details)
-
-	donor.insert(ignore_mandatory=True)
-	get_or_create_customer_for_donor(donor, email=donor_details.email)
-	return donor.name
+	legacy_payments.log_legacy_payment_usage("non_profit.non_profit.doctype.donation.donation.create_donor")
+	return legacy_payments.create_gateway_donor(payment)
 
 
 def get_company_for_donations():
-	company = frappe.db.get_single_value("Non Profit Settings", "donation_company")
-	if not company:
-		from non_profit.non_profit.utils import get_company
+	from non_profit.non_profit import legacy_payments
 
-		company = get_company()
-	return company
+	legacy_payments.log_legacy_payment_usage(
+		"non_profit.non_profit.doctype.donation.donation.get_company_for_donations"
+	)
+	return legacy_payments.get_company_for_donations()
 
 
 def get_additional_notes(donor, donor_details):
-	if isinstance(donor_details.notes, dict):
-		note_lines = []
-		for k, v in donor_details.notes.items():
-			# extract donor name from notes
-			if "name" in k.lower():
-				donor.update({"donor_name": donor_details.notes.get(k)})
-			if _is_sensitive_note_key(k):
-				continue
-			note_lines.append("{}: {}".format(k, v))
+	from non_profit.non_profit import legacy_payments
 
-		if note_lines:
-			donor.add_comment("Comment", "\n".join(note_lines))
-
-	elif isinstance(donor_details.notes, str):
-		notes = _safe_note_text(donor_details.notes)
-		if notes:
-			donor.add_comment("Comment", notes)
-
-	return donor
+	legacy_payments.log_legacy_payment_usage(
+		"non_profit.non_profit.doctype.donation.donation.get_additional_notes",
+		getattr(donor, "name", None),
+	)
+	return legacy_payments.get_additional_gateway_notes(donor, donor_details)
 
 
 def _is_sensitive_note_key(key: object) -> bool:
-	key = str(key or "").strip().lower()
-	return any(part in key for part in SENSITIVE_DONOR_NOTE_KEYS)
+	from non_profit.non_profit.legacy_payments import is_sensitive_gateway_note_key
+
+	return is_sensitive_gateway_note_key(key)
 
 
 def _safe_note_text(notes: str) -> str:
-	safe_lines = []
-	for line in str(notes or "").splitlines():
-		key = line.split(":", 1)[0]
-		if _is_sensitive_note_key(key):
-			continue
-		safe_lines.append(line)
-	return "\n".join(safe_lines).strip()
+	from non_profit.non_profit.legacy_payments import safe_gateway_note_text
+
+	return safe_gateway_note_text(notes)
 
 
 def create_mode_of_payment(method):
-	frappe.get_doc({"doctype": "Mode of Payment", "mode_of_payment": method}).insert(ignore_mandatory=True)
+	from non_profit.non_profit import legacy_payments
+
+	legacy_payments.log_legacy_payment_usage(
+		"non_profit.non_profit.doctype.donation.donation.create_mode_of_payment"
+	)
+	legacy_payments.create_gateway_mode_of_payment(method)
