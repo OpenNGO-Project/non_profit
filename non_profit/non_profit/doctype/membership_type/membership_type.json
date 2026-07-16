@@ -8,7 +8,7 @@
  "field_order": [
   "membership_type",
   "amount",
-  "razorpay_plan_id",
+  "is_subscription",
   "linked_item"
  ],
  "fields": [
@@ -29,11 +29,11 @@
    "reqd": 1
   },
   {
-   "fieldname": "razorpay_plan_id",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Razorpay Plan ID",
-   "unique": 1
+   "default": "0",
+   "description": "Enable when memberships of this type should create or link ERPNext Subscriptions. Leave disabled for declaration or data-collection memberships that are billed through a separate process.",
+   "fieldname": "is_subscription",
+   "fieldtype": "Check",
+   "label": "Is Subscription"
   },
   {
    "fieldname": "linked_item",
@@ -43,7 +43,9 @@
    "unique": 1
   }
  ],
- "links": [],
+  "links": [
+   {"link_doctype": "Membership", "link_fieldname": "membership_type"}
+  ],
  "modified": "2020-08-05 15:21:43.595745",
  "modified_by": "Administrator",
  "module": "Non Profit",

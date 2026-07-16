@@ -23,7 +23,8 @@
 							</div>
 								<div class="pull-right">
 								{% if user.website_url %}
-									<a href="{{ user.website_url }}">{{ user.website_url | truncate (50) or '' }}</a>
+									{# member-supplied values — keep escaped, the Jinja env has no autoescape #}
+									<a href="{{ user.website_url | e }}" rel="nofollow noopener">{{ user.website_url | truncate(50) | e }}</a>
 								{% endif %}
 							</div>
 							<div class="clearfix"></div>
@@ -31,7 +32,7 @@
 							<br><br>
 							<div class="col-lg-12">
 							{% if user.introduction %}
-								{{ user.introduction }}
+								{{ user.introduction | e }}
 							{% endif %}
 							</div>
 						</div>
@@ -72,8 +73,5 @@
 <p>{{ address or ''}}</p>
 </div>
 {% endif %}
-
-<p style="margin: 20px 0 30px;"><a href="/non_profit/join-chapter?name={{ name }}" class='btn btn-primary'>Join this Chapter</a></p>
-<p style="margin: 20px 0 30px;"><a href="/non_profit/leave-chapter?name={{ name }}" class=''>Leave this Chapter</a></p>
 
 {% endblock %}

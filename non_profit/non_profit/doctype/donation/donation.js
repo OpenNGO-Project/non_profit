@@ -4,8 +4,24 @@
 frappe.ui.form.on('Donation', {
 	refresh: function(frm) {
 		if (frm.doc.docstatus === 1 && !frm.doc.paid) {
-			frm.add_custom_button(__('Create Payment Entry'), function() {
+			frm.page.add_action_item(__('Create Payment Entry'), function() {
 				frm.events.make_payment_entry(frm);
+			});
+		}
+		if (frm.doc.docstatus === 1 && frm.doc.paid && !frm.doc.thank_you_sent) {
+			if (frm.doc.email) {
+				frm.page.add_action_item(__('Verdankung senden'), function() {
+					frm.call('send_thank_you').then(function() {
+						frappe.msgprint(__('Verdankung gesendet.'));
+						frm.reload_doc();
+					});
+				});
+			}
+			frm.page.add_action_item(__('Als extern verdankt markieren'), function() {
+				frm.call('mark_thank_you_sent').then(function() {
+					frappe.msgprint(__('Spende als extern verdankt markiert.'));
+					frm.reload_doc();
+				});
 			});
 		}
 	},

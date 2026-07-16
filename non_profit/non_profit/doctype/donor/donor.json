@@ -1,23 +1,50 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:email",
+ "autoname": "naming_series:",
  "creation": "2017-09-19 16:20:27.510196",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "naming_series",
   "donor_name",
   "column_break_5",
   "donor_type",
-  "email",
+  "preferred_language",
+  "receipt_delivery",
+  "relationship_section",
+  "relationship_manager",
+  "donor_level",
+  "column_break_rel",
+  "capacity_rating",
+  "is_major_donor",
+  "giving_summary_section",
+  "total_lifetime_amount",
+  "gift_count",
+  "first_gift_date",
+  "largest_gift_amount",
+  "column_break_giving",
+  "last_gift_date",
+  "last_gift_amount",
+  "last_interaction_date",
   "image",
+  "customer_section",
+  "customer",
+  "customer_name",
   "address_contacts",
   "address_html",
   "column_break_9",
   "contact_html"
  ],
  "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "NPO-DON-.YYYY.-",
+   "reqd": 1
+  },
   {
    "fieldname": "donor_name",
    "fieldtype": "Data",
@@ -38,12 +65,106 @@
    "reqd": 1
   },
   {
-   "fieldname": "email",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Email",
-   "reqd": 1,
-   "unique": 1
+   "default": "de",
+   "fieldname": "preferred_language",
+   "fieldtype": "Link",
+   "label": "Preferred Language",
+   "options": "Language"
+  },
+  {
+   "default": "Email",
+   "fieldname": "receipt_delivery",
+   "fieldtype": "Select",
+   "label": "Receipt Delivery",
+   "options": "Email\nPost\nBoth"
+  },
+  {
+   "fieldname": "relationship_section",
+   "fieldtype": "Section Break",
+   "label": "Relationship & Cultivation"
+  },
+  {
+   "fieldname": "relationship_manager",
+   "fieldtype": "Link",
+   "label": "Relationship Manager",
+   "options": "User"
+  },
+  {
+   "fieldname": "donor_level",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Donor Level",
+   "options": "\nProspect\nGrassroots\nAnnual\nMid-Level\nMajor"
+  },
+  {
+   "fieldname": "column_break_rel",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "capacity_rating",
+   "fieldtype": "Select",
+   "label": "Capacity Rating",
+   "options": "\nUnrated\nA\nB\nC"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_major_donor",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Major Donor",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "giving_summary_section",
+   "fieldtype": "Section Break",
+   "label": "Giving Summary"
+  },
+  {
+   "fieldname": "total_lifetime_amount",
+   "fieldtype": "Currency",
+   "label": "Lifetime Giving",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gift_count",
+   "fieldtype": "Int",
+   "label": "Gift Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "first_gift_date",
+   "fieldtype": "Date",
+   "label": "First Gift Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "largest_gift_amount",
+   "fieldtype": "Currency",
+   "label": "Largest Gift",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_giving",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_gift_date",
+   "fieldtype": "Date",
+   "label": "Last Gift Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_gift_amount",
+   "fieldtype": "Currency",
+   "label": "Last Gift Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_interaction_date",
+   "fieldtype": "Date",
+   "label": "Last Interaction",
+   "read_only": 1
   },
   {
    "fieldname": "image",
@@ -52,6 +173,25 @@
    "label": "Image",
    "no_copy": 1,
    "print_hide": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "customer_section",
+   "fieldtype": "Section Break",
+   "label": "Customer"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer"
+  },
+  {
+   "fetch_from": "customer.customer_name",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name",
+   "read_only": 1
   },
   {
    "depends_on": "eval:!doc.__islocal;",
@@ -80,6 +220,14 @@
   {
    "link_doctype": "Donation",
    "link_fieldname": "donor"
+  },
+  {
+   "link_doctype": "Major Gift",
+   "link_fieldname": "donor"
+  },
+  {
+   "link_doctype": "Donor Interaction",
+   "link_fieldname": "donor"
   }
  ],
  "modified": "2021-02-17 16:36:33.470731",
@@ -103,6 +251,7 @@
  ],
  "quick_entry": 1,
  "restrict_to_domain": "Non Profit",
+ "search_fields": "donor_name",
  "sort_field": "modified",
  "sort_order": "DESC",
  "title_field": "donor_name",

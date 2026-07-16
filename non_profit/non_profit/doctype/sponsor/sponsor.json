@@ -1,0 +1,145 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2026-04-15 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "donor",
+  "sponsor_name",
+  "tier",
+  "is_active",
+  "column_break_1",
+  "contract_start",
+  "contract_end",
+  "section_details",
+  "logo",
+  "website_url",
+  "column_break_details",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "NPO-SPON-.YYYY.-",
+   "reqd": 1
+  },
+  {
+   "fieldname": "donor",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Donor",
+   "options": "Donor",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "donor.donor_name",
+   "fieldname": "sponsor_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Sponsor Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tier",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Tier",
+   "options": "Sponsor Tier"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Active"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "contract_start",
+   "fieldtype": "Date",
+   "label": "Contract Start"
+  },
+  {
+   "fieldname": "contract_end",
+   "fieldtype": "Date",
+   "label": "Contract End"
+  },
+  {
+   "fieldname": "section_details",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "logo",
+   "fieldtype": "Attach Image",
+   "label": "Logo"
+  },
+  {
+   "fieldname": "website_url",
+   "fieldtype": "Data",
+   "label": "Website URL",
+   "options": "URL"
+  },
+  {
+   "fieldname": "column_break_details",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  }
+ ],
+ "image_field": "logo",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-04-15 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Non Profit",
+ "name": "Sponsor",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Non Profit Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "sponsor_name",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "sponsor_name",
+ "track_changes": 1
+}

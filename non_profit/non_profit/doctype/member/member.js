@@ -2,14 +2,6 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on('Member', {
-	setup: function(frm) {
-		frappe.db.get_single_value('Non Profit Settings', 'enable_razorpay_for_memberships').then(val => {
-			if (val && (frm.doc.subscription_id || frm.doc.customer_id)) {
-				frm.set_df_property('razorpay_details_section', 'hidden', false);
-			}
-		})
-	},
-
 	refresh: function(frm) {
 
 		frappe.dynamic_link = {doc: frm.doc, fieldname: 'name', doctype: 'Member'};
@@ -20,7 +12,7 @@ frappe.ui.form.on('Member', {
 			frappe.contacts.render_address_and_contact(frm);
 
 			// custom buttons
-			frm.add_custom_button(__('Accounting Ledger'), function() {
+			frm.page.add_action_item(__('Accounting Ledger'), function() {
 				if (frm.doc.customer) {
 					frappe.set_route('query-report', 'General Ledger', {party_type: 'Customer', party: frm.doc.customer});
 				} else {
@@ -28,17 +20,19 @@ frappe.ui.form.on('Member', {
 				}
 			});
 
-			frm.add_custom_button(__('Accounts Receivable'), function() {
+			frm.page.add_action_item(__('Accounts Receivable'), function() {
 				frappe.set_route('query-report', 'Accounts Receivable', {customer: frm.doc.customer});
 			});
 
-			if (!frm.doc.customer) {
-				frm.add_custom_button(__('Create Customer'), () => {
-					frm.call('make_customer_and_link').then(() => {
-						frm.reload_doc();
+			frm.page.add_action_item(__('Create Membership'), () => {
+				prompt_for_membership_type((membership_type) => {
+					frm.call('create_membership', {membership_type}).then((r) => {
+						if (r.message) {
+							frappe.set_route('Form', 'Membership', r.message);
+						}
 					});
 				});
-			}
+			});
 
 			// indicator
 			erpnext.utils.set_party_dashboard_indicators(frm);
@@ -47,21 +41,59 @@ frappe.ui.form.on('Member', {
 			frappe.contacts.clear_address_and_contact(frm);
 		}
 
-		frappe.call({
-			method:"frappe.client.get_value",
-			args:{
-				'doctype':"Membership",
-				'filters':{'member': frm.doc.name},
-				'fieldname':[
-					'to_date'
-				]
-			},
-			callback: function (data) {
-				if(data.message) {
-					frappe.model.set_value(frm.doctype,frm.docname,
-						"membership_expiry_date", data.message.to_date);
-				}
-			}
-		});
+		sync_membership_expiry_date(frm);
 	}
 });
+
+function sync_membership_expiry_date(frm) {
+	if (!frappe.meta.has_field(frm.doctype, "membership_expiry_date")) {
+		return;
+	}
+
+	frappe.call({
+		method: "frappe.client.get_value",
+		args: {
+			doctype: "Membership",
+			filters: {member: frm.doc.name},
+			fieldname: ["to_date"],
+		},
+		callback: function(data) {
+			if (!data.message) {
+				return;
+			}
+			if (frm.doc.membership_expiry_date === data.message.to_date) {
+				return;
+			}
+			frappe.model.set_value(
+				frm.doctype,
+				frm.docname,
+				"membership_expiry_date",
+				data.message.to_date,
+				null,
+				true
+			);
+		},
+	});
+}
+
+function prompt_for_membership_type(callback) {
+	const dialog = new frappe.ui.Dialog({
+		title: __('Create Membership'),
+		fields: [
+			{
+				fieldname: 'membership_type',
+				fieldtype: 'Link',
+				label: __('Membership Type'),
+				options: 'Membership Type',
+				reqd: 1,
+			},
+		],
+		primary_action_label: __('Create'),
+		primary_action(values) {
+			dialog.hide();
+			callback(values.membership_type);
+		},
+	});
+
+	dialog.show();
+}

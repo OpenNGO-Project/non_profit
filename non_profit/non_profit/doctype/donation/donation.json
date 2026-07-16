@@ -10,15 +10,29 @@
   "donor",
   "donor_name",
   "email",
+  "campaign",
+  "cost_center",
+  "project",
   "column_break_4",
   "company",
   "date",
   "payment_details_section",
   "paid",
+  "reconciled",
+  "reconciled_on",
+  "reconciled_payment_entry",
+  "thank_you_sent",
+  "thank_you_sent_on",
+  "thank_you_email_queue",
+  "thank_you_sent_by",
   "amount",
   "mode_of_payment",
+  "recurring_donation",
+  "major_gift",
   "column_break_12",
   "payment_id",
+  "confirmation_key",
+  "receipt",
   "amended_from"
  ],
  "fields": [
@@ -39,12 +53,56 @@
    "read_only": 1
   },
   {
-   "fetch_from": "donor.email",
    "fieldname": "email",
    "fieldtype": "Data",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Email",
+   "read_only": 1
+  },
+  {
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Campaign",
+   "options": "Donation Campaign",
+   "search_index": 1
+  },
+  {
+   "fetch_from": "campaign.cost_center",
+   "fetch_if_empty": 1,
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Project",
+   "options": "Project"
+  },
+  {
+   "fieldname": "recurring_donation",
+   "fieldtype": "Link",
+   "label": "Recurring Donation",
+   "options": "Recurring Donation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "major_gift",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Major Gift",
+   "options": "Major Gift"
+  },
+  {
+   "fieldname": "receipt",
+   "fieldtype": "Link",
+   "label": "Receipt",
+   "options": "Donation Receipt",
    "read_only": 1
   },
   {
@@ -55,7 +113,8 @@
    "fieldname": "date",
    "fieldtype": "Date",
    "label": "Date",
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "fieldname": "payment_details_section",
@@ -89,6 +148,63 @@
    "label": "Paid"
   },
   {
+   "default": "0",
+   "description": "Set when submitted Payment Entries for this Donation are cleared through bank reconciliation.",
+   "fieldname": "reconciled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Reconciled",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciled_on",
+   "fieldtype": "Date",
+   "label": "Reconciled On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciled_payment_entry",
+   "fieldtype": "Link",
+   "label": "Reconciled Payment Entry",
+   "no_copy": 1,
+   "options": "Payment Entry",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Set when a thank-you letter or email has been sent for this donation.",
+   "fieldname": "thank_you_sent",
+   "fieldtype": "Check",
+   "label": "Thank You Sent",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "thank_you_sent_on",
+   "fieldtype": "Datetime",
+   "label": "Thank You Sent On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "thank_you_email_queue",
+   "fieldtype": "Link",
+   "label": "Thank You Email Queue",
+   "no_copy": 1,
+   "options": "Email Queue",
+   "read_only": 1
+  },
+  {
+   "fieldname": "thank_you_sent_by",
+   "fieldtype": "Link",
+   "label": "Thank You Sent By",
+   "no_copy": 1,
+   "options": "User",
+   "read_only": 1
+  },
+  {
    "fieldname": "company",
    "fieldtype": "Link",
    "label": "Company",
@@ -110,6 +226,15 @@
    "label": "Payment ID"
   },
   {
+   "fieldname": "confirmation_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Confirmation Key",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  },
+  {
    "fieldname": "column_break_12",
    "fieldtype": "Column Break"
   }
@@ -117,7 +242,7 @@
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2022-03-16 17:18:45.611741",
+ "modified": "2026-06-12 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Donation",

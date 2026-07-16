@@ -1,0 +1,51 @@
+{
+ "actions": [],
+ "creation": "2026-04-15 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "donation",
+  "donation_date",
+  "amount"
+ ],
+ "fields": [
+  {
+   "fieldname": "donation",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Donation",
+   "options": "Donation",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "donation.date",
+   "fieldname": "donation_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "donation.amount",
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Amount",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-04-15 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Non Profit",
+ "name": "Donation Receipt Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "donation_date",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}
