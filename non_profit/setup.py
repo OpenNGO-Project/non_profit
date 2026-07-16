@@ -82,6 +82,18 @@ def _ensure_role_users_are_system_users(roles):
 		frappe.clear_cache(user=user_name)
 
 
+def before_uninstall():
+	if not frappe.db.exists("DocType", "Workspace Sidebar"):
+		return
+	frappe.db.set_value(
+		"Workspace Sidebar",
+		{"app": "non_profit"},
+		"app",
+		"",
+		update_modified=False,
+	)
+
+
 data = {"on_setup": "non_profit.setup.setup_non_profit"}
 
 

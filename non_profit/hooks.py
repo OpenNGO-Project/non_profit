@@ -17,6 +17,7 @@ jinja = {
 
 after_install = "non_profit.setup.setup_non_profit"
 after_migrate = "non_profit.non_profit.fundraising_setup.ensure_fundraising_fixtures"
+before_uninstall = "non_profit.setup.before_uninstall"
 
 override_doctype_class = {
 	"Bank Transaction": "non_profit.non_profit.custom_doctype.bank_transaction.NonProfitBankTransaction",

@@ -1,9 +1,7 @@
 ## Non Profit
 
-A Non profit app built on top of Frappe framework & ERPNext.
-
-
-People who change the world need the tools to do it! The Non Profit Modules of ERPNext is designed for a non-profit organization, so that they can deliver well on their noble cause of a better world.
+A Goodvantage-maintained hard fork of the Frappe Non Profit app for Frappe v16
+and ERPNext.
 
 
 ### Installation
@@ -12,22 +10,20 @@ Using bench, [install ERPNext](https://github.com/frappe/bench#installation) as 
 
 Once ERPNext is installed, add non_profit app to your bench by running
 
-```sh
-$ bench get-app non_profit
+```bash
+bench get-app non_profit
 ```
 
 After that, you can install non_profit app on required site by running
 
-```sh
-$ bench --site demo.com install-app non_profit
+```bash
+bench --site <site> install-app non_profit
 ```
 
 
 ### Documentation
 
-Read documentation at https://docs.erpnext.com/docs/v14/user/manual/en/non_profit/introduction
-
-Bench-local docs:
+Current fork documentation:
 
 - `HOW_TO.md` - operator/admin workflows.
 - `DOCUMENTATION.md` - technical architecture and app contracts.

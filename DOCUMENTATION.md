@@ -8,7 +8,7 @@
 
 | App | Dependency |
 |---|---|
-| `ilanga_app` | Dashboard, print assets, and public Ilanga pages over non_profit doctypes. |
+| `ilanga_app` | Lowercase `ilanga` presentation and editable Builder website through `good_npo`. |
 | `miki_app` | Membership/Customer substrate for kibesuisse declarations. |
 | `good_npo` | Generic Goodvantage NPO presentation layer. |
 | `good_demo` | Demo signup/reset layer that seeds non_profit demo records. |
@@ -22,11 +22,17 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
   Donation carries analysis dimensions `cost_center` (fetched from the campaign's cost center when empty) and `project` (both ERPNext doctypes) for downstream fundraising analytics (e.g. the `good_analytics` app).
 - **Sponsor**, **Sponsor Tier**, **Volunteer**, and **Grant Application** for broader NPO operations.
 - **Non Profit Settings** for company, donor type, billing, invoicing, payment account, and email defaults.
+- **Non Profit** Workspace and Workspace Sidebar for current Desk navigation,
+  including Good Help, fundraising, Major Gifts, membership, community,
+  settings, and the Expiring Memberships report.
 
 ## Hooks
 
 - `after_install = non_profit.setup.setup_non_profit`
 - `after_migrate = non_profit.non_profit.fundraising_setup.ensure_fundraising_fixtures` refreshes non_profit custom fields and fundraising fixtures.
+- `before_uninstall = non_profit.setup.before_uninstall` clears this app's
+  Workspace Sidebar ownership so developer-mode uninstall does not delete the
+  shipped sidebar JSON.
 - `before_tests = non_profit.non_profit.utils.before_tests` refreshes the same fundraising fixtures after the CI/test setup wizard creates a Company.
 - `doc_events["Membership"]["validate"] = non_profit.non_profit.membership_sync.validate_no_overlap`
   blocks overlapping active Memberships by default. Callers can set
@@ -43,6 +49,9 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
   layouts. Changing the chart year keeps the existing chart in place while the
   new data loads and restores the mobile scroll position after replacement.
 - Daily scheduler jobs expire memberships and process recurring donations.
+- Recurring Donation processing creates submitted, unpaid Donation rows for due
+  active schedules, advances `next_date`, cancels schedules that pass
+  `end_date`, and commits or rolls back each schedule independently.
 - `Payment Entry` is extended through `override_doctype_class`.
 
 ## Roles And Desk Access
@@ -78,6 +87,21 @@ another active receipt. The period comparison normalizes Frappe Date values and
 Desk JSON string dates before validation. Donation Receipt country defaults to
 `Switzerland` in DocType metadata, the yearly-generation dialog, and the backend
 fallback when no country argument is supplied.
+
+### Receipt jurisdiction contract
+
+`Donation Receipt DE` is the only seeded/send-time receipt print format. Its
+body contains German tax-law language (`§ 10b EStG`, `§ 5 KStG`, and related
+German provisions). `default_receipt_country = Switzerland` is only a data
+default; it does not translate, validate, or approve the print format for
+Switzerland. Deployments must install a legally approved jurisdiction-specific
+format before issuing tax certificates. The app does not provide invented Swiss
+legal wording.
+
+`DonationReceipt.send_to_donor()` currently attaches `Donation Receipt DE`
+explicitly. Do not use that action for another jurisdiction until the send
+contract is deliberately extended; manually printing an approved replacement is
+the safe interim path.
 `get_campaign_donation_chart(campaign, year=None)` on the Donation Campaign
 controller requires read permission on the Campaign and returns twelve monthly
 buckets for submitted paid donations on that campaign in the selected year.
@@ -104,6 +128,12 @@ accepted consent, allowed frequency (`one_off`, `Monthly`, `Quarterly`,
 `good_connector` is installed and a GoodVantage CAPTCHA site key is configured,
 guest submissions must include a valid CAPTCHA response; sites without
 Good Connector remain standalone and skip the optional CAPTCHA gate.
+
+The base public page and confirmation label amounts as EUR, and the seeded
+`Donation Thank You DE` template formats EUR. The separate `Donation Slip CH`
+format displays CHF. Donation has no currency field, so these are presentation
+assumptions, not a company-derived currency contract. Production sites must
+provide one approved currency-aware presentation flow.
 
 The `donate_confirm` page is key-gated: every Donation gets a random
 `confirmation_key` on insert (`Donation.before_insert`), the donate flow
@@ -440,6 +470,18 @@ for individual Donation changes.
 Non Profit Settings → **Major Gifts** adds `major_donor_threshold` (auto-flag).
 `stale_interaction_days` and `lapsed_major_months` are reserved — defined but
 not yet wired to any behavior.
+
+## Help And Navigation
+
+Markdown under `non_profit/fixtures/help/non_profit/` is discovered by Good
+Help's installed-app scan and synced into editable Wiki Documents when
+`good_help` is installed. The Workspace Sidebar links to
+`/app/good-help?app=non_profit`; customer edits remain protected by Good Help's
+installed-content hash.
+
+The Workspace and Workspace Sidebar are both source fixtures. The sidebar uses
+`app: "non_profit"`, `module: "Non Profit"`, and `standard: 1`; the
+`before_uninstall` hook preserves its source file in developer mode.
 
 ## Test Commands
 

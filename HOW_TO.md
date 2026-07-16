@@ -14,6 +14,11 @@ ERPNext must already be installed.
 
 NPO desk operators need `Non Profit Manager` or `Non Profit Member` with Desk Access. Setup repairs those roles and existing users during install/migrate. If an SSO-created user gets **Insufficient Permission for List Filter** on a non_profit list, run migrate/setup and have the user log in again.
 
+The shipped **Non Profit** workspace and sidebar expose current fundraising,
+Major Gifts, membership, community, settings, report, and Help links. The Help
+link requires `good_help`; Good Help syncs these Markdown fixtures into editable
+Wiki Documents.
+
 ## Configure Core Settings
 
 Open **Non Profit Settings** and set at least:
@@ -29,6 +34,20 @@ Do not configure provider-specific checkout or webhook credentials in
 `payrexx_integration`; those apps should verify provider callbacks and then
 mark the relevant Donation, Sales Invoice, Membership, or Subscription through
 the standard document APIs.
+
+### Currency and receipt jurisdiction
+
+The generic `/donate` and `/donate_confirm` pages currently display **EUR**, and
+the seeded `Donation Thank You DE` email also formats EUR. The separate
+`Donation Slip CH` Swiss QR slip displays CHF. Donation has no currency field,
+so these labels do not derive from the Donation Company. Production sites must
+provide a locally approved, currency-aware presentation flow.
+
+The seeded **Donation Receipt DE** contains German tax-law wording (`§ 10b EStG`
+and related German provisions). Setting the receipt country to Switzerland does
+not localize or legally approve that wording. Do not issue it as a Swiss tax
+certificate. Install a jurisdiction-specific format approved by the responsible
+organisation; this app intentionally does not invent Swiss legal text.
 
 ## Donations
 
@@ -97,6 +116,11 @@ period, belongs to the receipt Donor, and is not already attached to another
 active receipt. Large yearly runs load eligible Donations and active receipt
 ownership in batches; the operator workflow and all validation rules are the
 same as for an individual receipt.
+
+The yearly action creates drafts only. Review donor, period, country, language,
+donations, address, and the approved print format before submitting or sending.
+The built-in **Spendenbescheinigung senden** action attaches `Donation Receipt
+DE`; use it only where that German wording has been approved.
 
 When a payment gateway authorizes a Donation, `Donation.on_payment_authorized()`
 marks the Donation paid and, when enabled, creates the configured automatic
@@ -178,6 +202,11 @@ The legacy **Generate Invoice** action is only shown on sites that still carry a
 `Membership.invoice` link field. Current GoodNPO-style membership billing uses
 Sales Invoice links owned by the presentation app instead.
 
+When **Send Membership Acknowledgement** is enabled in Non Profit Settings, a
+saved Membership exposes **Actions → Send Acknowledgement**. It sends the
+configured Email Template and Membership Print Format and may include the linked
+legacy invoice print. Verify those templates before enabling the action.
+
 Operators may edit **Member Name** directly. When it is left blank and a
 Customer is linked, the Member form fills it from that Customer; if the Customer
 has a `name_additional` field, it is appended to the display name. Creating a
@@ -217,6 +246,17 @@ The **Expiring Memberships** report reads the latest non-cancelled Membership
 per Member and filters by its `to_date`. It no longer depends on the legacy
 `Membership.paid` field.
 
+## Recurring Donations
+
+Use **Recurring Donation** for a schedule, not as proof of payment. A due active
+row creates a submitted, unpaid Donation in the daily job, advances **Next
+Date**, and becomes Cancelled once the next date passes **End Date**. Accounting
+or a payment provider must settle each generated Donation separately.
+
+**Actions → Create Next Donation Now** creates an installment immediately and
+also advances the schedule. Use **Paused** to stop generation without ending the
+instruction.
+
 ## Chapters And Grants
 
 Logged-in users can join a published Chapter only as themselves through the
@@ -225,6 +265,15 @@ through the public leave endpoint. Staff changing another user's chapter row
 need write permission on the Chapter. Grant review invitations require write
 permission on the Grant Application and an Assessment Manager before the status is moved to
 **In Progress**.
+
+Create Volunteers from an existing Contact; the dialog requires a Volunteer Type
+and an email on the Contact. It does not create a Customer. Create Sponsors from
+a Contact, Customer, or both; the system creates or reuses the backing Donor and
+fetches the Sponsor name from it.
+
+Logged-in applicants use `/my-grant`. Staff set an Assessment Manager and use
+**Actions → Send Grant Review Email** while the application is **Received**;
+the action sends the invitation and moves it to **In Progress**.
 
 ## Major Gifts — Next Actions
 

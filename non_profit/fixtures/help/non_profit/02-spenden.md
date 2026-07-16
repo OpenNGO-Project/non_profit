@@ -13,11 +13,15 @@ Spenden werden über **Donation** erfasst und optional einer **Donation Campaign
 
 ## Spende erfassen
 
-1. Öffnen Sie **Donation** und wählen Sie **Neu**.
-2. Wählen oder erstellen Sie den **Donor**.
-3. Erfassen Sie Betrag, Datum und Zahlungsstatus.
-4. Ordnen Sie bei Bedarf eine **Donation Campaign** zu.
-5. Speichern Sie den Datensatz.
+1. Legen Sie den Donor über den Erstellungsdialog aus einem **Contact**, einem
+   **Customer** oder beiden an. Die E-Mail gehört zum verknüpften Customer bzw.
+   Contact, nicht als eigenes Feld zum Donor.
+2. Öffnen Sie **Donation** und wählen Sie **Neu**.
+3. Wählen Sie Donor und Firma und erfassen Sie Betrag, Datum und Zahlungsart.
+4. Ordnen Sie bei Bedarf eine aktive **Donation Campaign** zu.
+5. Speichern und übermitteln Sie die Donation.
+6. Erfassen Sie die Zahlung über **Actions → Create Payment Entry** oder lassen
+   Sie einen verifizierten Zahlungsanbieter die Zahlung autorisieren.
 
 ## Kampagnen nutzen
 
@@ -25,7 +29,26 @@ Kampagnen bündeln mehrere Spenden zu einem Fundraising-Ziel. Hinterlegen Sie Na
 
 ## Verdankung und Spendenbescheinigung
 
-Verdankungen gehören zur **Donation** und werden über `thank_you_sent` samt Auditfeldern verfolgt. Für formelle Spendenbescheinigungen nutzen Sie **Donation Receipt**. Dort werden die relevanten Spenden gesammelt und für den Versand bzw. Druck vorbereitet.
+Bei einer bezahlten Donation verwenden Sie **Actions → Verdankung senden** oder
+**Als extern verdankt markieren**. Beide Wege pflegen `thank_you_sent` und die
+Auditfelder. Eine Verdankung ist keine Steuerbescheinigung.
+
+Für eine **Donation Receipt** wählen Sie Donor und Geschäftsjahr und dann
+**Actions → Spenden aus Geschäftsjahr hinzufügen**. Alternativ erzeugt die
+Listenaktion **Jährliche Spendenbescheinigungen erstellen** Entwürfe je Donor.
+Nur übermittelte, bezahlte und noch nicht anderweitig belegte Spenden im
+gewählten Zeitraum sind zulässig. Prüfen, übermitteln und senden Sie den Entwurf
+erst danach.
+
+> **Rechtlicher Hinweis:** Das mitgelieferte Format **Donation Receipt DE**
+> enthält deutsches Steuerrecht. Das Standardland Schweiz ändert diesen Text
+> nicht. Verwenden Sie es nicht als Schweizer Steuerbescheinigung. Lassen Sie
+> vor Produktivbetrieb eine rechtlich freigegebene lokale Vorlage erstellen.
+
+> **Währungshinweis:** Die generische öffentliche `/donate`-Seite und das
+> Standard-Dankesmail zeigen EUR; der Schweizer QR-Spendenbeleg zeigt CHF. Diese
+> Labels werden nicht aus einer Donation-Währung abgeleitet. Verwenden Sie
+> produktiv nur einen lokal freigegebenen, einheitlichen Währungsflow.
 
 ## Häufige Fragen
 

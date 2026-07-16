@@ -11,7 +11,21 @@ Non Profit trennt das Mitglied (**Member**) von der eigentlichen Mitgliedschaft 
 
 ## Member
 
-Ein Member beschreibt die Person oder Organisation im Mitgliederregister. Pflegen Sie hier Name, Kontaktangaben und die wichtigsten Stammdaten.
+Ein Member beschreibt die Person oder Organisation im Mitgliederregister. Die
+Kontaktverknüpfung läuft über Frappe Contact; bei Organisationen kann zusätzlich
+ein Customer verknüpft sein. Membership Type und Laufzeit gehören nicht zum
+Member.
+
+## Member und Membership gemeinsam anlegen
+
+1. Öffnen Sie die **Member**-Liste und wählen Sie **Neu**.
+2. Wählen Sie einen Contact, einen Customer oder beide.
+3. Wählen Sie den Membership Type.
+4. **Create** erstellt oder öffnet den Member und eine aktuelle, standardmässig
+   unbefristete Membership.
+
+Auf einem bestehenden Member erstellt **Actions → Create Membership** die
+gewählte Mitgliedschaft oder öffnet eine bereits aktive.
 
 ## Membership
 
@@ -20,7 +34,7 @@ Eine Membership beschreibt eine konkrete Mitgliedschaftsperiode. Wichtige Felder
 - **Member**
 - **Membership Type**
 - Startdatum
-- Enddatum
+- **Membership Until**; leer bedeutet unbefristet
 - Status
 
 ## Membership Type
@@ -34,3 +48,12 @@ Das ist möglich, wenn ein Mitglied noch nicht gestartet, ausgetreten oder nur a
 
 **Wie beende ich eine Mitgliedschaft?**
 Setzen Sie das Enddatum der Membership und passen Sie den Status an. Löschen Sie den Member nicht, damit die Historie erhalten bleibt.
+
+**Wie sende ich eine Bestätigung?**
+Wenn Non Profit Settings den Versand aktiviert, verwenden Sie auf der
+Membership **Actions → Send Acknowledgement**. Das System verwendet die dort
+konfigurierte E-Mail- und Druckvorlage. Prüfen Sie diese vor dem ersten Versand.
+
+**Wie finde ich auslaufende Mitgliedschaften?**
+Der Bericht **Expiring Memberships** zeigt pro Member die neueste
+nicht-stornierte Membership, deren Enddatum im gewählten Monat liegt.
