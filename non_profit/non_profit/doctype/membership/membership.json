@@ -11,6 +11,7 @@
   "column_break_3",
   "membership_status",
   "membership_type",
+  "is_household_membership",
   "membership_validity_section",
   "from_date",
   "to_date",
@@ -56,6 +57,14 @@
    "label": "Membership Type",
    "options": "Membership Type",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_household_membership",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Household Membership",
+   "read_only": 1
   },
   {
    "fieldname": "membership_validity_section",

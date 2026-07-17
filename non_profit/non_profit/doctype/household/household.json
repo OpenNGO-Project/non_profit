@@ -1,0 +1,88 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:household_name",
+ "creation": "2026-07-17 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "household_name",
+  "members",
+  "address_contacts",
+  "address_html",
+  "column_break_9",
+  "contact_html"
+ ],
+ "fields": [
+  {
+   "fieldname": "household_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Household Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "members",
+   "fieldtype": "Table",
+   "label": "Members",
+   "options": "Household Member"
+  },
+  {
+   "depends_on": "eval:!doc.__islocal;",
+   "fieldname": "address_contacts",
+   "fieldtype": "Section Break",
+   "label": "Address and Contact",
+   "options": "fa fa-map-marker"
+  },
+  {
+   "fieldname": "address_html",
+   "fieldtype": "HTML",
+   "label": "Address HTML"
+  },
+  {
+   "fieldname": "column_break_9",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "contact_html",
+   "fieldtype": "HTML",
+   "label": "Contact HTML"
+  }
+ ],
+ "links": [
+  {
+   "group": "Household Members",
+   "link_doctype": "Member",
+   "link_fieldname": "household"
+  },
+  {
+   "group": "Household Members",
+   "link_doctype": "Donor",
+   "link_fieldname": "household"
+  }
+ ],
+ "modified": "2026-07-17 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Non Profit",
+ "name": "Household",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Non Profit Manager",
+   "share": 1,
+   "write": 1
+   }
+ ],
+ "restrict_to_domain": "Non Profit",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

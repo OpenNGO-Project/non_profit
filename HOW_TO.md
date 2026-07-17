@@ -246,6 +246,32 @@ The **Expiring Memberships** report reads the latest non-cancelled Membership
 per Member and filters by its `to_date`. It no longer depends on the legacy
 `Membership.paid` field.
 
+## Households
+
+Use **Household** for people who share a postal address and should be treated
+as one unit for mailings — typically couples. Create one Household per address
+unit and add **Member** or **Donor** rows in the members table with a **From
+Date**; tick **Is Primary** on the main contact. Leave **To Date** empty while
+the person belongs to the household. A Member or Donor can be a *current*
+member of only one household at a time; the form refuses to save a second one.
+Only **Non Profit Manager** users can view or edit Households because a
+Household may expose both Member and Donor records.
+
+- Marriage / new partner moves in: add a row with the **From Date**.
+- Divorce / someone moves out: set **To Date** on that person's row. The row
+  stays as history and the person's **Household** link on Member/Donor clears
+  automatically.
+
+Memberships of household members are flagged **Is Household Membership**
+automatically (on save, and refreshed when household membership changes), so
+one shared membership can cover the whole household. Attach the shared address
+and contacts through the standard **Address and Contact** section on the saved
+Household form; the same Address/Contact can also be linked to the individual
+Member, Donor, or Customer records. Customers also carry a **Household** link
+field, and Contacts have a **Title** field for academic titles such as `Dr.`.
+The Household fields on Member and Donor are read-only derived values; always
+change the dated rows on Household instead of editing those links directly.
+
 ## Recurring Donations
 
 Use **Recurring Donation** for a schedule, not as proof of payment. A due active

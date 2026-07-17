@@ -105,6 +105,23 @@ def make_custom_fields(update=True):
 
 def get_custom_fields():
 	return {
+		"Contact": [
+			{
+				"fieldname": "title",
+				"label": "Title",
+				"fieldtype": "Data",
+				"insert_after": "salutation",
+			},
+		],
+		"Customer": [
+			{
+				"fieldname": "household",
+				"label": "Household",
+				"fieldtype": "Link",
+				"options": "Household",
+				"insert_after": "territory",
+			},
+		],
 		"Task": [
 			{
 				"fieldname": "major_gift",
@@ -122,5 +139,5 @@ def get_custom_fields():
 				"insert_after": "major_gift",
 				"no_copy": 1,
 			},
-		]
+		],
 	}

@@ -27,6 +27,13 @@ class Membership(Document):
 			else:
 				frappe.throw(_("Please select a Member"))
 
+		# Read-only household flag: synced from Member.household, which the
+		# Household controller maintains. Household saves also refresh this flag
+		# on non-expired Memberships of affected Members.
+		self.is_household_membership = bool(
+			self.member and frappe.db.get_value("Member", self.member, "household")
+		)
+
 		self.validate_membership_period()
 
 	def create_member_from_website_user(self):

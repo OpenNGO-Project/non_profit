@@ -21,6 +21,7 @@
   {"child": 1, "collapsible": 0, "indent": 0, "keep_closed": 0, "label": "Donor Interaction", "link_to": "Donor Interaction", "link_type": "DocType", "show_arrow": 0, "type": "Link"},
   {"child": 0, "collapsible": 1, "icon": "users", "indent": 1, "keep_closed": 0, "label": "Members", "show_arrow": 0, "type": "Section Break"},
   {"child": 1, "collapsible": 0, "indent": 0, "keep_closed": 0, "label": "Member", "link_to": "Member", "link_type": "DocType", "show_arrow": 0, "type": "Link"},
+  {"child": 1, "collapsible": 0, "indent": 0, "keep_closed": 0, "label": "Household", "link_to": "Household", "link_type": "DocType", "show_arrow": 0, "type": "Link"},
   {"child": 1, "collapsible": 0, "indent": 0, "keep_closed": 0, "label": "Membership", "link_to": "Membership", "link_type": "DocType", "show_arrow": 0, "type": "Link"},
   {"child": 1, "collapsible": 0, "indent": 0, "keep_closed": 0, "label": "Membership Type", "link_to": "Membership Type", "link_type": "DocType", "show_arrow": 0, "type": "Link"},
   {"child": 0, "collapsible": 1, "icon": "hand-heart", "indent": 1, "keep_closed": 0, "label": "Community", "show_arrow": 0, "type": "Section Break"},

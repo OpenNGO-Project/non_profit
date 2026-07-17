@@ -23,6 +23,11 @@ class Donor(Document):
 		"""Load address and contacts in `__onload`"""
 		load_address_and_contact(self)
 
+	def validate(self) -> None:
+		from non_profit.non_profit.doctype.household.household import get_current_household
+
+		self.household = get_current_household("Donor", self.name) if not self.is_new() else None
+
 	@frappe.whitelist()
 	def make_customer_and_link(self: "Donor") -> None:
 		if self.customer:

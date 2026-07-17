@@ -18,6 +18,7 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 ## Key DocTypes
 
 - **Member** and **Membership** for membership identity, periods, invoicing, and B2B/B2C flows.
+- **Household** (with the **Household Member** child table) for grouping Members and Donors who share an address into one solicitation unit; see [Households](#households).
 - **Donor**, **Donation**, **Donation Campaign**, **Recurring Donation**, and **Donation Receipt** for fundraising. `Donor.customer` is the canonical ERPNext Customer relation for donor identity; Donation still links to Donor.
   Donation carries analysis dimensions `cost_center` (fetched from the campaign's cost center when empty) and `project` (both ERPNext doctypes) for downstream fundraising analytics (e.g. the `good_analytics` app).
 - **Sponsor**, **Sponsor Tier**, **Volunteer**, and **Grant Application** for broader NPO operations.
@@ -25,6 +26,55 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 - **Non Profit** Workspace and Workspace Sidebar for current Desk navigation,
   including Good Help, fundraising, Major Gifts, membership, community,
   settings, and the Expiring Memberships report.
+
+## Households
+
+**Household** groups the Members and Donors who share a postal address and are
+usually solicited together (typically couples). The docname is
+`household_name` (autoname `field:household_name`, `allow_rename`; renames
+cascade into Link fields). Rows in the **Household Member** child table carry
+`link_doctype` (`Member` or `Donor`), `link_name` (Dynamic Link), `from_date`,
+`to_date`, and `is_primary`. A row without `to_date` is a *current* household
+member; setting `to_date` turns it into history, so the child table itself is
+the dated membership history (divorce/marriage flows) — rows are not deleted
+when someone leaves.
+
+`from_date` is mandatory and `to_date` cannot precede it. Validation rejects a
+duplicate current row for the same party, more than one current primary in a
+Household, and a second current Household for a Member/Donor. Affected Member
+and Donor rows are locked in deterministic order before the cross-Household
+check locks conflicting Household Member rows, narrowing the otherwise
+unavoidable model-level race between concurrent transactions. Ordinary derived
+field reads during Member/Donor validation do not lock Household Member rows,
+so mutation paths consistently acquire party locks before child-row locks.
+
+`Household.on_update` reconciles the current party links through
+`frappe.db.set_value` (no recursive validation). It considers both the saved
+rows and the document's persisted prior rows, so deleting or retargeting a row
+clears the old party as well as setting the new one. `after_delete` performs
+the same cleanup for Household deletion. The read-only
+`Membership.is_household_membership` flag is refreshed on all Memberships of
+affected Members to `bool(Member.household)`. `Membership.validate` also sets
+the flag on every save.
+
+`Member.household` and `Donor.household` are read-only, no-copy derived fields;
+their controllers restore the value from the current Household Member row on
+save. Household itself grants access only to **Non Profit Manager**, matching
+Donor access, and validates write permission on affected target parties for
+normal saves.
+
+The canonical Python service for presentation apps is
+`non_profit.non_profit.doctype.household.household.add_member_to_household(household, member, from_date, to_date=None, is_primary=False, *, ignore_permissions=False) -> Household`.
+It appends dated Member history and saves through all Household validation and
+sync logic. By default it requires write permission on both Household and
+Member; `ignore_permissions=True` is reserved for trusted system processes.
+
+`Customer.household` (Link → Household) and `Contact.title` (Data, for
+academic titles such as `Dr.`) ship as custom fields from
+`non_profit.setup.get_custom_fields` on install and migrate. Addresses and
+Contacts attach to a Household through the standard Dynamic Link mechanism and
+render on the form exactly like on Member/Donor (`onload` +
+`frappe.contacts.render_address_and_contact`).
 
 ## Hooks
 
@@ -488,6 +538,7 @@ The Workspace and Workspace Sidebar are both source fixtures. The sidebar uses
 ```bash
 cd frappe-bench
 bench --site development16.localhost run-tests --app non_profit
+bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.household.test_household
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.major_gift.test_major_gift
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.donor_interaction.test_donor_interaction
 bench --site development16.localhost run-tests --module miki_app.tests.test_end_to_end

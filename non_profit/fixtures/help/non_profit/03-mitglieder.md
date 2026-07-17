@@ -41,6 +41,19 @@ Eine Membership beschreibt eine konkrete Mitgliedschaftsperiode. Wichtige Felder
 
 Der Membership Type definiert die Art der Mitgliedschaft und den Beitrag. Beitragsänderungen am Type wirken für neue Mitgliedschaften; bestehende Mitgliedschaften bleiben als Historie erhalten.
 
+## Haushalte
+
+Ein **Household** fasst Member und Donors mit gemeinsamer Postadresse zusammen.
+Nur Benutzer mit der Rolle **Non Profit Manager** können Haushalte bearbeiten.
+Fügen Sie für jede Person eine Zeile mit **From Date** ein und markieren Sie
+höchstens eine aktuelle Person als **Is Primary**. Eine Person kann nur eine
+aktuelle Haushaltszeile haben und nur einem aktuellen Haushalt angehören.
+
+Wenn eine Person auszieht, setzen Sie **To Date** auf oder nach **From Date**,
+statt die Zeile zu löschen. So bleibt die Historie erhalten. Die Felder
+**Household** auf Member und Donor sind schreibgeschützt und werden automatisch
+aus den aktuellen Haushaltszeilen aktualisiert.
+
 ## Häufige Fragen
 
 **Warum sehe ich einen Member ohne aktive Membership?**

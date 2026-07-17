@@ -25,6 +25,7 @@ class Member(Document):
 
 	def validate(self):
 		self.set_member_name_from_customer()
+		self.set_derived_household()
 		if not self.member_name:
 			frappe.throw(_("Member Name is required."))
 
@@ -34,6 +35,11 @@ class Member(Document):
 	def set_member_name_from_customer(self) -> None:
 		if self.customer and not cstr(self.member_name).strip():
 			self.member_name = _customer_display_name(self.customer)
+
+	def set_derived_household(self) -> None:
+		from non_profit.non_profit.doctype.household.household import get_current_household
+
+		self.household = get_current_household("Member", self.name) if not self.is_new() else None
 
 	def validate_email_type(self, email):
 		from frappe.utils import validate_email_address

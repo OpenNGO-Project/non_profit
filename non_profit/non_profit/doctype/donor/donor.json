@@ -32,6 +32,7 @@
   "customer_section",
   "customer",
   "customer_name",
+  "household",
   "address_contacts",
   "address_html",
   "column_break_9",
@@ -191,6 +192,14 @@
    "fieldname": "customer_name",
    "fieldtype": "Data",
    "label": "Customer Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "household",
+   "fieldtype": "Link",
+   "label": "Household",
+   "no_copy": 1,
+   "options": "Household",
    "read_only": 1
   },
   {

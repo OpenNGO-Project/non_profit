@@ -25,6 +25,7 @@
   {"hidden": 0, "is_query_report": 0, "label": "Donor Interaction", "link_count": 0, "link_to": "Donor Interaction", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Members", "link_count": 0, "onboard": 0, "type": "Card Break"},
   {"hidden": 0, "is_query_report": 0, "label": "Member", "link_count": 0, "link_to": "Member", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Household", "link_count": 0, "link_to": "Household", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Membership", "link_count": 0, "link_to": "Membership", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Membership Type", "link_count": 0, "link_to": "Membership Type", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Community & Grants", "link_count": 0, "onboard": 0, "type": "Card Break"},
