@@ -63,10 +63,14 @@ the chart year keeps the mobile scroll position stable.
 Public donation forms must submit donor name, a valid email, positive amount,
 consent, an allowed frequency, and only active Donation Campaigns. Keep those
 checks server-side in `non_profit.www.donate._handle_submission`; browser
-validation is only a convenience. Guest POSTs are rate-limited. When
-`good_connector` provides a GoodVantage CAPTCHA site key, the form renders the
-widget and the server verifies the CAPTCHA token before creating Donor/Donation
-records.
+validation is only a convenience. Guest POSTs are rate-limited and always
+require GoodVantage CAPTCHA. Install Good Connector and configure both CAPTCHA
+keys before exposing `/donate`; missing or unreadable configuration blocks
+submission instead of creating Donor/Donation records without bot protection.
+The submit button remains disabled until the CAPTCHA loader succeeds. If loading
+fails, use the displayed **Retry** action; the button is enabled only after that
+retry reaches the loaded state, and server-side token verification remains the
+authoritative gate.
 
 Use **Donor.customer** to connect fundraising contacts to ERPNext Customer data.
 Customer linkage is handled by creation, import, and repair helper flows rather

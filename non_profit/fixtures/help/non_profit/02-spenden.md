@@ -59,4 +59,4 @@ Prüfen Sie, ob die Person oder Organisation bereits als Donor existiert. Wenn n
 Prüfen Sie, ob alle Spenden der richtigen Kampagne zugeordnet sind und ob nur gültige bzw. bezahlte Spenden in der Auswertung berücksichtigt werden.
 
 **Das öffentliche Spendenformular lehnt eine Eingabe ab.**
-Prüfen Sie Pflichtfelder, Einwilligung, eine aktive Kampagne und, falls angezeigt, den CAPTCHA-Schritt.
+Prüfen Sie Pflichtfelder, Einwilligung, eine aktive Kampagne und den CAPTCHA-Schritt. Wenn das Laden des CAPTCHA fehlschlägt, bleibt die Schaltfläche zur Übermittlung gesperrt; verwenden Sie **Erneut versuchen**. Wenn das Formular auf eine fehlende CAPTCHA-Konfiguration hinweist, müssen in Good Connector sowohl Site Key als auch Secret gepflegt werden; ohne diese Konfiguration bleibt die Übermittlung gesperrt.

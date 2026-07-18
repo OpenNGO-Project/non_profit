@@ -174,10 +174,15 @@ Public donation pages that delegate to `non_profit.www.donate._handle_submission
 must pass server-side validation for donor name, email syntax, positive amount,
 accepted consent, allowed frequency (`one_off`, `Monthly`, `Quarterly`,
 `Yearly`), and an active Donation Campaign when a campaign is selected. Browser
-`required` attributes are UX only. The handler is rate-limited. If
-`good_connector` is installed and a GoodVantage CAPTCHA site key is configured,
-guest submissions must include a valid CAPTCHA response; sites without
-Good Connector remain standalone and skip the optional CAPTCHA gate.
+`required` attributes are UX only. The handler is rate-limited. Every guest
+submission must include a valid GoodVantage CAPTCHA response. Missing Good
+Connector or missing/unreadable CAPTCHA configuration fails closed; the app can
+still be installed without Good Connector, but public donation submission is
+unavailable until CAPTCHA support is installed and configured. The submit
+control starts disabled and follows the shared loader's `data-load-state`: only
+`loaded` enables it, while loading, retrying, and error states keep it disabled.
+The loader's Retry action can recover the control after a successful reload;
+the server never trusts that browser state and verifies every guest token.
 
 The base public page and confirmation label amounts as EUR, and the seeded
 `Donation Thank You DE` template formats EUR. The separate `Donation Slip CH`
@@ -312,9 +317,10 @@ Note: this bench intentionally runs two Swiss QR-bill engines. non_profit's
 `swiss_qrbill.py` (qrbill package, creditor from Non Profit Settings) renders
 Donation slips, while `good_connector.qr_bill` (chqr package, creditor from
 the Company bank account, with QRR/SCOR reference support) renders invoice
-QR pages for miki_app / good_event / good_npo. They cannot share code —
-non_profit is standalone and must not import good_connector. When changing
-payment-relevant QR behavior, check both engines.
+QR pages for miki_app / good_event / good_npo. They remain separate
+payment-document implementations even though non_profit may optionally import
+Good Connector integration services such as CAPTCHA and identity matching.
+When changing payment-relevant QR behavior, check both engines.
 
 ## Membership Compatibility
 

@@ -178,17 +178,14 @@ def _handle_submission(form):
 def _captcha_site_key() -> str:
 	if not get_goodvantage_captcha_site_key:
 		return ""
-	try:
-		return get_goodvantage_captcha_site_key()
-	except Exception:
-		return ""
+	return get_goodvantage_captcha_site_key()
 
 
 def _verify_captcha(form) -> None:
 	if frappe.session.user != "Guest":
 		return
 	if not _captcha_site_key():
-		return
+		frappe.throw(_("CAPTCHA is not configured. Please contact support."))
 	if not verify_goodvantage_captcha_response:
 		frappe.throw(_("CAPTCHA is not configured. Please contact support."))
 	response = (form.get(GOODVANTAGE_CAPTCHA_RESPONSE_FIELD) or form.get("captcha_response") or "").strip()

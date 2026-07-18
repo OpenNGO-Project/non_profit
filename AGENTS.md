@@ -16,10 +16,20 @@
 - Keep `HOW_TO.md` and `DOCUMENTATION.md` current when hooks, doctypes, public helpers, setup, scheduled jobs, or operational behavior change.
 - All custom DocTypes must have Python controllers.
 - All new `@frappe.whitelist()` functions need type hints.
+- Public guest donations require GoodVantage CAPTCHA and fail closed when Good
+  Connector or its CAPTCHA configuration is unavailable. Do not restore the
+  former optional/exception-swallowing bypass.
 - Desk form and list operations must use Frappe's Actions menu APIs
   (`frm.page.add_action_item`, `listview.page.add_action_item`, or
   `listview.page.add_actions_menu_item`) instead of visible inner-toolbar
   custom buttons, so Non Profit / GoodNPO views remain usable on mobile.
+
+## Documentation Contract
+
+This repo keeps four synchronized artifacts: `REQUIREMENTS.md` (what the app
+must do), `DOCUMENTATION.md` (how it works), `HOW_TO.md` (operator
+procedures), and the code. Record new or changed requirements in
+`REQUIREMENTS.md` and keep all four in sync with every change.
 
 ## Household Model
 

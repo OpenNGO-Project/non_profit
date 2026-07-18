@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import frappe
@@ -69,6 +70,20 @@ class TestDonateConfirmPage(FrappeTestCase):
 
 
 class TestDonatePage(FrappeTestCase):
+	def test_unconfigured_captcha_disables_public_donation_submit(self) -> None:
+		template = (Path(__file__).parent / "www" / "donate.html").read_text(encoding="utf-8")
+		self.assertIn("CAPTCHA is not configured. Please contact support.", template)
+		self.assertIn('data-testid="donate-submit" disabled', template)
+
+	def test_captcha_loader_state_controls_submit_and_supports_retry(self) -> None:
+		template = (Path(__file__).parent / "www" / "donate.html").read_text(encoding="utf-8")
+		self.assertIn("new MutationObserver(syncSubmitState)", template)
+		self.assertIn('state !== "loaded"', template)
+		self.assertIn('wrapper.dataset.loadState = "retrying"', template)
+		self.assertIn('wrapper.dataset.loadState = "error"', template)
+		self.assertIn('retry.className = "gv-captcha-retry"', template)
+		self.assertIn("mountGoodvantageCaptcha(selector, siteKey, {", template)
+
 	def test_guest_donation_requires_valid_captcha_when_configured(self) -> None:
 		previous_user = frappe.session.user
 		frappe.set_user("Guest")
@@ -84,16 +99,27 @@ class TestDonatePage(FrappeTestCase):
 		finally:
 			frappe.set_user(previous_user)
 
-	def test_guest_donation_allows_unconfigured_optional_captcha(self) -> None:
+	def test_guest_donation_fails_closed_when_captcha_is_unconfigured(self) -> None:
 		previous_user = frappe.session.user
 		frappe.set_user("Guest")
 		try:
 			with patch("non_profit.www.donate._captcha_site_key", return_value=""):
 				with patch("non_profit.www.donate.verify_goodvantage_captcha_response") as verify:
-					donate._verify_captcha({})
+					with self.assertRaises(frappe.ValidationError) as error:
+						donate._verify_captcha({})
 				verify.assert_not_called()
+				self.assertIn("CAPTCHA is not configured", str(error.exception))
 		finally:
 			frappe.set_user(previous_user)
+
+	def test_guest_donation_does_not_hide_captcha_configuration_errors(self) -> None:
+		with patch.object(
+			donate,
+			"get_goodvantage_captcha_site_key",
+			side_effect=frappe.ValidationError("invalid CAPTCHA configuration"),
+		):
+			with self.assertRaisesRegex(frappe.ValidationError, "invalid CAPTCHA configuration"):
+				donate._captcha_site_key()
 
 
 class TestHardenedWhitelistedMethods(FrappeTestCase):

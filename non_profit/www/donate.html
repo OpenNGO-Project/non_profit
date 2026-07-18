@@ -57,10 +57,12 @@
 		</div>
 		{% if captcha_site_key %}
 		<div class="form-group" style="margin-top: 1em;">
-			<div class="non-profit-donation-captcha"></div>
+			<div class="non-profit-donation-captcha" data-load-error="{{ _("CAPTCHA could not be loaded.") | e }}" data-retry="{{ _("Retry") | e }}"></div>
 		</div>
+		{% else %}
+		<p class="alert alert-danger" role="alert">{{ _("CAPTCHA is not configured. Please contact support.") }}</p>
 		{% endif %}
-		<button type="submit" class="btn btn-primary" style="margin-top: 1em;" data-testid="donate-submit">{{ _("Weiter zur Zahlung") }}</button>
+		<button type="submit" class="btn btn-primary" style="margin-top: 1em;" data-testid="donate-submit" disabled>{{ _("Weiter zur Zahlung") }}</button>
 	</form>
 </div>
 
@@ -69,17 +71,59 @@
 	(function () {
 		const siteKey = "{{ captcha_site_key | e }}";
 		const selector = ".non-profit-donation-captcha";
+		const wrapper = document.querySelector(selector);
+		const submit = document.querySelector('[data-testid="donate-submit"]');
 		let attempts = 0;
+
+		function syncSubmitState() {
+			const state = wrapper?.dataset.loadState || "waiting";
+			submit?.toggleAttribute("disabled", state !== "loaded");
+			if (submit) submit.dataset.captchaLoadState = state;
+		}
+
+		if (wrapper) {
+			new MutationObserver(syncSubmitState).observe(wrapper, {
+				attributes: true,
+				attributeFilter: ["data-load-state"],
+			});
+		}
 
 		function mountCaptcha() {
 			if (!window.good_connector?.mountGoodvantageCaptcha) {
 				attempts += 1;
-				window.setTimeout(mountCaptcha, attempts < 40 ? 100 : 500);
+				if (attempts >= 40) {
+					if (wrapper) {
+						wrapper.innerHTML = "";
+						const message = document.createElement("p");
+						message.className = "alert alert-danger";
+						message.setAttribute("role", "alert");
+						message.textContent = wrapper.dataset.loadError;
+						wrapper.appendChild(message);
+						const retry = document.createElement("button");
+						retry.type = "button";
+						retry.className = "gv-captcha-retry";
+						retry.textContent = wrapper.dataset.retry;
+						retry.addEventListener("click", function () {
+							attempts = 0;
+							wrapper.innerHTML = "";
+							wrapper.dataset.loadState = "retrying";
+							mountCaptcha();
+						});
+						wrapper.appendChild(retry);
+						wrapper.dataset.loadState = "error";
+					}
+					return;
+				}
+				window.setTimeout(mountCaptcha, 100);
 				return;
 			}
-			window.good_connector.mountGoodvantageCaptcha(selector, siteKey);
+			window.good_connector.mountGoodvantageCaptcha(selector, siteKey, {
+				loadError: wrapper?.dataset.loadError,
+				retry: wrapper?.dataset.retry,
+			});
 		}
 
+		syncSubmitState();
 		mountCaptcha();
 	})();
 </script>
