@@ -10,3 +10,4 @@ non_profit.patches.remove_donor_pan_details
 non_profit.patches.remove_membership_company
 non_profit.patches.backfill_major_gift_donor_rollups
 non_profit.patches.convert_next_actions_to_tasks
+non_profit.patches.backfill_donation_payment_totals

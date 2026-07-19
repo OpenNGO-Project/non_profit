@@ -468,6 +468,162 @@ class TestDonationPaymentEntryInvariants(IntegrationTestCase):
 		self.assertEqual(donation.paid, 0)
 
 
+class TestDonationPaymentEntryHooks(IntegrationTestCase):
+	"""Donation Payment Entry behaviour delivered through doc_events hooks.
+
+	These run against whichever Payment Entry controller class is active
+	(erpnext base or hrms on this bench): non_profit registers its Donation
+	delta via doc_events plus the maintained Donation.grand_total /
+	advance_paid mirrors, not via override_doctype_class.
+	"""
+
+	def setUp(self):
+		company, receivable_account, cash_account = get_company_and_accounts()
+		create_donor_type()
+		create_mode_of_payment(company)
+
+		settings = frappe.get_doc("Non Profit Settings")
+		values = {
+			"company": company,
+			"donation_company": company,
+			"default_donor_type": "_Test Donor",
+			"automate_donation_payment_entries": 1,
+			"donation_debit_account": receivable_account,
+			"donation_payment_account": cash_account,
+			"creation_user": "Administrator",
+		}
+		if any(settings.get(field) != value for field, value in values.items()):
+			settings.update(values)
+			settings.flags.ignore_permissions = True
+			settings.save()
+
+	def test_payment_entry_for_unpaid_donation_marks_paid(self):
+		# The exact path that fails when ERPNext's generic reference-details
+		# fallback cannot compute Donation outstanding amounts.
+		donation = create_submitted_donation(125)
+		self.assertEqual(frappe.utils.flt(donation.grand_total), 125)
+		self.assertEqual(frappe.utils.flt(donation.advance_paid), 0)
+		self.assertEqual(donation.paid, 0)
+
+		payment_entry = insert_donation_payment_entry(donation)
+		payment_entry.submit()
+
+		donation.reload()
+		self.assertEqual(donation.paid, 1)
+		self.assertEqual(frappe.utils.flt(donation.advance_paid), 125)
+		payment_entry.reload()
+		self.assertEqual(frappe.utils.flt(payment_entry.references[0].total_amount), 125)
+		self.assertEqual(frappe.utils.flt(payment_entry.references[0].outstanding_amount), 125)
+
+	def test_advance_paid_and_grand_total_maintained_on_submit_and_cancel(self):
+		donation = create_submitted_donation(100)
+
+		first_payment = insert_donation_payment_entry(donation, party_amount=40)
+		first_payment.submit()
+		donation.reload()
+		self.assertEqual(frappe.utils.flt(donation.grand_total), 100)
+		self.assertEqual(frappe.utils.flt(donation.advance_paid), 40)
+		self.assertEqual(donation.paid, 0)
+
+		second_payment = get_donation_payment_entry("Donation", donation.name)
+		prepare_donation_payment_entry(second_payment)
+		second_payment.insert()
+		second_payment.submit()
+		donation.reload()
+		self.assertEqual(frappe.utils.flt(donation.advance_paid), 100)
+		self.assertEqual(donation.paid, 1)
+
+		second_payment.cancel()
+		donation.reload()
+		self.assertEqual(frappe.utils.flt(donation.advance_paid), 40)
+		self.assertEqual(donation.paid, 0)
+
+		first_payment.cancel()
+		donation.reload()
+		self.assertEqual(frappe.utils.flt(donation.advance_paid), 0)
+		self.assertEqual(frappe.utils.flt(donation.grand_total), 100)
+
+	def test_second_allocation_beyond_outstanding_is_rejected(self):
+		donation = create_submitted_donation(100)
+		first_payment = insert_donation_payment_entry(donation, party_amount=40)
+		first_payment.submit()
+
+		payment_entry = get_donation_payment_entry("Donation", donation.name)
+		# Each row stays within the refetched outstanding (60), so ERPNext's
+		# per-row allocated check passes; only the cumulative H1 hook rejects
+		# this over-allocation.
+		payment_entry.append(
+			"references",
+			{
+				"reference_doctype": "Donation",
+				"reference_name": donation.name,
+				"total_amount": 100,
+				"outstanding_amount": 60,
+				"allocated_amount": 40,
+			},
+		)
+		payment_entry.paid_amount = 100
+		payment_entry.received_amount = 100
+		prepare_donation_payment_entry(payment_entry)
+		# Core rejects duplicate references first. Bypass only that overlapping
+		# guard here to exercise the independent cumulative-allocation hook.
+		with patch.object(type(payment_entry), "validate_duplicate_entry", return_value=None):
+			payment_entry.insert()
+			with self.assertRaisesRegex(frappe.ValidationError, "remaining outstanding"):
+				payment_entry.submit()
+
+	def test_cross_company_payment_entry_is_rejected(self):
+		donation = create_submitted_donation(100)
+		payment_entry = get_donation_payment_entry("Donation", donation.name)
+		other_company = frappe.get_all(
+			"Company",
+			filters={
+				"name": ["!=", donation.company],
+				"default_receivable_account": ["is", "set"],
+				"default_cash_account": ["is", "set"],
+			},
+			fields=["name", "default_receivable_account", "default_cash_account"],
+			order_by="name",
+			limit=1,
+		)[0]
+		payment_entry.company = other_company.name
+		payment_entry.paid_from = other_company.default_receivable_account
+		payment_entry.paid_to = other_company.default_cash_account
+		payment_entry.paid_from_account_currency = frappe.db.get_value(
+			"Account", payment_entry.paid_from, "account_currency"
+		)
+		payment_entry.paid_to_account_currency = frappe.db.get_value(
+			"Account", payment_entry.paid_to, "account_currency"
+		)
+		prepare_donation_payment_entry(payment_entry)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "belongs to company"):
+			payment_entry.insert()
+
+	def test_backfill_donation_payment_totals_patch(self):
+		donation = create_submitted_donation(100)
+		first_payment = insert_donation_payment_entry(donation, party_amount=40)
+		first_payment.submit()
+
+		# Simulate the pre-patch state where neither mirror field was populated.
+		frappe.db.set_value(
+			"Donation",
+			donation.name,
+			{"grand_total": 0, "advance_paid": 0},
+			update_modified=False,
+		)
+
+		from non_profit.patches.backfill_donation_payment_totals import execute
+
+		execute()
+
+		grand_total, advance_paid = frappe.db.get_value(
+			"Donation", donation.name, ["grand_total", "advance_paid"]
+		)
+		self.assertEqual(frappe.utils.flt(grand_total), 100)
+		self.assertEqual(frappe.utils.flt(advance_paid), 40)
+
+
 def get_company_and_accounts():
 	company_name = erpnext.get_default_company()
 	company = frappe.get_doc("Company", company_name)

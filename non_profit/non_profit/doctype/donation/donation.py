@@ -22,6 +22,12 @@ class Donation(Document):
 			self.confirmation_key = frappe.generate_hash(length=32)
 
 	def validate(self):
+		if self.meta.has_field("grand_total"):
+			# Mirrors Sales Invoice semantics: ERPNext's generic Payment Entry
+			# reference-details fallback computes Donation outstanding amounts
+			# as grand_total - advance_paid under any override_doctype_class
+			# winner. advance_paid is maintained by sync_donation_paid_state.
+			self.grand_total = self.amount
 		if self.donor:
 			self.email = get_donor_email(self.donor) or self.email
 		if not self.donor or not frappe.db.exists("Donor", self.donor):
@@ -32,6 +38,15 @@ class Donation(Document):
 			else:
 				frappe.throw(_("Please select a Donor"))
 		self._validate_major_gift_donor()
+
+	def on_submit(self):
+		# Keep the advance_paid mirror correct before any Payment Entry is
+		# created against this Donation. The paid flag is deliberately not
+		# touched here: Donations marked paid manually (without a Payment
+		# Entry) must stay paid through submit.
+		from non_profit.non_profit.custom_doctype.payment_entry import sync_donation_advance_paid
+
+		sync_donation_advance_paid(self.name)
 
 	def _validate_major_gift_donor(self):
 		# A linked Major Gift must belong to the same Donor as this Donation.

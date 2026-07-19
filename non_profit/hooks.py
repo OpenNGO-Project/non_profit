@@ -21,7 +21,6 @@ before_uninstall = "non_profit.setup.before_uninstall"
 
 override_doctype_class = {
 	"Bank Transaction": "non_profit.non_profit.custom_doctype.bank_transaction.NonProfitBankTransaction",
-	"Payment Entry": "non_profit.non_profit.custom_doctype.payment_entry.NonProfitPaymentEntry",
 }
 
 doc_events = {
@@ -32,6 +31,17 @@ doc_events = {
 		"on_submit": "non_profit.non_profit.major_gifts.on_donation_change",
 		"on_cancel": "non_profit.non_profit.major_gifts.on_donation_change",
 		"on_trash": "non_profit.non_profit.major_gifts.on_donation_change",
+	},
+	"Payment Entry": {
+		# The Donation delta deliberately lives in doc_events, not in
+		# override_doctype_class: the override resolves to the last installed
+		# app (hrms wins on this bench), while doc_events fire for every
+		# Payment Entry regardless of which controller class is active.
+		"before_validate": "non_profit.non_profit.custom_doctype.payment_entry.validate_donation_payment_entry_companies",
+		"validate": "non_profit.non_profit.custom_doctype.payment_entry.validate_donation_payment_entry_references",
+		"on_submit": "non_profit.non_profit.custom_doctype.payment_entry.sync_donation_accounting_state_for_payment_entry",
+		"on_cancel": "non_profit.non_profit.custom_doctype.payment_entry.sync_donation_accounting_state_for_payment_entry",
+		"on_change": "non_profit.non_profit.custom_doctype.payment_entry.sync_donation_reconciliation_state_on_payment_entry_change",
 	},
 	"Task": {
 		"on_update": "non_profit.non_profit.next_actions.on_task_change",

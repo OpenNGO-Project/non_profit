@@ -23,6 +23,18 @@
   (`frm.page.add_action_item`, `listview.page.add_action_item`, or
   `listview.page.add_actions_menu_item`) instead of visible inner-toolbar
   custom buttons, so Non Profit / GoodNPO views remain usable on mobile.
+- Payment Entry integration is hook-based, not class-based. The Donation
+  delta lives in the `before_validate` / `validate` and accounting-state
+  `doc_events` handlers in
+  `non_profit/non_profit/custom_doctype/payment_entry.py` (registered in
+  `hooks.py`): `override_doctype_class` resolves to the last installed app
+  (hrms wins on this bench), so the former `NonProfitPaymentEntry` controller
+  override was silently inert. The class remains only as an import-compatible
+  shell — never put required behaviour back on it. Donation carries
+  maintained read-only `grand_total` / `advance_paid` custom-field mirrors
+  (Sales Invoice semantics) so ERPNext's generic reference-details fallback
+  computes the correct outstanding amount under any active Payment Entry
+  controller; keep both fields in sync whenever the settlement state changes.
 
 ## Documentation Contract
 

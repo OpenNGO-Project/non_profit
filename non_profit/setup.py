@@ -104,7 +104,7 @@ def make_custom_fields(update=True):
 
 
 def get_custom_fields():
-	return {
+	custom_fields = {
 		"Contact": [
 			{
 				"fieldname": "title",
@@ -141,3 +141,36 @@ def get_custom_fields():
 			},
 		],
 	}
+	if frappe.db.exists("DocType", "Donation"):
+		custom_fields["Donation"] = get_donation_payment_custom_fields()
+	return custom_fields
+
+
+def get_donation_payment_custom_fields():
+	"""Donation mirrors of the Sales Invoice fields that ERPNext's generic
+	Payment Entry reference-details fallback reads.
+
+	ERPNext computes outstanding as ``grand_total - advance_paid`` for any
+	reference doctype it does not special-case. Maintaining these two fields
+	keeps Donation references correct no matter which app wins the
+	``override_doctype_class`` resolution for Payment Entry (see
+	``non_profit/non_profit/custom_doctype/payment_entry.py``).
+	"""
+	return [
+		{
+			"fieldname": "grand_total",
+			"label": "Grand Total",
+			"fieldtype": "Currency",
+			"insert_after": "amount",
+			"read_only": 1,
+			"no_copy": 1,
+		},
+		{
+			"fieldname": "advance_paid",
+			"label": "Advance Paid",
+			"fieldtype": "Currency",
+			"insert_after": "grand_total",
+			"read_only": 1,
+			"no_copy": 1,
+		},
+	]

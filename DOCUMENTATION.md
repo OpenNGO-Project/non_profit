@@ -102,7 +102,10 @@ render on the form exactly like on Member/Donor (`onload` +
 - Recurring Donation processing creates submitted, unpaid Donation rows for due
   active schedules, advances `next_date`, cancels schedules that pass
   `end_date`, and commits or rolls back each schedule independently.
-- `Payment Entry` is extended through `override_doctype_class`.
+- `Payment Entry` is extended through `doc_events` hooks, not
+  `override_doctype_class`: the override resolves to the last installed app
+  (hrms wins on this bench), while doc_events fire for every Payment Entry
+  regardless of which controller class is active.
 
 ## Roles And Desk Access
 
@@ -261,16 +264,36 @@ accounting error, and raises. Only after accounting succeeds does it call the
 narrow `_dispatch_payment_thank_you()` policy seam; presentation extensions may
 replace the message policy but do not override settlement. Donation itself owns
 all `thank_you_sent*` audit writes through `_mark_thank_you_sent()`.
-The `Payment Entry` override also syncs Donation references. Reference details
-and the Create Payment Entry helper expose only the Donation amount not already
-allocated by submitted Payment Entries. A fully allocated Donation cannot create
-another Payment Entry. Final submission locks all referenced Donation rows in
-name order and rejects a cumulative allocation above the Donation amount, so a
-stale or concurrent draft cannot post a second settlement. Donation references
-must use the Donation company and its expected Donor receivable account: the
-configured Donation Debit Account when it belongs to that company, otherwise
-ERPNext's company-specific Donor party account. Cancellation recalculates the
-paid flag from the remaining submitted Payment Entries.
+The `Payment Entry` delta is delivered through `doc_events` hooks
+(`before_validate` / `validate` / on_submit / on_cancel / on_change registered
+in `hooks.py`), not through
+`override_doctype_class`. The override resolves to whichever app installed
+last — on this bench `hrms` registers its own Payment Entry class, which made
+non_profit's former controller override inert and broke Donation settlement.
+doc_events fire for every Payment Entry regardless of the active controller,
+so the Donation behaviour no longer depends on install order. The
+`NonProfitPaymentEntry` class remains as an import-compatible shell only.
+The early `before_validate` company check runs before an active controller
+tries to resolve cross-company reference details; the full account and
+allocation checks remain in `validate`.
+Reference details and the Create Payment Entry helper expose only the Donation
+amount not already allocated by submitted Payment Entries. Donation carries
+two maintained read-only custom fields mirroring Sales Invoice semantics:
+`grand_total` (set equal to `amount` on validate) and `advance_paid` (the sum
+of submitted Payment Entry allocations, refreshed by the same sync path that
+maintains `paid`, on Donation submit, and on Payment Entry submit/cancel;
+existing rows are backfilled by patch). ERPNext's generic reference-details
+fallback therefore computes `outstanding = grand_total - advance_paid`, which
+is exactly the remaining Donation outstanding, so the active controller's
+`validate` passes under erpnext base, hrms, or any future override winner.
+A fully allocated Donation cannot create another Payment Entry. Final
+submission locks all referenced Donation rows in name order and rejects a
+cumulative allocation above the Donation amount, so a stale or concurrent
+draft cannot post a second settlement. Donation references must use the
+Donation company and its expected Donor receivable account: the configured
+Donation Debit Account when it belongs to that company, otherwise ERPNext's
+company-specific Donor party account. Cancellation recalculates the paid flag
+and `advance_paid` from the remaining submitted Payment Entries.
 Bank reconciliation stays separate from payment success. `Donation.reconciled`,
 `reconciled_on`, and `reconciled_payment_entry` are read-only mirrors of
 submitted Donation Payment Entries whose `clearance_date` has been set by

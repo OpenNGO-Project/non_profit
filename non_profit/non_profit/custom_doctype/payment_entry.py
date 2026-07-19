@@ -11,101 +11,76 @@ from erpnext.accounts.utils import get_account_currency
 from frappe import _
 from frappe.query_builder import Order
 from frappe.query_builder.functions import Sum
-from frappe.utils.data import flt, getdate
+from frappe.utils.data import comma_or, flt, getdate
 
 
 class NonProfitPaymentEntry(PaymentEntry):
-	"""Donor-aware Payment Entry.
+	"""Import-compatible shell over ERPNext's PaymentEntry.
 
-	Minimal delta over ERPNext's PaymentEntry: support the Donor party type
-	(paying against Donation references) and keep the linked Donations' paid /
-	reconciliation state in sync. Everything else defers to super().
+	This class intentionally carries NO behaviour. The Donation delta lives in
+	the module-level ``doc_events`` handlers below (registered for
+	``Payment Entry`` in ``non_profit/hooks.py``): ``override_doctype_class``
+	resolves to the last installed app that overrides the doctype, so once
+	``hrms`` (or any other app) registers its own Payment Entry class, a
+	controller override from this app is silently inert and validation/sync
+	behaviour would depend on install order. ``doc_events`` handlers fire for
+	every Payment Entry regardless of which class wins, keeping the Donation
+	delta deterministic.
+
+	The class remains only so external callers can keep importing and
+	constructing it; it must not grow required behaviour again.
 	"""
 
-	def validate(self):
-		if self.get("_action") == "submit":
-			_lock_referenced_donations(self)
-		super().validate()
 
-	def on_submit(self):
-		super().on_submit()
-		sync_donation_accounting_state_for_payment_entry(self)
+def validate_donation_payment_entry_companies(doc, method: str | None = None) -> None:
+	"""Reject cross-company Donation references before controller validation.
 
-	def on_cancel(self):
-		super().on_cancel()
-		sync_donation_accounting_state_for_payment_entry(self)
-
-	def on_change(self):
-		super_on_change = getattr(super(), "on_change", None)
-		if callable(super_on_change):
-			super_on_change()
-		if self.docstatus == 1:
-			sync_donation_reconciliation_state_for_payment_entry(self)
-
-	def get_valid_reference_doctypes(self):
-		# Donor payments may only reference Donations. Every other party type
-		# (including the custom "Member" party type registered by this app)
-		# keeps stock behaviour: ERPNext skips reference-doctype validation
-		# when this returns None.
-		if self.party_type == "Donor":
-			return ("Donation",)
-		return super().get_valid_reference_doctypes()
-
-	def validate_reference_documents(self):
-		super().validate_reference_documents()
-		_validate_donation_reference_accounts(self)
-		if self.get("_action") == "submit":
-			_validate_donation_allocation_totals(self)
-
-	def set_missing_ref_details(
-		self,
-		force: bool = False,
-		update_ref_details_only_for: list | None = None,
-		reference_exchange_details: dict | None = None,
-	) -> None:
-		# Mirrors PaymentEntry.set_missing_ref_details, except reference
-		# details are fetched via get_payment_reference_details() so Donation
-		# references get their amounts from the Donation document.
-		for d in self.get("references"):
-			if not d.allocated_amount:
-				continue
-
-			if (
-				update_ref_details_only_for
-				and (d.reference_doctype, d.reference_name) not in update_ref_details_only_for
-			):
-				continue
-
-			ref_details = get_payment_reference_details(
-				d.reference_doctype,
-				d.reference_name,
-				self.party_account_currency,
-				self.party_type,
-				self.party,
-				self.name if not self.is_new() else None,
+	The active Payment Entry controller resolves reference details during its
+	own ``validate`` method. A cross-company row can make that generic lookup
+	fail before normal ``validate`` doc-events run, so this invariant belongs in
+	``before_validate`` as well as the full account check below.
+	"""
+	for donation_name in _donation_reference_names(doc):
+		donation_company = frappe.db.get_value("Donation", donation_name, "company")
+		if donation_company and doc.company != donation_company:
+			frappe.throw(
+				_("Donation {0} belongs to company {1}, but the Payment Entry company is {2}.").format(
+					donation_name, donation_company, doc.company
+				)
 			)
 
-			# Only update exchange rate when the reference is Journal Entry
-			if (
-				reference_exchange_details
-				and d.reference_doctype == reference_exchange_details.reference_doctype
-				and d.reference_name == reference_exchange_details.reference_name
-			):
-				ref_details.update({"exchange_rate": reference_exchange_details.exchange_rate})
 
-			for field, value in ref_details.items():
-				if d.exchange_gain_loss:
-					# for cases where gain/loss is booked into invoice
-					# exchange_gain_loss is calculated from invoice & populated
-					# and row.exchange_rate is already set to payment entry's exchange rate
-					# refer -> `update_reference_in_payment_entry()` in utils.py
-					continue
+def validate_donation_payment_entry_references(doc, method: str | None = None) -> None:
+	"""``doc_events`` validate hook for Payment Entry.
 
-				if field == "exchange_rate" or not d.get(field) or force:
-					if self.get("_action") in ("submit", "cancel"):
-						d.db_set(field, value)
-					else:
-						d.set(field, value)
+	Runs after the active controller's own validate (erpnext base, hrms, or
+	any future ``override_doctype_class`` winner) and enforces the
+	Donation-side invariants the generic ERPNext path cannot express:
+
+	- a Donor party may only allocate against Donation references,
+	- company and Donor party account must match the referenced Donation (H2),
+	- on submit, referenced Donations are locked in name order and the
+	  cumulative allocation may not exceed the Donation amount (H1).
+
+	No-ops fast when no allocated Donation reference rows exist.
+	"""
+	if doc.party_type == "Donor":
+		for row in doc.get("references"):
+			if not row.allocated_amount:
+				continue
+			if row.reference_doctype != "Donation":
+				frappe.throw(_("Reference Doctype must be one of {0}").format(comma_or([_("Donation")])))
+
+	_validate_donation_reference_accounts(doc)
+	if doc.get("_action") == "submit":
+		_lock_referenced_donations(doc)
+		_validate_donation_allocation_totals(doc)
+
+
+def sync_donation_reconciliation_state_on_payment_entry_change(doc, method: str | None = None) -> None:
+	"""``doc_events`` on_change hook for Payment Entry (clearance-date sync)."""
+	if doc.docstatus == 1:
+		sync_donation_reconciliation_state_for_payment_entry(doc)
 
 
 @frappe.whitelist()
@@ -192,7 +167,7 @@ def get_donation_payment_entry(
 	return pe
 
 
-def sync_donation_accounting_state_for_payment_entry(payment_entry) -> None:
+def sync_donation_accounting_state_for_payment_entry(payment_entry, method: str | None = None) -> None:
 	sync_donation_paid_state_for_payment_entry(payment_entry)
 	sync_donation_reconciliation_state_for_payment_entry(payment_entry)
 
@@ -228,6 +203,30 @@ def sync_donation_paid_state(donation_name: str) -> None:
 			recompute_donor_giving(donor)
 		if major_gift:
 			recompute_major_gift_closed(major_gift)
+
+	sync_donation_advance_paid(donation_name)
+
+
+def sync_donation_advance_paid(donation_name: str) -> None:
+	"""Maintain ``Donation.advance_paid`` as the sum of submitted PE allocations.
+
+	Together with ``Donation.grand_total`` (set on Donation validate) this
+	mirrors Sales Invoice semantics so ERPNext's generic Payment Entry
+	reference-details fallback computes ``outstanding = grand_total -
+	advance_paid`` correctly under any ``override_doctype_class`` winner.
+	Kept separate from the ``paid`` flag: Donations marked paid manually
+	(without a Payment Entry) must not be reset by this sync.
+	"""
+	if not frappe.db.exists("Donation", donation_name):
+		return
+	# advance_paid is a custom field; guard for sites that have not migrated.
+	if not frappe.get_meta("Donation").has_field("advance_paid"):
+		return
+
+	submitted_total = _submitted_donation_payment_total(donation_name)
+	current_total = flt(frappe.db.get_value("Donation", donation_name, "advance_paid"))
+	if current_total != submitted_total:
+		frappe.db.set_value("Donation", donation_name, "advance_paid", submitted_total, update_modified=False)
 
 
 def _submitted_donation_payment_total(donation_name: str, exclude_payment_entry: str | None = None) -> float:
