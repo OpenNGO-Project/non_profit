@@ -6,6 +6,22 @@ from frappe.tests.utils import FrappeTestCase
 
 
 class TestGrantApplication(FrappeTestCase):
+	def test_public_template_hides_email_and_escapes_applicant_values(self) -> None:
+		template_path = frappe.get_app_path(
+			"non_profit",
+			"non_profit",
+			"doctype",
+			"grant_application",
+			"templates",
+			"grant_application.html",
+		)
+		with open(template_path, encoding="utf-8") as template_file:
+			template = template_file.read()
+
+		self.assertNotIn("{{ email", template)
+		self.assertIn("{{ applicant_name | e }}", template)
+		self.assertIn("{{ grant_description | e }}", template)
+
 	def test_create_grant_application(self) -> None:
 		doc = frappe.get_doc(
 			{

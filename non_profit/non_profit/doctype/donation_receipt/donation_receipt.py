@@ -59,6 +59,7 @@ class DonationReceipt(Document):
 			self.currency = frappe.db.get_default("currency") or "EUR"
 
 	def before_submit(self):
+		self._lock_donations_for_submit()
 		self._validate_donations_for_submit()
 		self.status = "Issued"
 		self.issued_on = nowdate()
@@ -105,6 +106,23 @@ class DonationReceipt(Document):
 						frappe.bold(donation_name), frappe.bold(other_receipt)
 					)
 				)
+
+	def _lock_donations_for_submit(self) -> None:
+		"""Serialize receipt ownership checks for every selected Donation."""
+		donation_names = sorted({row.donation for row in self.donations or [] if row.donation})
+		if not donation_names:
+			return
+		donation = frappe.qb.DocType("Donation")
+		(
+			frappe.qb.from_(donation)
+			.select(donation.name)
+			.where(donation.name.isin(donation_names))
+			.orderby(donation.name)
+			.for_update()
+		).run()
+		# validate() may have cached ownership before this transaction acquired
+		# the locks. Re-read Donation.receipt and active receipt items now.
+		self.flags.pop("donation_receipt_context", None)
 
 	def _mark_donations(self):
 		donation_names = list({row.donation for row in self.donations or [] if row.donation})

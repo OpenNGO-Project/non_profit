@@ -103,8 +103,11 @@ render on the form exactly like on Member/Donor (`onload` +
   new data loads and restores the mobile scroll position after replacement.
 - Daily scheduler jobs expire memberships and process recurring donations.
 - Recurring Donation processing creates submitted, unpaid Donation rows for due
-  active schedules, advances `next_date`, cancels schedules that pass
-  `end_date`, and commits or rolls back each schedule independently.
+  active schedules, locks and rechecks each schedule against the `next_date`
+  observed by that invocation, reuses any existing non-cancelled installment for
+  the same schedule/date, advances `next_date` at most once per invocation,
+  cancels schedules that pass `end_date`, and commits or rolls back each schedule
+  independently.
 - `Payment Entry` is extended through `doc_events` hooks, not
   `override_doctype_class`: the override resolves to the last installed app
   (hrms wins on this bench), while doc_events fire for every Payment Entry
@@ -143,6 +146,15 @@ another active receipt. The period comparison normalizes Frappe Date values and
 Desk JSON string dates before validation. Donation Receipt country defaults to
 `Switzerland` in DocType metadata, the yearly-generation dialog, and the backend
 fallback when no country argument is supplied.
+
+Submit locks selected Donation rows in name order and reloads Donation and
+active-receipt ownership under those locks before validating. Concurrent drafts
+therefore cannot both claim the same Donation from stale validation snapshots.
+
+Published Grant Application pages never render applicant email and apply
+explicit HTML escaping to applicant-provided display values. Authenticated users
+may still see the non-email contact section according to the existing page
+contract.
 
 ### Receipt jurisdiction contract
 

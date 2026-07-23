@@ -218,6 +218,17 @@ class TestDonationReceipt(FrappeTestCase):
 		self.assertEqual(set(context["donations"]), {donation.name for donation in donations})
 		self.assertLessEqual(sql.call_count, 2)
 
+	def test_submit_lock_discards_prelock_ownership_context(self) -> None:
+		from non_profit.non_profit.doctype.donation_receipt.donation_receipt import DonationReceipt
+
+		receipt = DonationReceipt({"doctype": "Donation Receipt"})
+		receipt.append("donations", {"donation": "DON-NOT-PERSISTED"})
+		receipt.flags.donation_receipt_context = {"stale": True}
+
+		receipt._lock_donations_for_submit()
+
+		self.assertNotIn("donation_receipt_context", receipt.flags)
+
 	def _donor(self):
 		donor_type = self._donor_type()
 		return frappe.get_doc(

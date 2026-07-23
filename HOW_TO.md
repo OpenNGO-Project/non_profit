@@ -306,7 +306,9 @@ change the dated rows on Household instead of editing those links directly.
 Use **Recurring Donation** for a schedule, not as proof of payment. A due active
 row creates a submitted, unpaid Donation in the daily job, advances **Next
 Date**, and becomes Cancelled once the next date passes **End Date**. Accounting
-or a payment provider must settle each generated Donation separately.
+or a payment provider must settle each generated Donation separately. The job
+serializes each schedule and reuses an already-created installment for the same
+schedule/date, so retries or overlapping workers do not create duplicates.
 
 **Actions → Create Next Donation Now** creates an installment immediately and
 also advances the schedule. Use **Paused** to stop generation without ending the
@@ -319,7 +321,7 @@ public join page. Chapter members can only leave their own active membership
 through the public leave endpoint. Staff changing another user's chapter row
 need write permission on the Chapter. Grant review invitations require write
 permission on the Grant Application and an Assessment Manager before the status is moved to
-**In Progress**.
+**In Progress**. Published grant pages do not render applicant email.
 
 Create Volunteers from an existing Contact; the dialog requires a Volunteer Type
 and an email on the Contact. It does not create a Customer. Create Sponsors from

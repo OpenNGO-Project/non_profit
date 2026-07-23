@@ -2,6 +2,7 @@
 non_profit.patches.set_non_profit_desktop_icon_app
 non_profit.patches.remove_tax_exemption_80g
 non_profit.patches.remove_certification_module
+non_profit.patches.remove_certification_module_tables
 
 [post_model_sync]
 non_profit.patches.backfill_donor_customers_from_email

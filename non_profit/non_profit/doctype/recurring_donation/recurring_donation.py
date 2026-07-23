@@ -58,10 +58,25 @@ class RecurringDonation(Document):
 		# run_doc_method only enforces read permission; inserting and
 		# submitting a Donation is a write-level action.
 		self.check_permission("write")
-		donation = self.create_donation(mark_paid=False)
+		_lock_recurring_donation(self.name)
+		self.load_from_db()
+		donation = self._get_or_create_current_donation()
 		self.advance_next_date()
 		self.save()
 		return donation.name
+
+	def _get_or_create_current_donation(self):
+		existing = frappe.db.get_value(
+			"Donation",
+			{
+				"recurring_donation": self.name,
+				"date": self.next_date,
+				"docstatus": ["<", 2],
+			},
+			"name",
+			order_by="creation asc",
+		)
+		return frappe.get_doc("Donation", existing) if existing else self.create_donation(mark_paid=False)
 
 
 def process_recurring_donations():
@@ -70,15 +85,31 @@ def process_recurring_donations():
 	due = frappe.get_all(
 		"Recurring Donation",
 		filters={"status": "Active", "next_date": ["<=", today]},
-		pluck="name",
+		fields=["name", "next_date"],
+		order_by="name asc",
 	)
-	for name in due:
+	for candidate in due:
+		name = candidate.name
 		try:
+			_lock_recurring_donation(name)
 			rec = frappe.get_doc("Recurring Donation", name)
-			rec.create_donation(mark_paid=False)
+			if (
+				rec.status != "Active"
+				or not rec.next_date
+				or getdate(rec.next_date) != getdate(candidate.next_date)
+				or getdate(rec.next_date) > today
+			):
+				frappe.db.rollback()
+				continue
+			rec._get_or_create_current_donation()
 			rec.advance_next_date()
 			rec.save(ignore_permissions=True)
 			frappe.db.commit()  # nosemgrep: frappe-manual-commit
 		except Exception:
 			frappe.log_error(title=f"Recurring Donation fan-out failed: {name}")
 			frappe.db.rollback()
+
+
+def _lock_recurring_donation(name: str) -> None:
+	recurring = frappe.qb.DocType("Recurring Donation")
+	(frappe.qb.from_(recurring).select(recurring.name).where(recurring.name == name).for_update()).run()
