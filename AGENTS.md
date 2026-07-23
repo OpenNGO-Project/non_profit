@@ -35,6 +35,17 @@
   (Sales Invoice semantics) so ERPNext's generic reference-details fallback
   computes the correct outstanding amount under any active Payment Entry
   controller; keep both fields in sync whenever the settlement state changes.
+- Good Connector owns shared EBICS ingestion, settings, `gc_*` QRR/audit fields,
+  aggregate ambiguity handling, and Bank Transaction linking. non_profit owns
+  only Donation QRR registration, side-effect-free candidate matching, and the
+  trusted unsaved Donation Payment Entry builder. Keep the existing qrbill
+  Donation-slip renderer, but pass the shared QRR only for a real QR-IBAN.
+  Candidate providers use deterministic ordered reads and return every
+  same-QRR Donation before amount checks so amount filtering cannot select among
+  ambiguous identities. Unsafe sole identities remain ineligible candidates.
+  Good Connector locks the selected eligible target before building its Payment
+  Entry. Automatic matching is company-currency only. QRR assignment serializes
+  on the Company and rejects active same-company Donation/Sales Invoice collisions.
 
 ## Documentation Contract
 

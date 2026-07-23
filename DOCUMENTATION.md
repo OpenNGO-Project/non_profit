@@ -25,7 +25,10 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 - **Non Profit Settings** for company, donor type, billing, invoicing, payment account, and email defaults.
 - **Non Profit** Workspace and Workspace Sidebar for current Desk navigation,
   including Good Help, fundraising, Major Gifts, membership, community,
-  settings, and the Expiring Memberships report.
+  settings, and the Expiring Memberships report. Contact, Address, Household,
+  Customer, and Supplier are grouped together under **People**. The upstream
+  links remain permission-filtered by Frappe; Non Profit roles do not gain
+  broad access to those ERPNext masters.
 
 ## Households
 
@@ -307,6 +310,26 @@ Global `Non Profit Settings` accounts are applied only when the configured
 Account belongs to the Donation company, so one company's legacy settings do
 not overwrite another company's party or bank accounts.
 
+When Good Connector is installed, Donation submit stores a complete 27-digit
+QRR in `Donation.gc_qr_reference`, and migrate backfills missing references on
+existing submitted Donations without changing `modified`. The Donation provider
+registered through `good_connector_ebics_reconciliation_providers` performs
+read-only matching by QRR, Donation/Bank Transaction company, company currency,
+submitted state, and remaining outstanding. It returns every submitted same-QRR
+Donation before amount checks so a duplicate identity cannot be selected by
+amount, and it does so through a deterministic ordered read without provider-side
+locking. A sole exact identity remains present but ineligible when policy blocks
+automation, so another provider cannot silently win. It is eligible only when
+the Company, receiving bank Account, and expected Donor receivable Account all
+use the Bank Transaction currency; unsupported multi-currency cases stay for
+manual review. The builder sets the Bank Transaction date before calculating
+Payment Entry exchange values. Good Connector aggregates this with invoice and
+other providers, locks the selected eligible target, and leaves multiple
+aggregate candidates for manual review before voucher submission and Bank
+Transaction linking.
+QRR assignment locks the Company and rejects active same-company collisions
+with both Donations and Sales Invoices before writing the reference.
+
 ### Donation Accounting Audit
 
 The read-only bench helper below reports submitted Donation references whose
@@ -335,6 +358,12 @@ of a separate final page so normal document footer behavior does not overlap the
 payment part. Missing creditor configuration is reported before checking the
 optional `qrbill` Python package, so setup errors remain visible even on CI
 images that do not install the QR-bill dependency.
+
+When the configured creditor account is a QR-IBAN and Good Connector is
+installed, the qrbill renderer receives the Donation's shared QRR as
+`reference_number`. Ordinary IBAN slips remain non-QRR. The qrbill renderer and
+its Non Profit Settings creditor source remain separate from Good Connector's
+chqr invoice renderer.
 
 Note: this bench intentionally runs two Swiss QR-bill engines. non_profit's
 `swiss_qrbill.py` (qrbill package, creditor from Non Profit Settings) renders
@@ -578,3 +607,10 @@ preconditions before the suite runs: it uses a short in-process test host URL,
 renames fixed ERPNext test Customers when local Customer naming is set to naming
 series, and pre-creates ERPNext test Addresses with `pincode` for Swiss benches
 where that field is mandatory.
+
+CI runs the server suite twice: once with only the declared ERPNext dependency
+to prove Good Connector remains optional, and once with the current published
+Good Connector installed after non_profit to verify optional compatibility
+without requiring unpublished integration APIs. The provider's review-only
+candidate contract is covered by non_profit's unit tests in both jobs; the full
+QRR registration tests run when the coordinated Good Connector API is present.

@@ -38,6 +38,9 @@ def setup_non_profit():
 	domain_settings.append("active_domains", dict(domain=domain))
 	frappe.clear_cache()
 	ensure_non_profit_desk_roles()
+	from non_profit.non_profit.fundraising_setup import ensure_good_connector_bank_integration
+
+	ensure_good_connector_bank_integration()
 
 
 def ensure_non_profit_desk_roles():

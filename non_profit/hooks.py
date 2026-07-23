@@ -28,7 +28,10 @@ doc_events = {
 		"validate": "non_profit.non_profit.membership_sync.validate_no_overlap",
 	},
 	"Donation": {
-		"on_submit": "non_profit.non_profit.major_gifts.on_donation_change",
+		"on_submit": [
+			"non_profit.non_profit.major_gifts.on_donation_change",
+			"non_profit.non_profit.bank_integration.register_donation_qr_reference",
+		],
 		"on_cancel": "non_profit.non_profit.major_gifts.on_donation_change",
 		"on_trash": "non_profit.non_profit.major_gifts.on_donation_change",
 	},
@@ -48,6 +51,10 @@ doc_events = {
 		"on_trash": "non_profit.non_profit.next_actions.on_task_change",
 	},
 }
+
+good_connector_ebics_reconciliation_providers = [
+	"non_profit.non_profit.bank_integration.get_ebics_reconciliation_candidates",
+]
 
 scheduler_events = {
 	"daily": [

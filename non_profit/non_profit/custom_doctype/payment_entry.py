@@ -97,6 +97,20 @@ def get_donation_payment_entry(
 	if dt != "Donation":
 		frappe.throw(_("Only Donation payment entries are supported here"))
 	frappe.has_permission(dt, "read", doc=dn, throw=True)
+	return _build_donation_payment_entry(dt, dn, party_amount, bank_account, bank_amount)
+
+
+def _build_donation_payment_entry(
+	dt: str,
+	dn: str,
+	party_amount: float | None = None,
+	bank_account: str | None = None,
+	bank_amount: float | None = None,
+	posting_date: Any = None,
+) -> Any:
+	"""Build an unsaved Donation Payment Entry for trusted accounting flows."""
+	if dt != "Donation":
+		frappe.throw(_("Only Donation payment entries are supported here"))
 
 	doc = frappe.get_doc(dt, dn)
 
@@ -129,7 +143,7 @@ def get_donation_payment_entry(
 	pe.company = doc.company
 	pe.cost_center = doc.get("cost_center")
 	pe.project = doc.get("project")
-	pe.posting_date = getdate()
+	pe.posting_date = getdate(posting_date) if posting_date else getdate()
 	pe.mode_of_payment = doc.get("mode_of_payment")
 	pe.party_type = "Donor"
 	pe.party = doc.get("donor")

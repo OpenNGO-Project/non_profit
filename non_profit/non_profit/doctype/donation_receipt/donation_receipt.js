@@ -7,29 +7,29 @@ frappe.ui.form.on("Donation Receipt", {
 					return;
 				}
 
-				frappe.call({
-					method: "non_profit.non_profit.doctype.donation_receipt.donation_receipt.get_donations_for_selected_year",
-					args: {
-						fiscal_year: frm.doc.fiscal_year,
-						donor: frm.doc.donor,
-					},
-					freeze: true,
-					freeze_message: __("Spenden werden geladen..."),
-				}).then((r) => {
-					const rows = (r.message && r.message.donations) || [];
-					frm.clear_table("donations");
-					rows.forEach((donation) => {
-						const row = frm.add_child("donations");
-						row.donation = donation.donation;
-						row.donation_date = donation.donation_date;
-						row.amount = donation.amount;
+				frappe
+					.call({
+						method: "non_profit.non_profit.doctype.donation_receipt.donation_receipt.get_donations_for_selected_year",
+						args: {
+							fiscal_year: frm.doc.fiscal_year,
+							donor: frm.doc.donor,
+						},
+						freeze: true,
+						freeze_message: __("Spenden werden geladen..."),
+					})
+					.then((r) => {
+						const rows = (r.message && r.message.donations) || [];
+						frm.clear_table("donations");
+						rows.forEach((donation) => {
+							const row = frm.add_child("donations");
+							row.donation = donation.donation;
+							row.donation_date = donation.donation_date;
+							row.amount = donation.amount;
+						});
+						frm.refresh_field("donations");
+						frm.dirty();
+						frappe.show_alert(__("{0} Spenden hinzugefügt", [rows.length]));
 					});
-					frm.refresh_field("donations");
-					frm.dirty();
-					frappe.show_alert(
-						__("{0} Spenden hinzugefügt", [rows.length])
-					);
-				});
 			});
 		}
 

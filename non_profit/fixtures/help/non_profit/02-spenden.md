@@ -23,6 +23,15 @@ Spenden werden über **Donation** erfasst und optional einer **Donation Campaign
 6. Erfassen Sie die Zahlung über **Actions → Create Payment Entry** oder lassen
    Sie einen verifizierten Zahlungsanbieter die Zahlung autorisieren.
 
+Bei installierter Good-Connector-Bankanbindung erhält eine übermittelte Donation
+eine 27-stellige QR-Referenz. Mit der bankseitig ausgegebenen QR-IBAN auf dem
+Schweizer Spendenbeleg kann eine eindeutige gebuchte Zahlung automatisch als
+Payment Entry zugeordnet werden. Keine oder mehrere passende Spenden/Rechnungen
+bleiben in der Bank Transaction mit **Review** zur manuellen Prüfung.
+Die automatische Zuordnung unterstützt nur die Firmenwährung; Bankkonto und
+Spender-Debitorenkonto müssen dieselbe Währung verwenden. Fremdwährungsfälle
+bleiben zur manuellen Prüfung offen.
+
 ## Kampagnen nutzen
 
 Kampagnen bündeln mehrere Spenden zu einem Fundraising-Ziel. Hinterlegen Sie Namen, Zeitraum und Zielbetrag. Danach können Spenden der Kampagne zugeordnet und Auswertungen einfacher gelesen werden.

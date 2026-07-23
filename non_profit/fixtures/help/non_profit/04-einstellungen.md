@@ -28,6 +28,10 @@ Prüfen Sie die Einstellungen nach der Installation, nach einem Firmenwechsel od
 - **Creation User**: technischer Benutzer für automatisierte Dokumente.
 - **Major Donor Threshold**: Schwelle für automatische Grossspender-Markierung.
 
+Die EBICS-Bankverbindung gehört nicht in Non Profit Settings. Bankkonto,
+Zahlungsart und automatische QR-Zuordnung werden zentral unter **Good Connector
+Settings → EBICS Bank Integration** gepflegt.
+
 **Stale Interaction Days** und **Lapsed Major Months** sind reserviert und lösen
 derzeit keine Automatik aus.
 

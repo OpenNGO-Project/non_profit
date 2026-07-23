@@ -15,9 +15,14 @@ ERPNext must already be installed.
 NPO desk operators need `Non Profit Manager` or `Non Profit Member` with Desk Access. Setup repairs those roles and existing users during install/migrate. If an SSO-created user gets **Insufficient Permission for List Filter** on a non_profit list, run migrate/setup and have the user log in again.
 
 The shipped **Non Profit** workspace and sidebar expose current fundraising,
-Major Gifts, membership, community, settings, report, and Help links. The Help
-link requires `good_help`; Good Help syncs these Markdown fixtures into editable
-Wiki Documents.
+Major Gifts, membership, community, settings, report, and Help links. Shared
+party masters (**Contact**, **Address**, **Household**, **Customer**, and
+**Supplier**) are grouped under **People**. Frappe hides each upstream master
+link unless the user already has its normal ERPNext read permission; the Non
+Profit roles do not grant broad Contact, Address, Customer, or Supplier access.
+Assign the appropriate ERPNext product role only when the operator's duties
+require it. The Help link requires `good_help`; Good Help syncs these Markdown
+fixtures into editable Wiki Documents.
 
 ## Configure Core Settings
 
@@ -168,6 +173,26 @@ The seeded **Donation Slip CH** Print Format renders the donation summary first
 and places the Swiss QR-bill at the bottom of a separate final page. QR data is
 prepared by the Donation controller before print rendering; do not add QR
 generator calls directly to editable Jinja templates.
+
+For automatic EBICS matching, install Good Connector and configure **Good
+Connector Settings → EBICS Bank Integration** with the receiving Bank Account
+and Mode of Payment. A submitted Donation receives a 27-digit QR reference. To
+put that reference on the Donation Slip CH, the Non Profit creditor account must
+be the exact QR-IBAN issued by the bank; an ordinary IBAN cannot carry QRR.
+Automatic Donation matching supports only the Company currency: the receiving
+bank Account and expected Donor receivable Account must use that same currency.
+Foreign-currency cases remain **Review** for manual accounting.
+The system also keeps overpayments and other unsafe exact Donation identities as
+review candidates, so an invoice provider cannot silently claim the same QRR.
+Donation candidate discovery is a side-effect-free ordered read; Good Connector,
+not the provider, locks the selected eligible target before building a Payment
+Entry.
+New references are checked against active same-company Donations and Sales
+Invoices; resolve any collision before issuing the slip.
+Enable automatic reconciliation only after testing Donation, Sales Invoice, no
+match, duplicate match, cross-domain match, partial payment, and overpayment
+examples. Any zero or multiple aggregate match stays **Review** in the Bank
+Transaction.
 
 Credit card payments have two separate states. **Paid** means the gateway
 confirmed the transaction and a submitted Payment Entry covers the Donation.

@@ -1,0 +1,19 @@
+{
+	"env": {
+		"browser": true,
+		"node": true,
+		"es2022": true,
+		"mocha": true
+	},
+	"parserOptions": {
+		"sourceType": "module"
+	},
+	"extends": "eslint:recommended",
+	"rules": {
+		"indent": "off",
+		"no-console": "warn",
+		"no-undef": "off",
+		"no-unused-vars": "off"
+	},
+	"root": true
+}

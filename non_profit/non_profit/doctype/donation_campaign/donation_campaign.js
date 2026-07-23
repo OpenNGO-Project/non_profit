@@ -12,7 +12,15 @@ frappe.ui.form.on("Donation Campaign", {
 (function () {
 	"use strict";
 
-	const CHART_COLORS = ["#14527a", "#6f7f2f", "#b1842e", "#7b5a8e", "#3f6f68", "#a45d45", "#5f6f89"];
+	const CHART_COLORS = [
+		"#14527a",
+		"#6f7f2f",
+		"#b1842e",
+		"#7b5a8e",
+		"#3f6f68",
+		"#a45d45",
+		"#5f6f89",
+	];
 	const CHART_SECTION_SELECTOR = ".non-profit-campaign-chart-section";
 
 	injectCampaignChartStyles();
@@ -273,34 +281,47 @@ frappe.ui.form.on("Donation Campaign", {
 	function setupCampaignChartClicks() {
 		$(document)
 			.off("click.nonProfitCampaignChart", ".non-profit-campaign-chart-segment")
-			.on("click.nonProfitCampaignChart", ".non-profit-campaign-chart-segment", function (event) {
-				event.preventDefault();
-				event.stopPropagation();
-				const doctype = this.getAttribute("data-route-form");
-				const docname = this.getAttribute("data-docname");
-				if (doctype && docname) frappe.set_route("Form", doctype, docname);
-			});
+			.on(
+				"click.nonProfitCampaignChart",
+				".non-profit-campaign-chart-segment",
+				function (event) {
+					event.preventDefault();
+					event.stopPropagation();
+					const doctype = this.getAttribute("data-route-form");
+					const docname = this.getAttribute("data-docname");
+					if (doctype && docname) frappe.set_route("Form", doctype, docname);
+				}
+			);
 		$(document)
 			.off("click.nonProfitCampaignChart", "[data-non-profit-campaign-chart-year-option]")
-			.on("click.nonProfitCampaignChart", "[data-non-profit-campaign-chart-year-option]", function (event) {
-				event.preventDefault();
-				if (cur_frm?.doctype !== "Donation Campaign") return;
-				const selectedYear =
-					Number(this.getAttribute("data-non-profit-campaign-chart-year-option")) ||
-					cur_frm.non_profit_campaign_chart_year;
-				$(this).closest(".non-profit-campaign-chart-year-picker").removeAttr("open");
-				if (selectedYear === cur_frm.non_profit_campaign_chart_year) return;
-				cur_frm.non_profit_campaign_chart_year = selectedYear;
-				renderCampaignDonationChart(cur_frm, {
-					loading: false,
-					scrollTop: window.scrollY,
-				});
-			});
+			.on(
+				"click.nonProfitCampaignChart",
+				"[data-non-profit-campaign-chart-year-option]",
+				function (event) {
+					event.preventDefault();
+					if (cur_frm?.doctype !== "Donation Campaign") return;
+					const selectedYear =
+						Number(this.getAttribute("data-non-profit-campaign-chart-year-option")) ||
+						cur_frm.non_profit_campaign_chart_year;
+					$(this).closest(".non-profit-campaign-chart-year-picker").removeAttr("open");
+					if (selectedYear === cur_frm.non_profit_campaign_chart_year) return;
+					cur_frm.non_profit_campaign_chart_year = selectedYear;
+					renderCampaignDonationChart(cur_frm, {
+						loading: false,
+						scrollTop: window.scrollY,
+					});
+				}
+			);
 	}
 
 	window.renderCampaignDonationChart = function (frm, options = {}) {
 		frm.non_profit_campaign_chart_request = (frm.non_profit_campaign_chart_request || 0) + 1;
-		renderCampaignDonationChartForRequest(frm, frm.non_profit_campaign_chart_request, 0, options);
+		renderCampaignDonationChartForRequest(
+			frm,
+			frm.non_profit_campaign_chart_request,
+			0,
+			options
+		);
 	};
 
 	function renderCampaignDonationChartForRequest(frm, requestId, attempt = 0, options = {}) {
@@ -312,7 +333,13 @@ frappe.ui.form.on("Donation Campaign", {
 		if (!frm.dashboard?.links_area?.wrapper) {
 			if (attempt < 20) {
 				window.setTimeout(
-					() => renderCampaignDonationChartForRequest(frm, requestId, attempt + 1, options),
+					() =>
+						renderCampaignDonationChartForRequest(
+							frm,
+							requestId,
+							attempt + 1,
+							options
+						),
 					100
 				);
 			}
@@ -320,8 +347,7 @@ frappe.ui.form.on("Donation Campaign", {
 		}
 		frappe
 			.call({
-				method:
-					"non_profit.non_profit.doctype.donation_campaign.donation_campaign.get_campaign_donation_chart",
+				method: "non_profit.non_profit.doctype.donation_campaign.donation_campaign.get_campaign_donation_chart",
 				args: {
 					campaign: frm.doc.name,
 					year: frm.non_profit_campaign_chart_year,
@@ -331,7 +357,8 @@ frappe.ui.form.on("Donation Campaign", {
 				if (frm.non_profit_campaign_chart_request !== requestId) return;
 				if (frm.is_new() || frm.doc?.name !== response.message?.campaign) return;
 				removeCampaignDonationChart(frm);
-				frm.non_profit_campaign_chart_year = response.message.year || frm.non_profit_campaign_chart_year;
+				frm.non_profit_campaign_chart_year =
+					response.message.year || frm.non_profit_campaign_chart_year;
 				const section = $(campaignDonationChartHtml(response.message || {}));
 				frm.dashboard.links_area.wrapper.before(section);
 				frm.dashboard.show();
@@ -375,12 +402,21 @@ frappe.ui.form.on("Donation Campaign", {
 					</div>
 					<div class="non-profit-campaign-chart-plot">
 						<div class="non-profit-campaign-chart-axis" aria-hidden="true">
-							${axisTicks.map((tick) => `<span style="bottom:${tick.position}%">${escapeHtml(shortMoney(tick.value))}</span>`).join("")}
+							${axisTicks
+								.map(
+									(tick) =>
+										`<span style="bottom:${tick.position}%">${escapeHtml(
+											shortMoney(tick.value)
+										)}</span>`
+								)
+								.join("")}
 						</div>
 						<div class="non-profit-campaign-chart-grid" aria-hidden="true">
 							${axisTicks.map((tick) => `<span style="bottom:${tick.position}%"></span>`).join("")}
 						</div>
-						<div class="non-profit-campaign-chart-bars" aria-label="${escapeHtml(__("Donations per Month"))}">${bars}</div>
+						<div class="non-profit-campaign-chart-bars" aria-label="${escapeHtml(
+							__("Donations per Month")
+						)}">${bars}</div>
 					</div>
 				</div>
 			</div>
@@ -389,11 +425,15 @@ frappe.ui.form.on("Donation Campaign", {
 
 	function chartYearSelect(selectedYear, yearOptions) {
 		const year = Number(selectedYear) || new Date().getFullYear();
-		const options = (yearOptions?.length ? yearOptions : Array.from({ length: 5 }, (_, index) => year - index)).map(
-			(option) => Number(option)
-		);
+		const options = (
+			yearOptions?.length
+				? yearOptions
+				: Array.from({ length: 5 }, (_, index) => year - index)
+		).map((option) => Number(option));
 		return `<details class="non-profit-campaign-chart-year-picker">
-			<summary class="non-profit-campaign-chart-year" aria-label="${escapeHtml(__("Year"))}">${escapeHtml(String(year))}</summary>
+			<summary class="non-profit-campaign-chart-year" aria-label="${escapeHtml(
+				__("Year")
+			)}">${escapeHtml(String(year))}</summary>
 			<div class="non-profit-campaign-chart-year-menu" role="listbox">${options
 				.map(
 					(option) =>
@@ -413,16 +453,24 @@ frappe.ui.form.on("Donation Campaign", {
 		const height = axisMax > 0 ? Math.max(4, Math.round((row.total / axisMax) * 100)) : 0;
 		const segments = row.segments
 			.map((segment, index) => {
-				const segmentHeight = row.total ? Math.max(3, (segment.total / row.total) * 100) : 0;
+				const segmentHeight = row.total
+					? Math.max(3, (segment.total / row.total) * 100)
+					: 0;
 				const title = `${segment.label}: ${format_currency(segment.total || 0, currency)}`;
 				return `<a class="non-profit-campaign-chart-segment" href="/desk/donation/${encodeURIComponent(
 					segment.donation
-				)}" data-route-form="Donation" data-docname="${escapeHtml(segment.donation)}" style="height:${segmentHeight}%; background:${chartColor(
+				)}" data-route-form="Donation" data-docname="${escapeHtml(
+					segment.donation
+				)}" style="height:${segmentHeight}%; background:${chartColor(
 					index
-				)}" title="${escapeHtml(title)}" data-tooltip="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"></a>`;
+				)}" title="${escapeHtml(title)}" data-tooltip="${escapeHtml(
+					title
+				)}" aria-label="${escapeHtml(title)}"></a>`;
 			})
 			.join("");
-		return `<div class="non-profit-campaign-chart-month" title="${escapeHtml(`${label}: ${amount}`)}">
+		return `<div class="non-profit-campaign-chart-month" title="${escapeHtml(
+			`${label}: ${amount}`
+		)}">
 			<div class="non-profit-campaign-chart-bar-track">
 				<div class="non-profit-campaign-chart-bar" style="height:${height}%">${segments}</div>
 			</div>
@@ -433,7 +481,8 @@ frappe.ui.form.on("Donation Campaign", {
 	function normalizeMonthlyDonations(monthlyDonations) {
 		return Array.from({ length: 12 }, (_, index) => {
 			const month = index + 1;
-			const row = (monthlyDonations || []).find((item) => Number(item.month) === month) || {};
+			const row =
+				(monthlyDonations || []).find((item) => Number(item.month) === month) || {};
 			return {
 				month,
 				total: Number(row.total) || 0,
@@ -461,7 +510,8 @@ frappe.ui.form.on("Donation Campaign", {
 	function niceAxisUpper(maxValue) {
 		const magnitude = 10 ** Math.floor(Math.log10(maxValue));
 		const normalized = maxValue / magnitude;
-		const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+		const niceNormalized =
+			normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
 		return niceNormalized * magnitude;
 	}
 
@@ -474,7 +524,9 @@ frappe.ui.form.on("Donation Campaign", {
 	}
 
 	function compactNumber(value) {
-		return new Intl.NumberFormat(frappe.boot.lang || undefined, { maximumFractionDigits: 1 }).format(Number(value) || 0);
+		return new Intl.NumberFormat(frappe.boot.lang || undefined, {
+			maximumFractionDigits: 1,
+		}).format(Number(value) || 0);
 	}
 
 	function chartColor(index) {

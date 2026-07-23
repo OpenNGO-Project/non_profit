@@ -105,6 +105,18 @@ def ensure_fundraising_fixtures():
 	ensure_email_template()
 	ensure_settings_defaults()
 	ensure_major_gift_workflow()
+	ensure_good_connector_bank_integration()
+
+
+def ensure_good_connector_bank_integration() -> None:
+	if "good_connector" not in frappe.get_installed_apps():
+		return
+	from good_connector.setup import ensure_bank_integration_setup
+
+	ensure_bank_integration_setup()
+	from non_profit.non_profit.bank_integration import backfill_donation_qr_references
+
+	backfill_donation_qr_references()
 
 
 DONATION_SLIP_CH_HTML = """
