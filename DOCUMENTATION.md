@@ -620,9 +620,9 @@ renames fixed ERPNext test Customers when local Customer naming is set to naming
 series, and pre-creates ERPNext test Addresses with `pincode` for Swiss benches
 where that field is mandatory.
 
-CI runs the server suite twice: once with only the declared ERPNext dependency
-to prove Good Connector remains optional, and once with the current published
-Good Connector installed after non_profit to verify optional compatibility
-without requiring unpublished integration APIs. The provider's review-only
-candidate contract is covered by non_profit's unit tests in both jobs; the full
-QRR registration tests run when the coordinated Good Connector API is present.
+CI runs the server suite with the declared ERPNext dependency, proving that Good
+Connector remains optional without requiring this OpenNGO repository to access a
+private cross-organization app. The provider's review-only candidate contract
+and uninstalled behavior are covered by non_profit's unit tests. Connector-backed
+QRR registration tests run in authorized integration environments where the
+coordinated Good Connector API is installed.

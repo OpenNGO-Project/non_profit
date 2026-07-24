@@ -13,14 +13,9 @@ concurrency:
 
 jobs:
   tests:
-    name: Server (${{ matrix.integration }})
+    name: Server
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
-    strategy:
-      fail-fast: false
-      matrix:
-        integration: [base, good-connector]
 
     services:
       redis-cache:
@@ -89,18 +84,12 @@ jobs:
         run: |
           bench get-app erpnext --branch version-16
           bench get-app payments --branch version-16
-          if [ "${{ matrix.integration }}" = "good-connector" ]; then
-            bench get-app good_connector https://github.com/SpendeDirekt/good_connector.git --branch main
-          fi
           bench get-app non_profit $GITHUB_WORKSPACE
           bench setup requirements --dev
           bench new-site --db-root-password root --admin-password admin test_site
           bench --site test_site install-app erpnext
           bench --site test_site install-app payments
           bench --site test_site install-app non_profit
-          if [ "${{ matrix.integration }}" = "good-connector" ]; then
-            bench --site test_site install-app good_connector
-          fi
           bench build
         env:
           CI: "Yes"
