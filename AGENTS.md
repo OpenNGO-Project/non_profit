@@ -46,6 +46,13 @@
   Good Connector locks the selected eligible target before building its Payment
   Entry. Automatic matching is company-currency only. QRR assignment serializes
   on the Company and rejects active same-company Donation/Sales Invoice collisions.
+- Preserve valid stored QRRs as immutable compatibility data. Generate only a
+  missing Donation reference through Good Connector's Donation namespace.
+- Fundraising setup owns `Donation Receipt DE` and `Donation Slip CH` only while
+  their HTML matches a known shipped hash. Keep the managed-hash allowlists
+  append-only when changing shipped HTML so untouched rows upgrade; never add an
+  operator-edited body to those allowlists. `Donation Thank You DE` remains
+  create-only after first insertion.
 
 ## Documentation Contract
 

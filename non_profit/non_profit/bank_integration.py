@@ -16,9 +16,13 @@ def register_donation_qr_reference(doc, method: str | None = None) -> str | None
 		or not frappe.get_meta("Donation").has_field("gc_qr_reference")
 	):
 		return None
-	from good_connector.qr_bill import assert_unique_qrr_reference, make_qrr_reference
+	from good_connector.qr_bill import assert_unique_qrr_reference, resolve_qrr_reference
 
-	reference = make_qrr_reference(doc.name)
+	reference = resolve_qrr_reference(
+		doc.name,
+		doctype="Donation",
+		stored_reference=doc.get("gc_qr_reference"),
+	)
 	assert_unique_qrr_reference("Donation", doc.name, reference, company=doc.company)
 	if doc.get("gc_qr_reference") != reference:
 		doc.db_set("gc_qr_reference", reference, update_modified=False)
@@ -32,7 +36,7 @@ def backfill_donation_qr_references() -> None:
 		or not frappe.get_meta("Donation").has_field("gc_qr_reference")
 	):
 		return
-	from good_connector.qr_bill import assert_unique_qrr_reference, make_qrr_reference
+	from good_connector.qr_bill import assert_unique_qrr_reference, resolve_qrr_reference
 
 	for donation in frappe.get_all(
 		"Donation",
@@ -40,11 +44,11 @@ def backfill_donation_qr_references() -> None:
 		fields=["name", "company"],
 		limit_page_length=0,
 	):
-		reference = make_qrr_reference(donation.name)
+		reference = resolve_qrr_reference(donation.name, doctype="Donation")
 		assert_unique_qrr_reference("Donation", donation.name, reference, company=donation.company)
 		frappe.db.set_value(
 			"Donation",
-			donation.name,
+			{"name": donation.name, "gc_qr_reference": ["is", "not set"]},
 			"gc_qr_reference",
 			reference,
 			update_modified=False,

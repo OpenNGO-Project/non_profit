@@ -4,6 +4,8 @@ Runs on `after_migrate` so a fresh bench migrate gives a working donation flow
 without manual setup.
 """
 
+from hashlib import sha256
+
 import frappe
 
 DONATION_RECEIPT_DE_HTML = """
@@ -74,6 +76,14 @@ DONATION_RECEIPT_DE_HTML = """
     <p style="margin-top: 2em; font-size: 8pt; color: #666;">Hinweis: Wer vorsätzlich oder grob fahrlässig eine unrichtige Zuwendungsbestätigung erstellt oder wer veranlasst, dass Zuwendungen nicht zu den in der Zuwendungsbestätigung angegebenen steuerbegünstigten Zwecken verwendet werden, haftet für die entgangene Steuer (§ 10b Abs. 4 EStG, § 9 Abs. 3 KStG, § 9 Nr. 5 GewStG).</p>
 </div>
 """
+
+# Keep hashes of every previously shipped body. Matching content is app-managed
+# and may be upgraded; any other body belongs to the operator and is preserved.
+DONATION_RECEIPT_DE_MANAGED_HASHES = frozenset(
+	{
+		"c1a06b2aa047d8de2c3d2c68358607b87be011593b11fac4d720f134c7317a23",
+	}
+)
 
 
 THANK_YOU_EMAIL_HTML = """<p>Liebe/r {{ doc.donor_name }},</p>
@@ -164,53 +174,59 @@ DONATION_SLIP_CH_HTML = """
 {% endif %}
 """
 
+DONATION_SLIP_CH_MANAGED_HASHES = frozenset(
+	{
+		"55df655758ecbdd705476175b4f13e628f106fc4e6268c46b0c374ce057b7d7c",
+	}
+)
+
 
 def ensure_swiss_qrbill_print_format():
-	name = "Donation Slip CH"
-	if frappe.db.exists("Print Format", name):
-		pf = frappe.get_doc("Print Format", name)
-		if pf.html != DONATION_SLIP_CH_HTML:
-			pf.html = DONATION_SLIP_CH_HTML
-			pf.flags.ignore_permissions = True
-			pf.save()
-		return
-	frappe.get_doc(
-		{
-			"doctype": "Print Format",
-			"name": name,
-			"doc_type": "Donation",
-			"module": "Non Profit",
-			"standard": "No",
-			"custom_format": 1,
-			"print_format_type": "Jinja",
-			"html": DONATION_SLIP_CH_HTML,
-			"disabled": 0,
-		}
-	).insert(ignore_permissions=True)
+	ensure_managed_print_format(
+		name="Donation Slip CH",
+		doc_type="Donation",
+		html=DONATION_SLIP_CH_HTML,
+		managed_hashes=DONATION_SLIP_CH_MANAGED_HASHES,
+	)
 
 
 def ensure_print_format():
-	name = "Donation Receipt DE"
+	ensure_managed_print_format(
+		name="Donation Receipt DE",
+		doc_type="Donation Receipt",
+		html=DONATION_RECEIPT_DE_HTML,
+		managed_hashes=DONATION_RECEIPT_DE_MANAGED_HASHES,
+	)
+
+
+def ensure_managed_print_format(*, name: str, doc_type: str, html: str, managed_hashes: frozenset[str]):
 	if frappe.db.exists("Print Format", name):
 		pf = frappe.get_doc("Print Format", name)
-		if pf.html != DONATION_RECEIPT_DE_HTML:
-			pf.html = DONATION_RECEIPT_DE_HTML
-			pf.flags.ignore_permissions = True
-			pf.save()
+		if pf.html == html:
+			return
+		if _html_hash(pf.html) not in managed_hashes:
+			return
+		pf.html = html
+		pf.flags.ignore_permissions = True
+		pf.save()
 		return
 	frappe.get_doc(
 		{
 			"doctype": "Print Format",
 			"name": name,
-			"doc_type": "Donation Receipt",
+			"doc_type": doc_type,
 			"module": "Non Profit",
 			"standard": "No",
 			"custom_format": 1,
 			"print_format_type": "Jinja",
-			"html": DONATION_RECEIPT_DE_HTML,
+			"html": html,
 			"disabled": 0,
 		}
 	).insert(ignore_permissions=True)
+
+
+def _html_hash(html: str | None) -> str:
+	return sha256((html or "").encode()).hexdigest()
 
 
 def ensure_email_template():

@@ -54,10 +54,15 @@ def swiss_qrbill_svg(doc) -> str:
 		amount_str = f"{amount:.2f}" if amount > 0 else None
 		reference_number = None
 		if "good_connector" in frappe.get_installed_apps():
-			from good_connector.qr_bill import is_qr_iban, make_qrr_reference
+			from good_connector.qr_bill import is_qr_iban, resolve_qrr_reference
 
 			if is_qr_iban(iban):
-				reference_number = doc.get("gc_qr_reference") or make_qrr_reference(doc.get("name"))
+				reference_doctype = doc.get("doctype") or "Donation"
+				reference_number = resolve_qrr_reference(
+					doc.get("name"),
+					doctype=reference_doctype,
+					stored_reference=doc.get("gc_qr_reference"),
+				)
 
 		# Debtor is optional on QR-bill — we only pass it if we have a
 		# complete address (postal code is mandatory in the spec). Otherwise

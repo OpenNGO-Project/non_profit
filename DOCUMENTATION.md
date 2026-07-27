@@ -170,6 +170,16 @@ legal wording.
 explicitly. Do not use that action for another jurisdiction until the send
 contract is deliberately extended; manually printing an approved replacement is
 the safe interim path.
+
+Fundraising setup inserts `Donation Receipt DE` and `Donation Slip CH` when they
+are missing. Existing Print Format HTML is treated as app-managed only when its
+SHA-256 hash matches an append-only allowlist of shipped bodies. This content
+ownership contract lets migrate apply a later shipped body to an untouched seed
+without overwriting any operator-edited body; it does not require a custom field
+on the core Print Format DocType. When shipped HTML changes, retain the prior
+hash in the allowlist. The `Donation Thank You DE` Email Template has a separate
+create-only contract and is never updated by migrate after insertion.
+
 `get_campaign_donation_chart(campaign, year=None)` on the Donation Campaign
 controller requires read permission on the Campaign and returns twelve monthly
 buckets for submitted paid donations on that campaign in the selected year.
@@ -322,9 +332,11 @@ Global `Non Profit Settings` accounts are applied only when the configured
 Account belongs to the Donation company, so one company's legacy settings do
 not overwrite another company's party or bank accounts.
 
-When Good Connector is installed, Donation submit stores a complete 27-digit
-QRR in `Donation.gc_qr_reference`, and migrate backfills missing references on
-existing submitted Donations without changing `modified`. The Donation provider
+When Good Connector is installed, Donation submit stores a complete,
+doctype-namespaced 27-digit QRR in `Donation.gc_qr_reference`, and migrate
+backfills missing references on existing submitted Donations without changing
+`modified`. Valid stored legacy references are never recomputed, preserving
+already-issued payment slips. The Donation provider
 registered through `good_connector_ebics_reconciliation_providers` performs
 read-only matching by QRR, Donation/Bank Transaction company, company currency,
 submitted state, and remaining outstanding. It returns every submitted same-QRR

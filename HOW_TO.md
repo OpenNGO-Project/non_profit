@@ -54,6 +54,13 @@ not localize or legally approve that wording. Do not issue it as a Swiss tax
 certificate. Install a jurisdiction-specific format approved by the responsible
 organisation; this app intentionally does not invent Swiss legal text.
 
+You may edit **Donation Receipt DE**, **Donation Slip CH**, and **Donation Thank
+You DE** in Desk. Migrate updates a Print Format only while its HTML still
+matches known app-shipped content; any operator-edited HTML is preserved. The
+thank-you Email Template is create-only and is never refreshed after insertion.
+To adopt a later shipped Print Format after customizing it, review the new
+shipped body and apply or replace the local version manually.
+
 ## Donations
 
 Use **Donor** (Spender), **Donation Campaign** (Spendenkampagne), **Donation** (Spende), and **Donation Receipt** (Spendenbescheinigung) for fundraising workflows.
@@ -176,7 +183,8 @@ generator calls directly to editable Jinja templates.
 
 For automatic EBICS matching, install Good Connector and configure **Good
 Connector Settings → EBICS Bank Integration** with the receiving Bank Account
-and Mode of Payment. A submitted Donation receives a 27-digit QR reference. To
+and Mode of Payment. A submitted Donation receives a Donation-namespaced
+27-digit QR reference; an already stored valid legacy reference is preserved. To
 put that reference on the Donation Slip CH, the Non Profit creditor account must
 be the exact QR-IBAN issued by the bank; an ordinary IBAN cannot carry QRR.
 Automatic Donation matching supports only the Company currency: the receiving
