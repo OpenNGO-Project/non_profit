@@ -88,7 +88,8 @@ Use **Donor.customer** to connect fundraising contacts to ERPNext Customer data.
 Customer linkage is handled by creation, import, and repair helper flows rather
 than a separate Donor form action. The helper reuses a Customer already linked
 to a Member with the same email before creating a new Customer, then links
-Contact and Address rows to both Donor and Customer.
+Contact and Address rows to both Donor and Customer. For an individual Donor,
+the hidden canonical Contact field is persisted as well.
 When creating a Donor from Desk, use the Contact/Customer dialog to select a
 Contact, a Customer, or both. Contact-only Donors stay linked to the Contact
 without forcing Customer creation; selecting a Customer links both Contact and
@@ -98,9 +99,13 @@ saved through the parent Contact so Frappe validates the child rows correctly.
 These helpers require create permission for the target record and write
 permission on selected Contact/Customer records before links are appended.
 Volunteer creation is Contact-only and deliberately does not create or link a
-Customer.
-Donor email is stored on the linked **Customer** (`Customer.email_id`), not on
-Donor. Donation, Recurring Donation, and Donation Receipt rows keep an email
+Customer. Person-role helpers accept a blank legacy Contact classification and
+set it to **Person**, but reject a Contact explicitly classified as a generic
+endpoint/shared mailbox.
+Donor email is not stored on Donor. Individual Donors use their canonical
+Contact email first; organization or legacy Donors fall back to the linked
+**Customer** (`Customer.email_id`) and then a linked Contact. Donation,
+Recurring Donation, and Donation Receipt rows keep an email
 snapshot for operations and correspondence. For existing records, run
 `non_profit.non_profit.doctype.donor.donor.backfill_donor_customers` with
 `bench execute` when you intentionally want to create/link Customers for older
@@ -248,8 +253,8 @@ Operators may edit **Member Name** directly. When it is left blank and a
 Customer is linked, the Member form fills it from that Customer; if the Customer
 has a `name_additional` field, it is appended to the display name. Creating a
 new Member opens a dialog where operators choose a Contact, a Customer, or both,
-plus the Membership Type; contact-only members are linked through Contact
-Dynamic Links, not a Contact field on Member. The system creates/reuses the
+plus the Membership Type; contact-only members store the canonical Contact on
+Member and retain the standard Contact Dynamic Link. The system creates/reuses the
 Member and creates/reuses the open-ended Membership in one step. From a saved
 Member, use **Actions → Create Membership** to create or open the active
 open-ended Membership for that Member and chosen Membership Type.
@@ -287,27 +292,31 @@ per Member and filters by its `to_date`. It no longer depends on the legacy
 
 Use **Household** for people who share a postal address and should be treated
 as one unit for mailings — typically couples. Create one Household per address
-unit and add **Member** or **Donor** rows in the members table with a **From
-Date**; tick **Is Primary** on the main contact. Leave **To Date** empty while
-the person belongs to the household. A Member or Donor can be a *current*
-member of only one household at a time; the form refuses to save a second one.
+unit and add each person's **Contact** in the **People** table with a **From
+Date**; optionally record the relationship and tick **Is Primary** on the main
+person. Leave **To Date** empty while the person belongs to the Household. A
+Contact can belong to only one current Household; the form refuses a second.
 Only **Non Profit Manager** users can view or edit Households because a
 Household may expose both Member and Donor records.
 
 - Marriage / new partner moves in: add a row with the **From Date**.
 - Divorce / someone moves out: set **To Date** on that person's row. The row
-  stays as history and the person's **Household** link on Member/Donor clears
+  stays as history and every linked Member/Donor role's **Household** clears
   automatically.
 
 Memberships of household members are flagged **Is Household Membership**
-automatically (on save, and refreshed when household membership changes), so
-one shared membership can cover the whole household. Attach the shared address
+automatically (on save, and refreshed when household membership changes) for
+reporting and downstream policy. The flag does not transfer one person's
+membership coverage to everyone in the Household. Attach the shared address
 and contacts through the standard **Address and Contact** section on the saved
 Household form; the same Address/Contact can also be linked to the individual
 Member, Donor, or Customer records. Customers also carry a **Household** link
 field, and Contacts have a **Title** field for academic titles such as `Dr.`.
-The Household fields on Member and Donor are read-only derived values; always
-change the dated rows on Household instead of editing those links directly.
+The Household fields on Member and Donor are read-only role projections; always
+change the dated Contact rows on Household instead of editing those links.
+Contacts explicitly classified as **Generic Endpoint** cannot be Household
+people. **NPO Organization** and the hidden Customer/Supplier identity fields
+are Stage 1 data anchors; no operator merge workflow is shipped yet.
 
 ## Recurring Donations
 

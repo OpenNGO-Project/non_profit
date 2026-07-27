@@ -4,10 +4,12 @@
 from unittest.mock import patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
+
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Contact", "Volunteer Type"]
 
 
-class TestVolunteer(FrappeTestCase):
+class TestVolunteer(IntegrationTestCase):
 	def test_create_volunteer(self) -> None:
 		volunteer_type = self._make_volunteer_type()
 		doc = frappe.get_doc(
@@ -53,6 +55,8 @@ class TestVolunteer(FrappeTestCase):
 
 		volunteer = frappe.get_doc("Volunteer", result["volunteer"])
 		self.assertEqual(volunteer.email, email)
+		self.assertEqual(volunteer.contact, contact.name)
+		self.assertEqual(frappe.db.get_value("Contact", contact.name, "npo_identity_kind"), "Person")
 		self.assertTrue(
 			frappe.db.exists(
 				"Dynamic Link",
@@ -71,6 +75,43 @@ class TestVolunteer(FrappeTestCase):
 					"parenttype": "Contact",
 					"parent": contact.name,
 					"link_doctype": "Customer",
+				},
+			)
+		)
+
+	def test_contact_helper_repairs_missing_volunteer_dynamic_link(self) -> None:
+		from non_profit.non_profit.doctype.volunteer.volunteer import create_volunteer_from_contact
+
+		volunteer_type = self._make_volunteer_type()
+		email = f"test.canonical.volunteer.{frappe.generate_hash(length=8)}@example.com"
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Canonical Volunteer",
+				"email_ids": [{"email_id": email, "is_primary": 1}],
+			}
+		).insert(ignore_permissions=True)
+		volunteer = frappe.get_doc(
+			{
+				"doctype": "Volunteer",
+				"volunteer_name": "Canonical Volunteer",
+				"volunteer_type": volunteer_type,
+				"email": email,
+				"contact": contact.name,
+			}
+		).insert(ignore_permissions=True)
+
+		result = create_volunteer_from_contact(contact.name, volunteer_type)
+
+		self.assertEqual(result["volunteer"], volunteer.name)
+		self.assertTrue(
+			frappe.db.exists(
+				"Dynamic Link",
+				{
+					"parenttype": "Contact",
+					"parent": contact.name,
+					"link_doctype": "Volunteer",
+					"link_name": volunteer.name,
 				},
 			)
 		)
@@ -96,6 +137,26 @@ class TestVolunteer(FrappeTestCase):
 		):
 			with self.assertRaises(frappe.PermissionError):
 				create_volunteer_from_contact(contact=contact.name, volunteer_type=volunteer_type)
+
+	def test_create_volunteer_from_contact_rejects_generic_endpoint(self) -> None:
+		from non_profit.non_profit.doctype.volunteer.volunteer import create_volunteer_from_contact
+
+		volunteer_type = self._make_volunteer_type()
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Volunteer Mailbox",
+				"npo_identity_kind": "Generic Endpoint",
+				"email_ids": [
+					{"email_id": f"volunteer.mailbox.{frappe.generate_hash(length=8)}@example.com"}
+				],
+			}
+		).insert(ignore_permissions=True)
+
+		with self.assertRaises(frappe.ValidationError):
+			create_volunteer_from_contact(contact=contact.name, volunteer_type=volunteer_type)
+
+		self.assertFalse(frappe.db.exists("Volunteer", {"contact": contact.name}))
 
 	def _make_volunteer_type(self) -> str:
 		name = f"Test VType {frappe.generate_hash(length=6)}"

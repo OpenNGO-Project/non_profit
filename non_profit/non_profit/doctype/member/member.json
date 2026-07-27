@@ -9,6 +9,8 @@
  "field_order": [
   "naming_series",
   "member_name",
+  "subject_type",
+  "contact",
   "column_break_5",
   "customer",
   "household",
@@ -31,6 +33,25 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Member Name"
+  },
+  {
+   "fieldname": "subject_type",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Subject Type",
+   "no_copy": 1,
+   "options": "\nIndividual\nOrganization",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contact",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Canonical Contact",
+   "no_copy": 1,
+   "options": "Contact",
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "column_break_5",

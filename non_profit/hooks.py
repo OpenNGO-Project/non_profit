@@ -16,7 +16,7 @@ jinja = {
 }
 
 after_install = "non_profit.setup.setup_non_profit"
-after_migrate = "non_profit.non_profit.fundraising_setup.ensure_fundraising_fixtures"
+after_migrate = "non_profit.setup.after_migrate"
 before_uninstall = "non_profit.setup.before_uninstall"
 
 override_doctype_class = {
@@ -24,6 +24,9 @@ override_doctype_class = {
 }
 
 doc_events = {
+	"Contact": {
+		"validate": "non_profit.non_profit.utils.validate_contact_identity_kind",
+	},
 	"Membership": {
 		"validate": "non_profit.non_profit.membership_sync.validate_no_overlap",
 	},

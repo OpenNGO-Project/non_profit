@@ -25,8 +25,8 @@
   {
    "fieldname": "members",
    "fieldtype": "Table",
-   "label": "Members",
-   "options": "Household Member"
+   "label": "People",
+   "options": "Household Person"
   },
   {
    "depends_on": "eval:!doc.__islocal;",
@@ -52,12 +52,12 @@
  ],
  "links": [
   {
-   "group": "Household Members",
+    "group": "NPO Roles",
    "link_doctype": "Member",
    "link_fieldname": "household"
   },
   {
-   "group": "Household Members",
+    "group": "NPO Roles",
    "link_doctype": "Donor",
    "link_fieldname": "household"
   }

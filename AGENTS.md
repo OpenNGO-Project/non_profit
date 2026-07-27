@@ -63,32 +63,41 @@ procedures), and the code. Record new or changed requirements in
 
 ## Household Model
 
-- **Household** + child **Household Member** (`link_doctype` Member/Donor,
-  `link_name`, `from_date`, `to_date`, `is_primary`) model who belongs to a
-  shared-address unit. A row without `to_date` is current; setting `to_date`
-  makes history. The child table IS the history — for divorce/move-out set
-  `to_date`, never delete the row.
-- Party links are synced from `Household.on_update` via `frappe.db.set_value`
-  (never by saving the party doc — that would recurse). Sync reconciles both
-  current and persisted prior rows so removal, retargeting, history changes,
-  and deletion cannot leave stale Member/Donor or Membership state.
-- `Member.household` and `Donor.household` are read-only derived links. Change
-  Household rows, or call
-  `non_profit.non_profit.doctype.household.household.add_member_to_household`;
-  never write either party field directly.
-- Current rows require `from_date`, cannot have `to_date < from_date`, and must
-  be unique per party. A Household may have at most one current primary, and a
-  party may have at most one current Household. Validation locks affected
-  party rows in deterministic order to serialize concurrent changes.
-- Household access is restricted to `Non Profit Manager`, matching Donor
-  access; service calls enforce write permission on both Household and Member
-  unless an explicitly trusted caller passes `ignore_permissions=True`.
+- **Household** + child **Household Person** (`contact`, `relationship`,
+  `from_date`, `to_date`, `is_primary`) model a shared-address unit by canonical
+  Contact. A row without `to_date` is current; for divorce/move-out set
+  `to_date` so the child table retains history.
+- Household sync projects one Contact's current Household onto every linked
+  Member/Donor role via `frappe.db.set_value` (never by saving the role). It
+  reconciles current and prior rows and refreshes Membership flags.
+- `Member.household` and `Donor.household` are read-only role projections.
+  Change Household rows or call
+  `non_profit.non_profit.doctype.household.household.add_person_to_household`;
+  never write those role fields directly.
+- Current rows require `from_date`, reject invalid date order, are unique per
+  Contact, and allow one current primary. A Contact has at most one current
+  Household. Validation locks affected Contacts deterministically.
+- Blank legacy Contact identity kinds become `Person`; explicit
+  `Generic Endpoint` Contacts are rejected from person roles/Households, and a
+  Contact already used there cannot be reclassified as a Generic Endpoint.
+- Canonical role Contact assignment is conflict-checked against both the hidden
+  role field and existing Contact Dynamic Links, and one Contact can back at
+  most one role of each type. Never add, clear, or retarget it on an existing
+  role with a raw save or `frappe.db.set_value`; use the owning identity helper.
+- Household access is restricted to `Non Profit Manager`; service calls enforce
+  write permission on Household and Contact unless a trusted caller passes
+  `ignore_permissions=True`.
 - `Membership.is_household_membership` is a read-only flag set in
   `Membership.validate` and refreshed on all Memberships when household links
-  change. `Customer.household` and `Contact.title` are custom
-  fields from `non_profit.setup.get_custom_fields`.
+  change. `Customer.household`, `Contact.title`, and hidden standard-master NPO
+  identity fields come from `non_profit.setup.get_custom_fields` on install and
+  migrate.
 - Address/Contact attach to Household via standard Dynamic Links (same
   pattern as Member/Donor, including `load_address_and_contact` on `onload`).
+- The 16.3.0 `Household Member` -> `Household Person` replacement is protected
+  by ordered pre/post model-sync patches. Never remove, move after model sync,
+  or weaken their fail-closed identity/date checks; an ambiguous production row
+  must stop migration rather than be guessed or deleted.
 
 ## Smoke Commands
 

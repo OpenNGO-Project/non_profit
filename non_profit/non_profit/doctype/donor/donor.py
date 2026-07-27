@@ -15,6 +15,12 @@ try:
 except ImportError:
 	resolve_or_create_contact_from_external_signup = None
 
+from non_profit.non_profit.utils import (
+	ensure_canonical_contact_available,
+	ensure_person_contact,
+	role_uses_canonical_person,
+	validate_person_role_contact_change,
+)
 from non_profit.non_profit.utils import split_person_name as _split_person_name
 
 
@@ -26,7 +32,16 @@ class Donor(Document):
 	def validate(self) -> None:
 		from non_profit.non_profit.doctype.household.household import get_current_household
 
-		self.household = get_current_household("Donor", self.name) if not self.is_new() else None
+		validate_person_role_contact_change(self)
+		if self.contact:
+			if self.subject_type and self.subject_type != "Individual":
+				frappe.throw(_("A Donor with a canonical Contact must represent an individual."))
+			self.subject_type = "Individual"
+			ensure_person_contact(self.contact)
+		if self.subject_type == "Household" and self.subject_household:
+			self.household = self.subject_household
+		else:
+			self.household = get_current_household(self.contact) if self.contact else None
 
 	@frappe.whitelist()
 	def make_customer_and_link(self: "Donor") -> None:
@@ -96,8 +111,16 @@ def get_or_create_donor_for_customer(
 	existing_donor = frappe.db.exists("Donor", {"customer": customer})
 	if existing_donor:
 		donor = frappe.get_doc("Donor", existing_donor)
+		repair_subject_type = (
+			frappe.db.get_value("Customer", customer, "customer_type") == "Company"
+			and not donor.subject_type
+			and not donor.contact
+		)
 		if not ignore_permissions:
-			donor.check_permission("read")
+			donor.check_permission("write" if repair_subject_type else "read")
+		if repair_subject_type:
+			frappe.db.set_value("Donor", donor.name, "subject_type", "Organization", update_modified=False)
+			donor.subject_type = "Organization"
 		return donor
 	if not ignore_permissions:
 		frappe.has_permission("Donor", "create", throw=True)
@@ -106,6 +129,8 @@ def get_or_create_donor_for_customer(
 	donor.donor_type = _resolve_donor_type(donor_type)
 	donor.donor_name = _customer_display_name(customer)
 	donor.customer = customer
+	if frappe.db.get_value("Customer", customer, "customer_type") == "Company":
+		donor.subject_type = "Organization"
 	donor.insert(ignore_permissions=ignore_permissions)
 	_link_contact_and_address_to_customer(donor, customer)
 	return donor
@@ -131,6 +156,7 @@ def get_or_create_donor_for_contact(
 
 	linked_donor = _donor_linked_to_contact(contact)
 	if linked_donor:
+		ensure_contact_link(contact, "Donor", linked_donor, ignore_permissions=ignore_permissions)
 		if customer:
 			donor_for_customer = frappe.db.exists("Donor", {"customer": customer})
 			if donor_for_customer and donor_for_customer != linked_donor:
@@ -160,7 +186,10 @@ def get_or_create_donor_for_contact(
 			_link_contact_and_address_to_customer(donor, customer, email=email)
 			return donor
 	if email:
-		existing_donor = find_donor_by_email(email)
+		existing_donor = next(
+			(donor for donor in find_donors_by_email(email) if role_uses_canonical_person("Donor", donor)),
+			None,
+		)
 		if existing_donor:
 			ensure_contact_link(contact, "Donor", existing_donor, ignore_permissions=ignore_permissions)
 			donor = frappe.get_doc("Donor", existing_donor)
@@ -178,6 +207,8 @@ def get_or_create_donor_for_contact(
 		frappe.has_permission("Donor", "create", throw=True)
 	donor.donor_type = _resolve_donor_type(donor_type)
 	donor.donor_name = get_contact_display_name(contact_doc)
+	donor.subject_type = "Individual"
+	donor.contact = contact
 	if customer:
 		donor.customer = customer
 	donor.insert(ignore_permissions=ignore_permissions)
@@ -255,12 +286,19 @@ def get_donor_email(donor) -> str | None:
 		return None
 
 	if isinstance(donor, str):
-		customer = frappe.db.get_value("Donor", donor, "customer")
+		values = frappe.db.get_value("Donor", donor, ["customer", "contact"], as_dict=True) or {}
+		customer = values.get("customer")
+		canonical_contact = values.get("contact")
 		donor_name = donor
 	else:
 		customer = donor.get("customer")
+		canonical_contact = donor.get("contact")
 		donor_name = donor.name
 
+	if canonical_contact:
+		email = get_contact_email(canonical_contact)
+		if email:
+			return email
 	if customer:
 		email = _normalize_email(frappe.db.get_value("Customer", customer, "email_id"))
 		if email:
@@ -376,7 +414,7 @@ def _create_customer_for_donor(donor, *, values_provider=None) -> str:
 	values = {
 		"doctype": "Customer",
 		"customer_name": donor.donor_name,
-		"customer_type": "Individual",
+		"customer_type": "Company" if donor.get("subject_type") == "Organization" else "Individual",
 		"customer_group": _default_customer_group(),
 		"territory": _default_territory(),
 	}
@@ -389,12 +427,26 @@ def _create_customer_for_donor(donor, *, values_provider=None) -> str:
 
 
 def _link_contact_and_address_to_customer(donor, customer: str, email: str | None = None) -> None:
+	if (
+		frappe.db.get_value("Customer", customer, "customer_type") == "Company"
+		and not donor.get("subject_type")
+		and not donor.get("contact")
+	):
+		frappe.db.set_value("Donor", donor.name, "subject_type", "Organization", update_modified=False)
+		donor.subject_type = "Organization"
 	email = _normalize_email(email) or _legacy_donor_email(donor)
 	contact_name = _contact_for_donor(donor, email=email, customer=customer)
 	updates = {}
 	if email and frappe.db.get_value("Customer", customer, "email_id") != email:
 		updates["email_id"] = email
 	if contact_name:
+		if donor.get("subject_type") in (None, "", "Individual"):
+			current_household = ensure_contact_link(contact_name, "Donor", donor.name)
+			donor.subject_type = "Individual"
+			donor.contact = contact_name
+			donor.household = current_household
+		else:
+			_ensure_contact_link_row(contact_name, "Donor", donor.name)
 		_ensure_contact_link_row(contact_name, "Customer", customer)
 		if frappe.db.get_value("Customer", customer, "customer_primary_contact") != contact_name:
 			updates["customer_primary_contact"] = contact_name
@@ -405,6 +457,8 @@ def _link_contact_and_address_to_customer(donor, customer: str, email: str | Non
 
 
 def _contact_for_donor(donor, email: str | None = None, customer: str | None = None) -> str | None:
+	if donor.get("contact") and frappe.db.exists("Contact", donor.contact):
+		return donor.contact
 	contact_name = frappe.db.get_value(
 		"Dynamic Link",
 		{"parenttype": "Contact", "link_doctype": "Donor", "link_name": donor.name},
@@ -429,7 +483,10 @@ def _contact_for_donor(donor, email: str | None = None, customer: str | None = N
 				order_by="idx asc",
 			)
 		if contact_name:
-			ensure_contact_link(contact_name, "Donor", donor.name)
+			if donor.get("subject_type") in (None, "", "Individual"):
+				ensure_contact_link(contact_name, "Donor", donor.name)
+			else:
+				_ensure_contact_link_row(contact_name, "Donor", donor.name)
 			return contact_name
 
 	if not email:
@@ -493,13 +550,35 @@ def ensure_contact_link(
 	link_name: str,
 	*,
 	ignore_permissions: bool = True,
-) -> None:
+) -> str | None:
+	contact = frappe.get_doc("Contact", contact_name)
+	if not ignore_permissions:
+		contact.check_permission("write")
+	current_household = None
+	if link_doctype == "Donor" and frappe.db.exists("Donor", link_name):
+		subject_type = frappe.db.get_value("Donor", link_name, "subject_type")
+		if subject_type and subject_type != "Individual":
+			frappe.throw(
+				_("Donor {0} does not represent an individual Contact.").format(frappe.bold(link_name))
+			)
+		ensure_canonical_contact_available("Donor", link_name, contact_name)
+		ensure_person_contact(contact_name)
+		frappe.db.set_value(
+			"Donor",
+			link_name,
+			{"subject_type": "Individual", "contact": contact_name},
+			update_modified=False,
+		)
+		from non_profit.non_profit.doctype.household.household import sync_contact_role_households
+
+		current_household = sync_contact_role_households(contact_name)
 	_ensure_contact_link_row(
 		contact_name,
 		link_doctype,
 		link_name,
 		ignore_permissions=ignore_permissions,
 	)
+	return current_household
 
 
 def _ensure_contact_link_row(
@@ -543,13 +622,22 @@ def get_contact_display_name(contact_doc) -> str:
 
 
 def _donor_linked_to_contact(contact: str) -> str | None:
-	donor = frappe.db.get_value(
+	if donor := frappe.db.get_value("Donor", {"contact": contact}, "name"):
+		return donor
+	donors = frappe.get_all(
 		"Dynamic Link",
-		{"parenttype": "Contact", "parent": contact, "link_doctype": "Donor"},
-		"link_name",
+		filters={"parenttype": "Contact", "parent": contact, "link_doctype": "Donor"},
+		pluck="link_name",
 		order_by="idx asc",
 	)
-	return donor if donor and frappe.db.exists("Donor", donor) else None
+	return next(
+		(
+			donor
+			for donor in donors
+			if frappe.db.exists("Donor", donor) and role_uses_canonical_person("Donor", donor)
+		),
+		None,
+	)
 
 
 def _contact_linked_to(link_doctype: str, link_name: str) -> str | None:

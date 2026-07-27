@@ -11,6 +11,7 @@ from non_profit.non_profit.doctype.member.member import (
 	create_member,
 	create_member_and_membership,
 	get_or_create_member,
+	get_or_create_member_for_contact,
 	get_or_create_member_for_customer,
 	get_or_create_membership_for_member,
 	resolve_or_create_contact_from_external_signup,
@@ -103,8 +104,8 @@ class TestMember(unittest.TestCase):
 			member_meta = json.load(handle)
 
 		self.assertEqual(
-			member_meta["field_order"][:4],
-			["naming_series", "member_name", "column_break_5", "customer"],
+			member_meta["field_order"][:6],
+			["naming_series", "member_name", "subject_type", "contact", "column_break_5", "customer"],
 		)
 		fieldnames = {field["fieldname"] for field in member_meta["fields"]}
 		self.assertNotIn("customer_section", fieldnames)
@@ -181,6 +182,9 @@ class TestMember(unittest.TestCase):
 		self.assertIsNone(result["customer"])
 		self.assertFalse(member.customer)
 		self.assertEqual(member.email_id, email)
+		self.assertEqual(member.subject_type, "Individual")
+		self.assertEqual(member.contact, contact.name)
+		self.assertEqual(frappe.db.get_value("Contact", contact.name, "npo_identity_kind"), "Person")
 		self.assertEqual(membership.member, member.name)
 		self.assertEqual(membership.membership_type, membership_type)
 		self.assertFalse(membership.to_date)
@@ -201,6 +205,93 @@ class TestMember(unittest.TestCase):
 				{"parenttype": "Contact", "parent": contact.name, "link_doctype": "Customer"},
 			)
 		)
+
+	def test_contact_member_helper_rejects_generic_endpoint(self):
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Shared Mailbox",
+				"npo_identity_kind": "Generic Endpoint",
+				"email_ids": [
+					{
+						"email_id": f"np-generic-contact-{frappe.generate_hash(length=8)}@example.org",
+						"is_primary": 1,
+					}
+				],
+			}
+		).insert(ignore_permissions=True)
+
+		with self.assertRaises(frappe.ValidationError):
+			get_or_create_member_for_contact(contact.name, ignore_permissions=True)
+
+		self.assertFalse(frappe.db.exists("Member", {"contact": contact.name}))
+
+	def test_canonical_contact_cannot_be_retargeted_by_saving_member(self):
+		first_contact = frappe.get_doc(
+			{"doctype": "Contact", "first_name": "First Canonical Member Contact"}
+		).insert(ignore_permissions=True)
+		second_contact = frappe.get_doc(
+			{"doctype": "Contact", "first_name": "Second Canonical Member Contact"}
+		).insert(ignore_permissions=True)
+		member = frappe.get_doc(
+			{
+				"doctype": "Member",
+				"member_name": "Canonical Contact Member",
+				"contact": first_contact.name,
+			}
+		).insert(ignore_permissions=True)
+
+		member.contact = second_contact.name
+		with self.assertRaisesRegex(frappe.ValidationError, "cannot be changed directly"):
+			member.save(ignore_permissions=True)
+
+	def test_canonical_contact_cannot_be_added_by_saving_existing_member(self):
+		member = frappe.get_doc(
+			{"doctype": "Member", "member_name": "Existing Member Without Canonical Contact"}
+		).insert(ignore_permissions=True)
+		contact = frappe.get_doc(
+			{"doctype": "Contact", "first_name": "Later Canonical Member Contact"}
+		).insert(ignore_permissions=True)
+
+		member.contact = contact.name
+		with self.assertRaisesRegex(frappe.ValidationError, "cannot be changed directly"):
+			member.save(ignore_permissions=True)
+
+	def test_contact_cannot_be_canonical_for_two_members(self):
+		from non_profit.non_profit.doctype.member.member import _link_contact_to_member
+
+		contact = frappe.get_doc({"doctype": "Contact", "first_name": "One Canonical Member Role"}).insert(
+			ignore_permissions=True
+		)
+		first_member = frappe.get_doc(
+			{
+				"doctype": "Member",
+				"member_name": "First Canonical Member Role",
+				"contact": contact.name,
+			}
+		).insert(ignore_permissions=True)
+		second_member = frappe.get_doc(
+			{"doctype": "Member", "member_name": "Second Canonical Member Role"}
+		).insert(ignore_permissions=True)
+
+		with self.assertRaisesRegex(frappe.ValidationError, first_member.name):
+			_link_contact_to_member(contact.name, second_member.name, ignore_permissions=True)
+
+	def test_legacy_member_contact_link_cannot_be_reclassified_as_generic_endpoint(self):
+		member = frappe.get_doc({"doctype": "Member", "member_name": "Legacy Dynamic Link Member"}).insert(
+			ignore_permissions=True
+		)
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Legacy Dynamic Link Member",
+				"links": [{"link_doctype": "Member", "link_name": member.name}],
+			}
+		).insert(ignore_permissions=True)
+
+		contact.npo_identity_kind = "Generic Endpoint"
+		with self.assertRaisesRegex(frappe.ValidationError, "used as a person role"):
+			contact.save(ignore_permissions=True)
 
 	def test_customer_dialog_helper_creates_member_and_membership(self):
 		membership_type = self._membership_type()
@@ -249,6 +340,8 @@ class TestMember(unittest.TestCase):
 
 		member = frappe.get_doc("Member", result["member"])
 		self.assertEqual(member.customer, customer.name)
+		self.assertEqual(member.subject_type, "Individual")
+		self.assertEqual(member.contact, contact.name)
 		self.assertTrue(
 			frappe.db.exists(
 				"Dynamic Link",
@@ -315,6 +408,8 @@ class TestMember(unittest.TestCase):
 
 		self.assertEqual(frappe.db.count("Contact Email", {"email_id": email}), 1)
 		self.assertTrue(member.customer)
+		self.assertEqual(member.subject_type, "Individual")
+		self.assertEqual(member.contact, contact.name)
 		self.assertTrue(
 			frappe.db.exists(
 				"Dynamic Link",

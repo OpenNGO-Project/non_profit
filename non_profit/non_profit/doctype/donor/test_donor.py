@@ -4,10 +4,19 @@
 from unittest.mock import patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
+
+IGNORE_TEST_RECORD_DEPENDENCIES = [
+	"Contact",
+	"Customer",
+	"Donor Type",
+	"Household",
+	"Language",
+	"User",
+]
 
 
-class TestDonor(FrappeTestCase):
+class TestDonor(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls) -> None:
 		super().setUpClass()
@@ -56,6 +65,9 @@ class TestDonor(FrappeTestCase):
 			frappe.db.get_value("Customer", donor.customer, "customer_primary_contact"),
 			contact,
 		)
+		self.assertEqual(donor.subject_type, "Individual")
+		self.assertEqual(donor.contact, contact)
+		self.assertEqual(frappe.db.get_value("Contact", contact, "npo_identity_kind"), "Person")
 
 	def test_donor_reuses_member_customer_by_email(self) -> None:
 		from non_profit.non_profit.doctype.donor.donor import (
@@ -83,6 +95,110 @@ class TestDonor(FrappeTestCase):
 		self.assertEqual(get_or_create_customer_for_donor(donor, email=email), customer.name)
 		donor.reload()
 		self.assertEqual(donor.customer, customer.name)
+
+	def test_customer_only_company_donor_remains_organization(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import get_or_create_donor_for_customer
+
+		customer = self._customer("Organization Donor Customer")
+		frappe.db.set_value("Customer", customer.name, "customer_type", "Company", update_modified=False)
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Organization Mailbox",
+				"npo_identity_kind": "Generic Endpoint",
+				"links": [{"link_doctype": "Customer", "link_name": customer.name}],
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value(
+			"Customer", customer.name, "customer_primary_contact", contact.name, update_modified=False
+		)
+
+		donor = get_or_create_donor_for_customer(
+			customer.name, donor_type=self._donor_type(), ignore_permissions=True
+		)
+
+		self.assertEqual(donor.subject_type, "Organization")
+		self.assertFalse(donor.contact)
+		self.assertEqual(
+			frappe.db.get_value("Contact", contact.name, "npo_identity_kind"), "Generic Endpoint"
+		)
+		self.assertTrue(
+			frappe.db.exists(
+				"Dynamic Link",
+				{
+					"parenttype": "Contact",
+					"parent": contact.name,
+					"link_doctype": "Donor",
+					"link_name": donor.name,
+				},
+			)
+		)
+
+	def test_existing_company_donor_customer_linking_repairs_organization_subject(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import get_or_create_customer_for_donor
+
+		customer = self._customer("Legacy Organization Donor Customer")
+		frappe.db.set_value("Customer", customer.name, "customer_type", "Company", update_modified=False)
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Legacy Organization Mailbox",
+				"npo_identity_kind": "Generic Endpoint",
+				"links": [{"link_doctype": "Customer", "link_name": customer.name}],
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value(
+			"Customer", customer.name, "customer_primary_contact", contact.name, update_modified=False
+		)
+		donor = frappe.get_doc(
+			{
+				"doctype": "Donor",
+				"donor_name": "Legacy Organization Donor",
+				"donor_type": self._donor_type(),
+				"customer": customer.name,
+			}
+		).insert(ignore_permissions=True)
+
+		get_or_create_customer_for_donor(donor)
+		donor.reload()
+
+		self.assertEqual(donor.subject_type, "Organization")
+		self.assertFalse(donor.contact)
+		self.assertEqual(
+			frappe.db.get_value("Contact", contact.name, "npo_identity_kind"), "Generic Endpoint"
+		)
+
+	def test_organization_contact_link_does_not_block_individual_donor_role(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import (
+			get_or_create_donor_for_contact,
+			get_or_create_donor_for_customer,
+		)
+
+		email = f"organization-contact-person-{frappe.generate_hash(length=8)}@example.org"
+		customer = self._customer("Organization With Individual Donor Contact")
+		frappe.db.set_value("Customer", customer.name, "customer_type", "Company", update_modified=False)
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Organization Contact Person",
+				"email_ids": [{"email_id": email, "is_primary": 1}],
+				"links": [{"link_doctype": "Customer", "link_name": customer.name}],
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value(
+			"Customer", customer.name, "customer_primary_contact", contact.name, update_modified=False
+		)
+		organization_donor = get_or_create_donor_for_customer(
+			customer.name, donor_type=self._donor_type(), ignore_permissions=True
+		)
+
+		individual_donor = get_or_create_donor_for_contact(
+			contact.name, donor_type=self._donor_type(), ignore_permissions=True
+		)
+
+		self.assertNotEqual(individual_donor.name, organization_donor.name)
+		self.assertEqual(individual_donor.subject_type, "Individual")
+		self.assertEqual(individual_donor.contact, contact.name)
 
 	def test_policy_identity_service_rejects_ambiguous_donor_email(self) -> None:
 		from non_profit.non_profit.donor_identity import resolve_donor_customer_identity
@@ -314,7 +430,61 @@ class TestDonor(FrappeTestCase):
 		)
 
 		self.assertFalse(donor.customer)
+		self.assertEqual(donor.subject_type, "Individual")
+		self.assertEqual(donor.contact, contact.name)
+		self.assertEqual(frappe.db.get_value("Contact", contact.name, "npo_identity_kind"), "Person")
 		self.assertEqual(get_donor_email(donor), email)
+
+	def test_individual_donor_email_prefers_canonical_contact(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import get_donor_email
+
+		customer = self._customer("Canonical Contact Email Donor")
+		frappe.db.set_value(
+			"Customer", customer.name, "email_id", "customer@example.org", update_modified=False
+		)
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Canonical Email",
+				"email_ids": [{"email_id": "person@example.org", "is_primary": 1}],
+			}
+		).insert(ignore_permissions=True)
+		donor = frappe.get_doc(
+			{
+				"doctype": "Donor",
+				"donor_name": "Canonical Contact Email Donor",
+				"donor_type": self._donor_type(),
+				"customer": customer.name,
+				"subject_type": "Individual",
+				"contact": contact.name,
+			}
+		).insert(ignore_permissions=True)
+
+		self.assertEqual(get_donor_email(donor), "person@example.org")
+
+	def test_individual_donor_rejects_a_second_linked_contact(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import ensure_contact_link
+
+		donor = frappe.get_doc(
+			{
+				"doctype": "Donor",
+				"donor_name": "Conflicting Linked Contact Donor",
+				"donor_type": self._donor_type(),
+			}
+		).insert(ignore_permissions=True)
+		first_contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "First Linked Contact",
+				"links": [{"link_doctype": "Donor", "link_name": donor.name}],
+			}
+		).insert(ignore_permissions=True)
+		second_contact = frappe.get_doc({"doctype": "Contact", "first_name": "Second Linked Contact"}).insert(
+			ignore_permissions=True
+		)
+
+		with self.assertRaisesRegex(frappe.ValidationError, first_contact.name):
+			ensure_contact_link(second_contact.name, "Donor", donor.name)
 
 	def test_get_donor_email_reads_linked_customer(self) -> None:
 		from non_profit.non_profit.doctype.donor.donor import (

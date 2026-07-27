@@ -43,7 +43,9 @@ Der Membership Type definiert die Art der Mitgliedschaft und den Beitrag. Beitra
 
 ## Haushalte
 
-Ein **Household** fasst Member und Donors mit gemeinsamer Postadresse zusammen.
+Ein **Household** fasst Personen mit gemeinsamer Postadresse zusammen. Jede
+Zeile verweist auf den kanonischen **Contact**; dessen Member- und Donor-Rollen
+werden automatisch aktualisiert.
 Nur Benutzer mit der Rolle **Non Profit Manager** können Haushalte bearbeiten.
 Fügen Sie für jede Person eine Zeile mit **From Date** ein und markieren Sie
 höchstens eine aktuelle Person als **Is Primary**. Eine Person kann nur eine

@@ -8,6 +8,7 @@
  "engine": "InnoDB",
  "field_order": [
   "volunteer_name",
+  "contact",
   "column_break_5",
   "volunteer_type",
   "email",
@@ -31,6 +32,16 @@
    "in_list_view": 1,
    "label": "Volunteer Name",
    "reqd": 1
+  },
+  {
+   "fieldname": "contact",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Canonical Contact",
+   "no_copy": 1,
+   "options": "Contact",
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "column_break_5",

@@ -17,8 +17,9 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 
 ## Key DocTypes
 
-- **Member** and **Membership** for membership identity, periods, invoicing, and B2B/B2C flows.
-- **Household** (with the **Household Member** child table) for grouping Members and Donors who share an address into one solicitation unit; see [Households](#households).
+- **Contact** is the canonical person identity; **Member**, individual **Donor**, and **Volunteer** are role projections that retain a conflict-checked canonical Contact link. One Contact can back at most one role of each type. Ordinary saves of existing roles cannot add, clear, or retarget that link.
+- **NPO Organization** is the canonical organization identity anchor. ERPNext Customer and Supplier remain operating/accounting parties linked through hidden preparatory identity fields.
+- **Household** (with the **Household Person** child table) groups Contacts who share an address into one solicitation unit; see [Households](#households).
 - **Donor**, **Donation**, **Donation Campaign**, **Recurring Donation**, and **Donation Receipt** for fundraising. `Donor.customer` is the canonical ERPNext Customer relation for donor identity; Donation still links to Donor.
   Donation carries analysis dimensions `cost_center` (fetched from the campaign's cost center when empty) and `project` (both ERPNext doctypes) for downstream fundraising analytics (e.g. the `good_analytics` app).
 - **Sponsor**, **Sponsor Tier**, **Volunteer**, and **Grant Application** for broader NPO operations.
@@ -32,57 +33,65 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
 
 ## Households
 
-**Household** groups the Members and Donors who share a postal address and are
-usually solicited together (typically couples). The docname is
-`household_name` (autoname `field:household_name`, `allow_rename`; renames
-cascade into Link fields). Rows in the **Household Member** child table carry
-`link_doctype` (`Member` or `Donor`), `link_name` (Dynamic Link), `from_date`,
-`to_date`, and `is_primary`. A row without `to_date` is a *current* household
-member; setting `to_date` turns it into history, so the child table itself is
-the dated membership history (divorce/marriage flows) — rows are not deleted
-when someone leaves.
+**Household** groups people who share a postal address and are usually solicited
+together. Its **Household Person** rows carry `contact`, optional
+`relationship`, `from_date`, `to_date`, and `is_primary`. A row without
+`to_date` is current. Normal move-out/divorce handling sets `to_date` instead
+of deleting the row so the child table remains the dated history.
 
 `from_date` is mandatory and `to_date` cannot precede it. Validation rejects a
-duplicate current row for the same party, more than one current primary in a
-Household, and a second current Household for a Member/Donor. Affected Member
-and Donor rows are locked in deterministic order before the cross-Household
-check locks conflicting Household Member rows, narrowing the otherwise
-unavoidable model-level race between concurrent transactions. Ordinary derived
-field reads during Member/Donor validation do not lock Household Member rows,
-so mutation paths consistently acquire party locks before child-row locks.
+duplicate current row for one Contact, more than one current primary, a second
+current Household for the same Contact, and a Contact explicitly classified as
+`Generic Endpoint`. Blank legacy Contact classifications are set to `Person`.
+A Contact already used by a canonical person role or Household row cannot later
+be reclassified as a Generic Endpoint. Household save and delete operations
+both require write permission on every affected Contact unless a trusted caller
+explicitly bypasses permissions. Mutations lock affected Contact rows deterministically before checking
+conflicting Household Person rows.
 
-`Household.on_update` reconciles the current party links through
-`frappe.db.set_value` (no recursive validation). It considers both the saved
-rows and the document's persisted prior rows, so deleting or retargeting a row
-clears the old party as well as setting the new one. `after_delete` performs
-the same cleanup for Household deletion. The read-only
-`Membership.is_household_membership` flag is refreshed on all Memberships of
-affected Members to `bool(Member.household)`. `Membership.validate` also sets
-the flag on every save.
+`Household.on_update` projects the current Household onto every Member and Donor
+whose hidden canonical `contact` field matches. It uses `frappe.db.set_value`
+instead of saving role documents and refreshes
+`Membership.is_household_membership`. Saved and prior rows are reconciled, so a
+correction that removes or retargets a row and a Household deletion cannot leave
+stale role links. Attaching an existing role to a Contact invokes the same sync
+immediately. Member/Donor controllers also restore their read-only derived
+`household` field on save.
 
-`Member.household` and `Donor.household` are read-only, no-copy derived fields;
-their controllers restore the value from the current Household Member row on
-save. Household itself grants access only to **Non Profit Manager**, matching
-Donor access, and validates write permission on affected target parties for
-normal saves.
+The canonical service is
+`non_profit.non_profit.doctype.household.household.add_person_to_household(household, contact, from_date, to_date=None, is_primary=False, relationship=None, *, ignore_permissions=False) -> Household`.
+It requires write permission on Household and Contact unless a trusted
+server-side caller passes `ignore_permissions=True`.
 
-The canonical Python service for presentation apps is
-`non_profit.non_profit.doctype.household.household.add_member_to_household(household, member, from_date, to_date=None, is_primary=False, *, ignore_permissions=False) -> Household`.
-It appends dated Member history and saves through all Household validation and
-sync logic. By default it requires write permission on both Household and
-Member; `ignore_permissions=True` is reserved for trusted system processes.
-
-`Customer.household` (Link → Household) and `Contact.title` (Data, for
-academic titles such as `Dr.`) ship as custom fields from
-`non_profit.setup.get_custom_fields` on install and migrate. Addresses and
-Contacts attach to a Household through the standard Dynamic Link mechanism and
-render on the form exactly like on Member/Donor (`onload` +
-`frappe.contacts.render_address_and_contact`).
+`Customer.household` and `Contact.title` remain operational custom fields.
+Stage 1 also ships hidden, read-only identity preparation fields on Contact,
+Customer, and Supplier, plus the **NPO Organization** master. These fields are
+installed on both install and migrate; setup repairs partial metadata/schema
+states where a Custom Field record exists but its database column does not.
+All setup-owned Custom Fields carry module `Non Profit`, so uninstall removes
+their links before dropping app DocTypes such as NPO Organization.
+Addresses and Contacts attach to Household through standard Dynamic Links.
+`Household Person` replaces `Household Member` through ordered migration
+patches. Before model sync, each old Member/Donor row must resolve to exactly
+one canonical Contact. The patch backfills the role's canonical Contact,
+coalesces only exact same-Household/current-date rows for one person (the common
+Member+Donor projection case), and renames the child DocType/table without
+recreating it. Orphan child rows, invalid dates/primaries, missing roles,
+no/multiple/conflicting Contacts, non-person identity classifications, and
+conflicting current Household dates stop the migration before conversion
+instead of dropping or guessing data. After model
+sync, a second patch installs the required standard-master identity fields,
+classifies migrated Contacts as people, and refreshes role/Membership
+projections. Both patches are idempotent, including recovery after the
+DocType/table rename has committed. If orphan cleanup already removed the old
+DocType metadata but retained a populated `tabHousehold Member`, the pre-model
+patch validates and copies those rows into an already-synced Household Person
+table while retaining the orphan table as a recovery backup.
 
 ## Hooks
 
 - `after_install = non_profit.setup.setup_non_profit`
-- `after_migrate = non_profit.non_profit.fundraising_setup.ensure_fundraising_fixtures` refreshes non_profit custom fields and fundraising fixtures.
+- `after_migrate = non_profit.setup.after_migrate` refreshes standard-master custom fields and fundraising fixtures.
 - `before_uninstall = non_profit.setup.before_uninstall` clears this app's
   Workspace Sidebar ownership so developer-mode uninstall does not delete the
   shipped sidebar JSON.
@@ -233,8 +242,10 @@ guest-viewable.
 
 Donor identity mirrors the Member/Customer pattern: `Donation.donor` points to a
 Donor, and Customer-level CRM data resolves through `Donation.donor ->
-Donor.customer`. Donor no longer stores its own email address; donor email is
-read from `Donor.customer -> Customer.email_id` and copied onto Donation /
+Donor.customer`. Donor no longer stores its own email address; an individual
+Donor reads email from its canonical Contact first, while organization and
+legacy roles fall back to `Donor.customer -> Customer.email_id` and then a
+linked Contact. The result is copied onto Donation /
 Recurring Donation / Donation Receipt rows as an operational snapshot.
 `Donor.preferred_language` and `Donation Receipt.language` are Link fields to
 Frappe's `Language` DocType, matching core language selectors such as
@@ -265,18 +276,23 @@ Customer-only, or Contact+Customer selections. The Member list uses Frappe's
 native `listview_settings.primary_action` hook to open its combined Member and
 Membership creation dialog directly; each Add action creates a fresh dialog,
 and cancelling it leaves the user on the list instead of an unsaved Member form.
-Contact-only Donors keep a Contact
-Dynamic Link and no Customer until a Customer is explicitly selected through a
-creation/import/repair flow.
+Contact-only individual Donors store the canonical `Donor.contact`, keep a
+Contact Dynamic Link, and have no Customer until one is explicitly selected
+through a creation/import/repair flow. Customer-only Company donors remain
+Organization subjects backed by the Company Customer; their linked contact
+people or generic mailboxes are correspondence links, not canonical person
+identity.
 Sponsor creation reuses the same Donor identity helper before creating/reusing
 the Sponsor. Contact Dynamic Links are appended through the parent Contact
 document, not inserted as standalone child rows. These helpers explicitly require
 create permission for the target record plus write permission on selected
 Contacts/Customers before they append links or update Customer/Donor identity
-fields. Conflicting Contact+Customer selections are rejected instead of silently
-moving a Contact to another Donor/Member. Volunteer creation intentionally
-accepts Contact only and links the Contact to Volunteer without creating or
-linking a Customer.
+fields. Conflicting canonical or Dynamic-Link Contact assignments are rejected
+instead of silently moving a Contact to another Donor/Member/Volunteer.
+Person-role helpers classify blank
+legacy Contacts as `Person` and reject an explicit `Generic Endpoint` rather
+than silently reclassifying a shared mailbox. Volunteer creation intentionally
+accepts Contact only, stores `Volunteer.contact`, and does not create a Customer.
 
 `Donation.thank_you_sent` is a standard field on Donation for **Verdankungen**. `Donation.send_thank_you()` queues the configured Email Template, stores `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` when available, and marks this field once the email is queued. Presentation apps such as `ilanga_app` and `good_npo` read this field for pending thank-you queues. `Donation.receipt` remains reserved for **Donation Receipt** / **Spendenbescheinigung** tax certificates, so an immediate thank-you must not populate it.
 
@@ -412,9 +428,10 @@ Miki uses:
 - `Membership.member` as the canonical membership link
 
 Member no longer stores `membership_type`. Membership Type, Status, and validity
-dates belong only to `Membership`; Member is the identity record and can be
-linked to a Customer for B2B flows. Contact-only person memberships are linked
-through Contact Dynamic Link rows; Member does not store a Contact field.
+dates belong only to `Membership`; Contact is the canonical person identity and
+Member is its membership role. `Member.contact` stores that canonical link,
+while `Member.customer` remains the operating Customer relation for B2B flows;
+the Contact Dynamic Link is retained for standard Frappe navigation.
 
 `Membership.company` has been removed. It is not the member's
 business/company relation, and any business organisation lookup should resolve
@@ -434,7 +451,8 @@ linked ERPNext Customer, not directly to Member.
 Member names are operator-editable. When `Member.member_name` is blank and a
 Customer is linked, the controller fills it from `Customer.customer_name` plus
 `Customer.name_additional` when that field exists. Contact-only helper flows
-derive the name from the Contact and link the Contact through Dynamic Link rows.
+derive the name from the Contact, persist `Member.contact`, and retain the
+Dynamic Link row.
 The Member Desk form does not write membership validity dates back onto Member;
 if a legacy `membership_expiry_date` field exists, the client refreshes it from
 the linked Membership without marking the form dirty.

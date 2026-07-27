@@ -15,6 +15,12 @@ try:
 except ImportError:
 	resolve_or_create_contact_from_external_signup = None
 
+from non_profit.non_profit.utils import (
+	ensure_canonical_contact_available,
+	ensure_person_contact,
+	role_uses_canonical_person,
+	validate_person_role_contact_change,
+)
 from non_profit.non_profit.utils import split_person_name as _split_person_name
 
 
@@ -25,6 +31,12 @@ class Member(Document):
 
 	def validate(self):
 		self.set_member_name_from_customer()
+		validate_person_role_contact_change(self)
+		if self.contact:
+			if self.subject_type and self.subject_type != "Individual":
+				frappe.throw(_("A Member with a canonical Contact must represent an individual."))
+			self.subject_type = "Individual"
+			ensure_person_contact(self.contact)
 		self.set_derived_household()
 		if not self.member_name:
 			frappe.throw(_("Member Name is required."))
@@ -39,7 +51,7 @@ class Member(Document):
 	def set_derived_household(self) -> None:
 		from non_profit.non_profit.doctype.household.household import get_current_household
 
-		self.household = get_current_household("Member", self.name) if not self.is_new() else None
+		self.household = get_current_household(self.contact) if self.contact else None
 
 	def validate_email_type(self, email):
 		from frappe.utils import validate_email_address
@@ -126,6 +138,7 @@ def get_or_create_member_for_contact(
 
 	linked_member = _member_linked_to_contact(contact)
 	if linked_member:
+		_link_contact_to_member(contact, linked_member, ignore_permissions=ignore_permissions)
 		member = frappe.get_doc("Member", linked_member)
 		if not ignore_permissions:
 			member.check_permission("read")
@@ -147,6 +160,8 @@ def get_or_create_member_for_contact(
 		frappe.has_permission("Member", "create", throw=True)
 	member.member_name = _contact_display_name(contact_doc)
 	member.email_id = email
+	member.subject_type = "Individual"
+	member.contact = contact
 	member.insert(ignore_permissions=ignore_permissions)
 	_link_contact_to_member(contact, member.name, ignore_permissions=ignore_permissions)
 	return member
@@ -313,16 +328,26 @@ def _single_membership_type() -> str | None:
 
 
 def _member_linked_to_contact(contact: str) -> str | None:
-	linked_member = frappe.db.get_value(
+	if member := frappe.db.get_value("Member", {"contact": contact}, "name"):
+		return member
+	linked_members = frappe.get_all(
 		"Dynamic Link",
-		{
+		filters={
 			"parenttype": "Contact",
 			"parent": contact,
 			"link_doctype": "Member",
 		},
-		"link_name",
+		pluck="link_name",
+		order_by="idx asc",
 	)
-	return linked_member if linked_member and frappe.db.exists("Member", linked_member) else None
+	return next(
+		(
+			member
+			for member in linked_members
+			if frappe.db.exists("Member", member) and role_uses_canonical_person("Member", member)
+		),
+		None,
+	)
 
 
 def _link_contact_to_member(
@@ -330,7 +355,26 @@ def _link_contact_to_member(
 	member: str,
 	*,
 	ignore_permissions: bool = False,
-) -> None:
+) -> str | None:
+	subject_type = frappe.db.get_value("Member", member, "subject_type")
+	if subject_type and subject_type != "Individual":
+		frappe.throw(_("Member {0} does not represent an individual Contact.").format(frappe.bold(member)))
+	ensure_canonical_contact_available("Member", member, contact)
+	contact_doc = frappe.get_doc("Contact", contact)
+	if not ignore_permissions:
+		contact_doc.check_permission("write")
+	ensure_person_contact(contact)
+	contact_doc.npo_identity_kind = "Person"
+	frappe.db.set_value(
+		"Member",
+		member,
+		{"subject_type": "Individual", "contact": contact},
+		update_modified=False,
+	)
+	from non_profit.non_profit.doctype.household.household import sync_contact_role_households
+
+	current_household = sync_contact_role_households(contact)
+
 	if frappe.db.exists(
 		"Dynamic Link",
 		{
@@ -340,13 +384,11 @@ def _link_contact_to_member(
 			"link_name": member,
 		},
 	):
-		return
+		return current_household
 
-	contact_doc = frappe.get_doc("Contact", contact)
-	if not ignore_permissions:
-		contact_doc.check_permission("write")
 	contact_doc.append("links", {"link_doctype": "Member", "link_name": member})
 	contact_doc.save(ignore_permissions=ignore_permissions)
+	return current_household
 
 
 def _link_contact_to_customer(
@@ -445,6 +487,7 @@ def create_member(user_details):
 	contact = _contact_for_email(user_details.email)
 	if contact:
 		_link_contact_to_member(contact, member.name, ignore_permissions=True)
+		member.reload()
 
 	return member
 

@@ -9,6 +9,9 @@
  "field_order": [
   "naming_series",
   "donor_name",
+  "subject_type",
+  "contact",
+  "subject_household",
   "column_break_5",
   "donor_type",
   "preferred_language",
@@ -52,6 +55,35 @@
    "in_list_view": 1,
    "label": "Donor Name",
    "reqd": 1
+  },
+  {
+   "fieldname": "subject_type",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Subject Type",
+   "no_copy": 1,
+   "options": "\nIndividual\nOrganization\nHousehold\nAnonymous",
+   "read_only": 1
+  },
+  {
+   "fieldname": "contact",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Canonical Contact",
+   "no_copy": 1,
+   "options": "Contact",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "subject_household",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Subject Household",
+   "no_copy": 1,
+   "options": "Household",
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "column_break_5",
