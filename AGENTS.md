@@ -94,6 +94,18 @@ procedures), and the code. Record new or changed requirements in
   migrate.
 - Address/Contact attach to Household via standard Dynamic Links (same
   pattern as Member/Donor, including `load_address_and_contact` on `onload`).
+- Postal consumers must resolve Contact/Member/Donor/Household/Customer through
+  `non_profit.non_profit.correspondence`; it is bounded, read-only, keeps
+  person sources as people for explicit later Household consolidation, accepts
+  canonical subjects with bounded related Contact/Member/Donor/Customer rows,
+  and never treats `Generic Endpoint` as a person or guesses among multiple
+  Addresses. Related rows may supply language/address candidates but must never
+  replace the caller's canonical Contact, Customer, or Household.
+- Joint giving uses one Household-subject Donor resolved through
+  `get_or_create_donor_for_household()`. The helper locks only the Household
+  parent row, reuses one canonical or legacy blank-subject-type Household Donor,
+  and fails on multiple candidates; do not create a Household Customer or
+  attribute joint giving to the primary Household person.
 - The 16.3.0 `Household Member` -> `Household Person` replacement is protected
   by ordered pre/post model-sync patches. Never remove, move after model sync,
   or weaken their fail-closed identity/date checks; an ambiguous production row

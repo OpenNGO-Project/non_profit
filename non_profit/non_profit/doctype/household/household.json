@@ -8,6 +8,7 @@
  "engine": "InnoDB",
  "field_order": [
   "household_name",
+  "preferred_language",
   "members",
   "address_contacts",
   "address_html",
@@ -21,6 +22,12 @@
    "in_list_view": 1,
    "label": "Household Name",
    "reqd": 1
+  },
+  {
+   "fieldname": "preferred_language",
+   "fieldtype": "Link",
+   "label": "Preferred Language",
+   "options": "Language"
   },
   {
    "fieldname": "members",

@@ -218,6 +218,69 @@ def get_or_create_donor_for_contact(
 	return donor
 
 
+def get_or_create_donor_for_household(
+	household: str,
+	donor_type: str | None = None,
+	*,
+	ignore_permissions: bool = False,
+):
+	"""Resolve one Household-subject Donor while holding the Household row lock."""
+	household = cstr(household).strip()
+	if not household:
+		frappe.throw(_("Household is required to create a Donor"))
+
+	household_row = frappe.db.get_value(
+		"Household",
+		household,
+		["name", "household_name"],
+		as_dict=True,
+		for_update=True,
+	)
+	if not household_row:
+		frappe.throw(
+			_("Household {0} does not exist").format(frappe.bold(household)),
+			frappe.DoesNotExistError,
+		)
+	if not ignore_permissions:
+		household_doc = frappe.get_doc("Household", household)
+		household_doc.check_permission("write")
+
+	donor_table = frappe.qb.DocType("Donor")
+	donor_names = (
+		frappe.qb.from_(donor_table)
+		.select(donor_table.name)
+		.where(donor_table.subject_household == household)
+		.where(
+			(donor_table.subject_type == "Household")
+			| donor_table.subject_type.isnull()
+			| (donor_table.subject_type == "")
+		)
+		.orderby(donor_table.name)
+		.limit(2)
+	).run(pluck=True)
+	if len(donor_names) > 1:
+		frappe.throw(
+			_("Household {0} has more than one active Household Donor. Staff review is required.").format(
+				frappe.bold(household)
+			)
+		)
+	if donor_names:
+		donor = frappe.get_doc("Donor", donor_names[0])
+		if not ignore_permissions:
+			donor.check_permission("read")
+		return donor
+
+	if not ignore_permissions:
+		frappe.has_permission("Donor", "create", throw=True)
+	donor = frappe.new_doc("Donor")
+	donor.donor_name = household_row.household_name
+	donor.donor_type = _resolve_donor_type(donor_type)
+	donor.subject_type = "Household"
+	donor.subject_household = household
+	donor.insert(ignore_permissions=ignore_permissions)
+	return donor
+
+
 def get_or_create_customer_for_donor(
 	donor,
 	email: str | None = None,

@@ -200,6 +200,86 @@ class TestDonor(IntegrationTestCase):
 		self.assertEqual(individual_donor.subject_type, "Individual")
 		self.assertEqual(individual_donor.contact, contact.name)
 
+	def test_household_donor_service_creates_and_reuses_one_donor(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import get_or_create_donor_for_household
+
+		household = frappe.get_doc(
+			{
+				"doctype": "Household",
+				"household_name": f"Household Donor {frappe.generate_hash(length=8)}",
+			}
+		).insert(ignore_permissions=True)
+		donor_type = self._donor_type()
+
+		donor = get_or_create_donor_for_household(
+			household.name,
+			donor_type=donor_type,
+			ignore_permissions=True,
+		)
+		reused = get_or_create_donor_for_household(
+			household.name,
+			donor_type=donor_type,
+			ignore_permissions=True,
+		)
+
+		self.assertEqual(reused.name, donor.name)
+		self.assertEqual(donor.donor_name, household.household_name)
+		self.assertEqual(donor.subject_type, "Household")
+		self.assertEqual(donor.subject_household, household.name)
+		self.assertEqual(donor.household, household.name)
+		self.assertFalse(donor.customer)
+
+	def test_household_donor_service_reuses_unique_legacy_blank_subject_type(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import get_or_create_donor_for_household
+
+		household = frappe.get_doc(
+			{
+				"doctype": "Household",
+				"household_name": f"Legacy Household Donor {frappe.generate_hash(length=8)}",
+			}
+		).insert(ignore_permissions=True)
+		legacy_donor = frappe.get_doc(
+			{
+				"doctype": "Donor",
+				"donor_name": "Legacy Household Donor",
+				"donor_type": self._donor_type(),
+				"subject_household": household.name,
+			}
+		).insert(ignore_permissions=True)
+
+		reused = get_or_create_donor_for_household(household.name, ignore_permissions=True)
+
+		self.assertEqual(reused.name, legacy_donor.name)
+		self.assertFalse(reused.subject_type)
+		self.assertEqual(
+			frappe.db.count("Donor", {"subject_household": household.name}),
+			1,
+		)
+
+	def test_household_donor_service_rejects_existing_conflict(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import get_or_create_donor_for_household
+
+		household = frappe.get_doc(
+			{
+				"doctype": "Household",
+				"household_name": f"Conflicting Household Donor {frappe.generate_hash(length=8)}",
+			}
+		).insert(ignore_permissions=True)
+		donor_type = self._donor_type()
+		for suffix, subject_type in (("One", "Household"), ("Two", None)):
+			frappe.get_doc(
+				{
+					"doctype": "Donor",
+					"donor_name": f"Household Donor {suffix}",
+					"donor_type": donor_type,
+					"subject_type": subject_type,
+					"subject_household": household.name,
+				}
+			).insert(ignore_permissions=True)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "more than one active Household Donor"):
+			get_or_create_donor_for_household(household.name, ignore_permissions=True)
+
 	def test_policy_identity_service_rejects_ambiguous_donor_email(self) -> None:
 		from non_profit.non_profit.donor_identity import resolve_donor_customer_identity
 

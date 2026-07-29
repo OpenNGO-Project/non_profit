@@ -12,6 +12,7 @@
 | `miki_app` | Membership/Customer substrate for kibesuisse declarations. |
 | `good_npo` | Generic Goodvantage NPO presentation layer. |
 | `good_demo` | Demo signup/reset layer that seeds non_profit demo records. |
+| `good_direct_mail` | Postal campaigns consume canonical correspondence profiles and Household Donors without reversing the dependency. |
 
 Breaking changes are allowed while Miki is not production, but `miki_app` must be updated in the same change whenever shared membership behavior changes.
 
@@ -87,6 +88,93 @@ DocType/table rename has committed. If orphan cleanup already removed the old
 DocType metadata but retained a populated `tabHousehold Member`, the pre-model
 patch validates and copies those rows into an already-synced Household Person
 table while retaining the orphan table as a recovery backup.
+
+## Correspondence Profiles
+
+`Contact.preferred_language` is an editable setup-owned Custom Field (Link to
+Language), and `Household.preferred_language` is a normal Household Link field.
+Neither has a default: unresolved language remains visible to the consuming
+workflow instead of silently assuming a language.
+
+`non_profit.non_profit.correspondence` is the generic, non-whitelisted
+identity boundary for postal correspondence. It does not import or depend on a
+campaign app. Public functions are:
+
+- `get_correspondence_profile(source_doctype, source_name)` for one source. Its
+  canonical-subject keyword form (`canonical_subject_type`,
+  `canonical_subject`, and optional `contacts`, `members`, `donors`, and
+  `customers` name lists) is the adapter for a consumer that already consolidated
+  its audience; `as_of` is accepted as upstream selection context but does not
+  redefine current Household rows.
+- `get_correspondence_profiles(source_references)` for at most 500
+  references, returned in input order. Existing `{doctype, name}` /
+  `{reference_doctype, reference_name}` mappings and `(doctype, name)` pairs are
+  supported. A canonical reference is a mapping with `canonical_subject_type`,
+  `canonical_subject`, and optional `contacts`, `members`, `donors`, and
+  `customers` sequences. Canonical aliases `Person` and `Organization` normalize
+  to Contact and Customer. Across one call, at most 5,000 related identities may
+  be supplied. Strings/bytes and mappings are rejected where a sequence is
+  required, and iterable limits are checked after consuming only the allowed
+  bound plus one item.
+
+Supported sources are Contact, Member, Donor, Household, and Customer. The
+service resolves each to a canonical `Person` (Contact), `Organization`
+(Customer), or `Household`; a person's current Household is returned as context
+but does not automatically replace that Person as the canonical subject. This
+allows a Direct Mail consumer to consolidate only when its selected population
+contains at least two current people in the same explicit Household. A Contact
+classified as `Generic Endpoint` is rejected whenever a source tries to use it
+as a person. Blank legacy identity kinds are read as people without writing the
+classification back.
+For a canonical reference, related role rows enrich the profile but never change
+the declared canonical Contact, Customer, or Household. Related Donor language,
+related Customer language, related Contact language, Dynamic Links on all four
+related identity types, and explicit Contact/Customer address pointers are
+eligible. A related Member or Donor also exposes its backing Contact and Customer
+to those lookups.
+
+Current Household people are ordered primary first and then by Contact name.
+Profiles expose structured people/name components and an addressee, plus a
+resolved language and exact `{doctype, name, fieldname}` provenance. The
+language precedence available in this substrate is current Household, source or
+related Donor, backing or related Customer, then canonical/current or related
+Contact. A campaign-level
+recipient override and run default remain consumer-owned fallbacks.
+
+Active (`Address.disabled = 0`) Addresses are collected set-based from standard
+Dynamic Links and explicit Contact/Customer address pointers. Candidates are
+deduplicated, retain every `{doctype, name, via}` provenance path, and contain
+structured postal fields. One resolved candidate is exposed as `address`; zero
+adds `MISSING_ADDRESS`. With multiple candidates, one unique direct
+Contact/Customer pointer or one uniquely primary Address is accepted; otherwise
+the profile adds `AMBIGUOUS_ADDRESS` without selecting the first row. Other
+stable issue codes cover missing/ambiguous canonical Contacts,
+Households, Household people, language, and addressee. The complete public set
+is `MISSING_CANONICAL_SUBJECT`, `MISSING_PERSON_CONTACT`,
+`AMBIGUOUS_PERSON_CONTACT`, `MISSING_ORGANIZATION`, `MISSING_HOUSEHOLD`,
+`AMBIGUOUS_HOUSEHOLD`, `MISSING_HOUSEHOLD_PEOPLE`,
+`UNSUPPORTED_SUBJECT_TYPE`, `MISSING_ADDRESSEE`, `MISSING_LANGUAGE`,
+`MISSING_ADDRESS`, and `AMBIGUOUS_ADDRESS` (also exported as
+`CORRESPONDENCE_ISSUE_CODES`). Both `issues` (with details) and ordered
+`issue_codes` are returned. Resolution performs reads only: it does not
+classify Contacts, select/write an Address, or create party data.
+The resolved structured Address is returned as `address`, with its document name
+also available as `address_name` for consumers that already loaded Address rows.
+Dynamic Link reads use one bounded query per target DocType with only that
+DocType's exact target names. They therefore cannot trip the related-row guard on
+false combinations produced by independent cross-DocType/name `IN` filters.
+
+Household payment attribution continues through the existing Donor model. The
+public server-side helper
+`non_profit.non_profit.doctype.donor.donor.get_or_create_donor_for_household(household, donor_type=None, *, ignore_permissions=False)`
+locks only the Household parent row before lookup, rejects multiple candidates,
+reuses one canonical Household-subject Donor or one legacy row whose
+`subject_type` is blank but whose `subject_household` is set, or creates one
+named from `Household.household_name` with
+`subject_type = "Household"` and `subject_household` set. Donor currently has no
+inactive lifecycle state, so every persisted matching Donor is active for this
+check. The helper deliberately creates neither a Household Customer nor another
+identity DocType.
 
 ## Hooks
 

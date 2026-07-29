@@ -355,6 +355,37 @@ Contacts explicitly classified as **Generic Endpoint** cannot be Household
 people. **NPO Organization** and the hidden Customer/Supplier identity fields
 are Stage 1 data anchors; no operator merge workflow is shipped yet.
 
+Set **Preferred Language** on a Contact for individual correspondence. Set it
+on Household when people in that Household should receive shared mail in one
+language; the current Household preference takes precedence over Donor,
+Customer, and Contact language when correspondence is resolved. Leave the field
+blank when staff must choose the language in the sending workflow rather than
+recording an assumed default.
+
+Postal integrations that already consolidated an audience should send the
+canonical Contact, Customer, or Household plus the related Contact, Member,
+Donor, and Customer names to the correspondence resolver. Related Donor,
+Customer, and Contact language/address data is considered, but it cannot replace
+the supplied canonical subject. Pass actual name lists, not a single string.
+
+Keep only usable postal Addresses active and link a shared address directly to
+the Household. The correspondence resolver accepts a sole candidate, a unique
+explicit Contact/Customer address pointer, or one uniquely primary Address. If
+a profile reports `MISSING_ADDRESS`, add/link the correct Address. If it reports
+`AMBIGUOUS_ADDRESS`, review the linked active Addresses and disable/unlink an
+obsolete link or set the intended unique primary; the resolver deliberately
+does not choose the first row. Never edit a shared Address automatically from a
+returned-letter workflow.
+
+Integrations that need joint donation attribution must call
+`get_or_create_donor_for_household()` and use the resulting Donor on Donation.
+Do not assign the Donation arbitrarily to the primary person and do not create a
+Household Customer: Household is already the canonical solicitation subject,
+and Donor is the existing Donation/Payment Entry party. A unique legacy Donor
+with the same **Subject Household** and blank **Subject Type** is reused; if more
+than one canonical/legacy candidate exists, resolve the duplicate records before
+retrying.
+
 ## Recurring Donations
 
 Use **Recurring Donation** for a schedule, not as proof of payment. A due active
