@@ -166,6 +166,16 @@ class TestMember(unittest.TestCase):
 		self.assertIn(".always(() => dialog.enable_primary_action())", member_list_script)
 		self.assertIn('frappe.set_route("Form", "Member", result.member)', member_list_script)
 		self.assertIn('fieldname: "existing_address"', member_list_script)
+		self.assertLess(
+			member_list_script.index(
+				'fieldname: "contact"', member_list_script.index("show_member_creation_dialog")
+			),
+			member_list_script.index('fieldname: "existing_address"'),
+		)
+		self.assertLess(
+			member_list_script.index('fieldname: "existing_address"'),
+			member_list_script.index('fieldname: "person_section"'),
+		)
 		self.assertIn('frappe.db.get_doc("Contact", contactName)', member_list_script)
 		self.assertIn('frappe.db.get_doc("Address", addressName)', member_list_script)
 		self.assertIn('dialog.set_df_property(fieldname, "read_only", readOnly)', member_list_script)

@@ -71,6 +71,15 @@ function show_member_creation_dialog() {
 				},
 			},
 			{
+				fieldname: "existing_address",
+				fieldtype: "Link",
+				label: __("Existing Address (Optional)"),
+				options: "Address",
+				async change() {
+					await load_existing_address(dialog);
+				},
+			},
+			{
 				fieldname: "person_section",
 				fieldtype: "Section Break",
 				label: __("Person"),
@@ -150,15 +159,6 @@ function show_member_creation_dialog() {
 				fieldname: "address_section",
 				fieldtype: "Section Break",
 				label: __("Address"),
-			},
-			{
-				fieldname: "existing_address",
-				fieldtype: "Link",
-				label: __("Existing Address (Optional)"),
-				options: "Address",
-				async change() {
-					await load_existing_address(dialog);
-				},
 			},
 			{
 				fieldname: "address_line1",
