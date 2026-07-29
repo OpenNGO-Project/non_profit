@@ -273,9 +273,54 @@ dotted paths remain supported.
 
 Desk creation helpers for Member, Donor, and Sponsor accept Contact-only,
 Customer-only, or Contact+Customer selections. The Member list uses Frappe's
-native `listview_settings.primary_action` hook to open its combined Member and
-Membership creation dialog directly; each Add action creates a fresh dialog,
-and cancelling it leaves the user on the list instead of an unsaved Member form.
+native `listview_settings.primary_action` hook to open a guided **Create Member**
+dialog directly; each Add action creates a fresh dialog, and cancelling it leaves
+the user on the list instead of an unsaved Member form. The guided dialog accepts
+an Individual or Organization plus Membership Type and From Date. Individual
+fields cover first/last name, email, optional phone, and complete postal address;
+Organization needs a name and may include a complete address and a real named
+human contact person. Country defaults from the site. It posts to the existing
+`create_member_and_membership` endpoint using its additive guided input shape and
+routes to the resulting Member. Calls using only the older `contact`, `customer`,
+and `membership_type` arguments keep their existing behavior and response keys.
+Optional Existing Contact and Existing Address selectors load those records into
+read-only identity fields; server-side resolution treats the selected records as
+authoritative, checks record permissions and person classification, and adds only
+the missing role links. Leaving the selectors blank keeps exact automatic reuse.
+On a site where Good Connector is not installed, the list action falls back to
+the original technical Contact/Customer selector instead of offering raw identity
+creation; this preserves the app's optional Connector dependency.
+
+The guided endpoint is an authenticated Desk workflow, not a wrapper around the
+Good NPO guest endpoint. Before writing, it requires create/read/write permission
+on Contact, Address, Customer, Member, and Membership plus read access to the
+selected Membership Type and Country. It lets Frappe own the request transaction,
+does not commit, and does not create subscriptions, invoices, or emails. Good
+Connector performs deterministic Contact and Address resolution. Exact canonical
+person identity and exact linked addresses are reused; same-email Customer rows
+alone are never authority to adopt or modify a Customer/Household. Multiple or
+contradictory Contact, Member, Customer, organization-name, or exact Address
+candidates stop with a staff-review message. Organization Customers may retain
+an existing primary Contact while another real human correspondence Contact is
+linked; the guided flow never replaces the existing primary.
+
+Guided identity keys are transaction-scoped to serialize duplicate submissions,
+and current parent-record reads are locked before mutation. Deadlocks are allowed
+to propagate to Frappe after MariaDB rolls back the transaction rather than being
+masked by an invalid savepoint rollback. When an exact Address is reused, values
+the concise dialog does not collect (such as address line 2, canton/state, email,
+phone, and its existing title) are preserved.
+
+Individual creation stores the resolved person in `Member.contact`, links the
+Address to Contact/Customer/Member, and reuses a Member only through that
+canonical Contact. Same display names with different emails therefore remain
+separate. Organization creation uses a Company/Partnership Customer and an
+Organization Member whose canonical Contact stays empty. An optional contact
+person is a separate Person Contact linked to the Organization Customer and
+Member through Dynamic Links; the organization itself is never created as a
+Contact. Organization addresses link to Customer and Member, not automatically
+to the contact person's private identity. Address type `Billing` is operational
+metadata and is not postal consent.
 Contact-only individual Donors store the canonical `Donor.contact`, keep a
 Contact Dynamic Link, and have no Customer until one is explicitly selected
 through a creation/import/repair flow. Customer-only Company donors remain
@@ -468,12 +513,12 @@ remove those facades earlier than 90 days after warning telemetry is deployed,
 and then only after one complete release cycle reports zero calls. New
 integrations must use current Sales Invoice, Subscription, Payment Entry, and
 Donation authorization services.
-The Contact/Customer dialog and helper accept Contact, Customer, or both, create
-or reuse the Member first, link the Contact to both Member and Customer when both
-are selected, then create or reuse an open-ended Membership for the selected
-Membership Type;
-presentation apps such as `miki_app` use this for parent-owned business
-memberships.
+The legacy Contact/Customer helper accepts Contact, Customer, or both, creates or
+reuses the Member first, links the Contact to both Member and Customer when both
+are selected, then creates or reuses an open-ended Membership for the selected
+Membership Type; presentation apps such as `miki_app` use this for parent-owned
+business memberships. The guided raw-data Desk input mode is additive on the
+same endpoint and does not change the original arguments or response keys.
 
 If any of these contracts change, adjust `miki_app` and run its membership-related tests.
 
@@ -648,7 +693,9 @@ bench --site development16.localhost run-tests --module miki_app.tests.test_end_
 preconditions before the suite runs: it uses a short in-process test host URL,
 renames fixed ERPNext test Customers when local Customer naming is set to naming
 series, and pre-creates ERPNext test Addresses with `pincode` for Swiss benches
-where that field is mandatory.
+where that field is mandatory. When HRMS is installed, it also creates the
+`Email Account/Jobs` test record expected by HRMS 16's module-level bootstrap;
+current Frappe test fixtures no longer provide that legacy record.
 
 CI runs the server suite with the declared ERPNext dependency, proving that Good
 Connector remains optional without requiring this OpenNGO repository to access a

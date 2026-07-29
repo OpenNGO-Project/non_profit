@@ -251,13 +251,50 @@ legacy invoice print. Verify those templates before enabling the action.
 
 Operators may edit **Member Name** directly. When it is left blank and a
 Customer is linked, the Member form fills it from that Customer; if the Customer
-has a `name_additional` field, it is appended to the display name. Creating a
-new Member opens a dialog where operators choose a Contact, a Customer, or both,
-plus the Membership Type; contact-only members store the canonical Contact on
-Member and retain the standard Contact Dynamic Link. The system creates/reuses the
-Member and creates/reuses the open-ended Membership in one step. From a saved
-Member, use **Actions → Create Membership** to create or open the active
-open-ended Membership for that Member and chosen Membership Type.
+has a `name_additional` field, it is appended to the display name.
+
+To create a complete member identity from Desk:
+
+Good Connector must be installed for this guided raw-data dialog (Good NPO and
+ilanga already include it). A standalone Non Profit site without Good Connector
+keeps the technical Contact/Customer selector.
+
+1. Open **Member** and choose **Add Member** / **Mitglied anlegen**.
+2. Select **Individual / Privatperson** or **Organization / Organisation**.
+3. Optionally select an existing Contact and/or Address. Their identity fields
+   are filled and locked so the selected master data is linked without being
+   overwritten. Clear a selector to enter new data instead.
+4. For an Individual, enter first name, last name, email, optional phone,
+   street/house number, postal code, city, country, Membership Type, and From
+   Date. Country starts with the site default.
+5. For an Organization, enter its name. The address is optional but street,
+   postal code, and city must be entered together. A contact person is optional;
+   when used, enter the real person's first name, last name, and email (phone is
+   optional). Never enter the foundation/company itself as the contact person.
+6. Choose **Create**. On success Desk opens the resulting Member.
+
+The action safely creates or reuses Contact, Address, Customer, and Member. It
+creates a new Current open-ended Membership or reuses an existing active Current
+period without rewriting its configured dates. For a person, the Contact is the canonical
+`Member.contact`. For an organization, the Customer/Member represents the
+organization while an optional human Contact remains a separate correspondence
+link. An Organization Customer's existing primary Contact is retained when an
+additional correspondence person is linked. If Desk reports multiple Contacts,
+Members, Customers, organization names, exact Addresses, or an active non-Current
+Membership, stop and resolve those records manually; the dialog deliberately does not guess or merge. A same-email Customer
+that is not already linked to the resolved Contact is not adopted. Billing
+Address metadata is an operational address type and must not be interpreted as
+postal consent.
+
+Users need create, read, and write permission for Contact, Address, Customer,
+Member, and Membership, plus read permission for Membership Type and Country.
+The action creates no Subscription, invoice, acknowledgement, or confirmation
+email. Public Good NPO signup billing remains a separate workflow.
+
+From a saved Member, use **Actions → Create Membership** to create or open the
+active open-ended Membership for that Member and chosen Membership Type. Existing
+integrations may continue using the technical Contact/Customer endpoint; its
+arguments and response contract are unchanged.
 
 Leave **Membership Until** empty for a perpetual/open-ended membership. If code
 creates the Membership and must intentionally keep **Membership Until** blank, set

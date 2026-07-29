@@ -172,7 +172,47 @@ def create_member_and_membership(
 	contact: str | None = None,
 	customer: str | None = None,
 	membership_type: str | None = None,
+	member_kind: str | None = None,
+	from_date: str | None = None,
+	first_name: str | None = None,
+	last_name: str | None = None,
+	email: str | None = None,
+	phone: str | None = None,
+	organization_name: str | None = None,
+	organization_contact_first_name: str | None = None,
+	organization_contact_last_name: str | None = None,
+	organization_contact_email: str | None = None,
+	organization_contact_phone: str | None = None,
+	address_line1: str | None = None,
+	postal_code: str | None = None,
+	city: str | None = None,
+	country: str | None = None,
+	existing_address: str | None = None,
 ) -> dict[str, str | None]:
+	if cstr(member_kind).strip():
+		from non_profit.non_profit.member_identity import create_guided_membership
+
+		return create_guided_membership(
+			member_kind=member_kind,
+			existing_contact=contact,
+			existing_address=existing_address,
+			membership_type=membership_type,
+			from_date=from_date,
+			first_name=first_name,
+			last_name=last_name,
+			email=email,
+			phone=phone,
+			organization_name=organization_name,
+			organization_contact_first_name=organization_contact_first_name,
+			organization_contact_last_name=organization_contact_last_name,
+			organization_contact_email=organization_contact_email,
+			organization_contact_phone=organization_contact_phone,
+			address_line1=address_line1,
+			postal_code=postal_code,
+			city=city,
+			country=country,
+		)
+
 	contact = (contact or "").strip()
 	customer = (customer or "").strip()
 	membership_type = (membership_type or "").strip()
@@ -227,12 +267,13 @@ def get_or_create_membership_for_member(
 	membership_status: str = "Current",
 	keep_to_date_open: bool = True,
 	*,
+	keep_from_date: bool = False,
 	ignore_permissions: bool = False,
 ):
 	if not member:
 		frappe.throw(_("Member is required to create a Membership"))
 
-	member_doc = frappe.get_doc("Member", member)
+	member_doc = frappe.get_doc("Member", member, for_update=True)
 	if not ignore_permissions:
 		member_doc.check_permission("read")
 	membership_type = membership_type or _single_membership_type()
@@ -248,7 +289,7 @@ def get_or_create_membership_for_member(
 		reference_date,
 	)
 	if existing_membership:
-		membership = frappe.get_doc("Membership", existing_membership)
+		membership = frappe.get_doc("Membership", existing_membership, for_update=True)
 		if not ignore_permissions:
 			membership.check_permission("read")
 		return membership
@@ -273,6 +314,8 @@ def get_or_create_membership_for_member(
 
 	if keep_to_date_open and not to_date:
 		membership.flags.keep_to_date_open = True
+	if keep_from_date:
+		membership.flags.keep_from_date = True
 
 	membership.insert(ignore_permissions=ignore_permissions)
 	return membership
@@ -283,16 +326,17 @@ def _active_membership_for_member(
 	membership_type: str,
 	reference_date,
 ) -> str | None:
-	memberships = frappe.get_all(
-		"Membership",
-		filters={
-			"member": member,
-			"membership_type": membership_type,
-			"membership_status": ["!=", "Cancelled"],
-		},
-		fields=["name", "from_date", "to_date"],
-		order_by="from_date desc, creation desc",
-	)
+	membership = frappe.qb.DocType("Membership")
+	memberships = (
+		frappe.qb.from_(membership)
+		.select(membership.name, membership.from_date, membership.to_date)
+		.where(membership.member == member)
+		.where(membership.membership_type == membership_type)
+		.where(membership.membership_status != "Cancelled")
+		.orderby(membership.from_date, order=frappe.qb.desc)
+		.orderby(membership.creation, order=frappe.qb.desc)
+		.for_update()
+	).run(as_dict=True)
 
 	for membership in memberships:
 		if _membership_active_on(membership, reference_date):
@@ -356,11 +400,14 @@ def _link_contact_to_member(
 	*,
 	ignore_permissions: bool = False,
 ) -> str | None:
-	subject_type = frappe.db.get_value("Member", member, "subject_type")
-	if subject_type and subject_type != "Individual":
+	contact_doc = frappe.get_doc("Contact", contact, for_update=True)
+	member_doc = frappe.get_doc("Member", member, for_update=True)
+	if member_doc.subject_type and member_doc.subject_type != "Individual":
 		frappe.throw(_("Member {0} does not represent an individual Contact.").format(frappe.bold(member)))
+	if not ignore_permissions:
+		member_doc.check_permission("read")
+		member_doc.check_permission("write")
 	ensure_canonical_contact_available("Member", member, contact)
-	contact_doc = frappe.get_doc("Contact", contact)
 	if not ignore_permissions:
 		contact_doc.check_permission("write")
 	ensure_person_contact(contact)

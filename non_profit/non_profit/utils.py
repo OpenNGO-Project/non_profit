@@ -199,6 +199,7 @@ def before_tests():
 	from non_profit.non_profit.fundraising_setup import ensure_fundraising_fixtures
 
 	use_short_test_host_name()
+	ensure_hrms_bootstrap_email_account()
 
 	if not frappe.get_list("Company"):
 		setup_complete(
@@ -235,6 +236,28 @@ def use_short_test_host_name():
 	if not frappe.flags.in_test:
 		return
 	frappe.local.conf.host_name = "http://development16.localhost"
+
+
+def ensure_hrms_bootstrap_email_account():
+	"""Provide the legacy Email Account expected by HRMS's module-level test bootstrap."""
+
+	if (
+		not frappe.flags.in_test
+		or "hrms" not in frappe.get_installed_apps()
+		or not frappe.db.exists("DocType", "Email Account")
+		or frappe.db.exists("Email Account", "Jobs")
+	):
+		return
+
+	frappe.get_doc(
+		{
+			"doctype": "Email Account",
+			"email_account_name": "Jobs",
+			"email_id": "jobs@example.com",
+			"smtp_server": "smtp.example.com",
+			"no_smtp_authentication": 1,
+		}
+	).insert(ignore_permissions=True)
 
 
 def ensure_erpnext_bootstrap_customer_names():

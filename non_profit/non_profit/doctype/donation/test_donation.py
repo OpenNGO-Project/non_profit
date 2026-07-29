@@ -627,10 +627,22 @@ class TestDonationPaymentEntryHooks(IntegrationTestCase):
 def get_company_and_accounts():
 	company_name = erpnext.get_default_company()
 	company = frappe.get_doc("Company", company_name)
+	receivable_account = company.default_receivable_account or frappe.db.get_value(
+		"Account",
+		{"company": company.name, "account_type": "Receivable", "is_group": 0},
+		"name",
+		order_by="name",
+	)
+	cash_account = company.default_cash_account or frappe.db.get_value(
+		"Account",
+		{"company": company.name, "account_type": "Cash", "is_group": 0},
+		"name",
+		order_by="name",
+	)
 	return (
 		company.name,
-		company.default_receivable_account,
-		company.default_cash_account,
+		receivable_account,
+		cash_account,
 	)
 
 
@@ -780,7 +792,12 @@ def get_alternate_receivable_account(company, expected_account):
 
 
 def create_mode_of_payment(company):
-	default_account = frappe.db.get_value("Company", company, "default_cash_account")
+	default_account = frappe.db.get_value("Company", company, "default_cash_account") or frappe.db.get_value(
+		"Account",
+		{"company": company, "account_type": "Cash", "is_group": 0},
+		"name",
+		order_by="name",
+	)
 	account_row = {"company": company, "default_account": default_account}
 
 	if not frappe.db.exists("Mode of Payment", "Debit Card"):

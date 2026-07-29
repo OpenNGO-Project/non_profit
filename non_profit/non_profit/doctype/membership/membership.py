@@ -65,7 +65,8 @@ class Membership(Document):
 			if getdate(add_days(last_membership.to_date, -30)) > getdate(nowdate()):
 				frappe.throw(_("You can only renew if your membership expires within 30 days"))
 
-			self.from_date = add_days(last_membership.to_date, 1)
+			if not getattr(self.flags, "keep_from_date", False):
+				self.from_date = add_days(last_membership.to_date, 1)
 
 		# Public/client apps may explicitly request an open-ended membership.
 		# Keep that generic signal here so presentation apps do not need to

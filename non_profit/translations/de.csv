@@ -72,6 +72,10 @@ Chapter Members,Sektionsmitglieder
 Chapter member not found.,Sektionsmitglied nicht gefunden.
 Coach,Coach
 Contact Creation Failed,Kontakt konnte nicht erstellt werden
+Contact Person Email,E-Mail der Kontaktperson
+Contact Person First Name,Vorname der Kontaktperson
+Contact Person Last Name,Nachname der Kontaktperson
+Contact Person Phone,Telefon der Kontaktperson
 Contact is required to create a Donor,Zum Erstellen eines Spenders ist ein Kontakt erforderlich
 Contact is required to create a Member,Zum Erstellen eines Mitglieds ist ein Kontakt erforderlich
 Contact is required to create a Volunteer,Zum Erstellen eines Freiwilligen ist ein Kontakt erforderlich
@@ -79,6 +83,7 @@ Contact {0} does not exist,Kontakt {0} existiert nicht
 Contract End,Vertragsende
 Contract Start,Vertragsbeginn
 Create Member and Membership,Mitglied und Mitgliedschaft erstellen
+Create Member,Mitglied anlegen
 Create Membership,Mitgliedschaft erstellen
 Create Next Donation Now,Nächste Spende jetzt erstellen
 Created donation {0},Spende {0} erstellt
@@ -132,6 +137,7 @@ Grant Description,Beschreibung der Förderung
 Has any past Grant Record,Hat frühere Förderdatensätze
 Häufigkeit,Häufigkeit
 INR,INR
+Individual,Privatperson
 Ich stimme der Speicherung meiner Daten zu.,Ich stimme der Speicherung meiner Daten zu.
 Ihre Spende ist eingegangen.,Ihre Spende ist eingegangen.
 Ihre Spende unterstützt unsere Arbeit.,Ihre Spende unterstützt unsere Arbeit.
@@ -155,6 +161,7 @@ Member Activity,Mitgliedsaktivität
 Member ID,Mitglieds-ID
 Member Name is required.,Mitgliedsname ist erforderlich.
 Member Name,Mitgliedsname
+Member Type,Mitgliedsart
 Member Since,Mitglied seit
 Member is required to create a Membership,Zum Erstellen einer Mitgliedschaft ist ein Mitglied erforderlich
 Membership ID,Mitgliedschafts-ID
@@ -187,12 +194,16 @@ Non Profit Manager,Non-Profit-Manager
 Non Profit Member,Non-Profit-Mitglied
 Non Profit Settings,Non-Profit-Einstellungen
 Not Certified,Nicht zertifiziert
+Optional Contact Person,Optionale Kontaktperson
+Organization,Organisation
+Organization Name,Name der Organisation
 Overlapping Membership,Überschneidende Mitgliedschaft
 PDF File,PDF-Datei
 Payment Details,Zahlungsdetails
 Payment ID,Zahlungs-ID
 Period From,Zeitraum von
 Period To,Zeitraum bis
+Person,Privatperson
 Please agree to the storage of your data.,Bitte stimmen Sie der Speicherung Ihrer Daten zu.
 "Please fill in name, email and amount","Bitte Name, E-Mail und Betrag ausfüllen"
 Please select a Member,Bitte ein Mitglied auswählen
@@ -256,6 +267,36 @@ You need to set <b>Debit Account</b> in {0},Sie müssen <b>Sollkonto</b> in {0} 
 You need to set <b>Default Company</b> for invoicing in {0},Sie müssen <b>Standardfirma</b> für die Rechnungsstellung in {0} setzen
 You need to set <b>Payment Account</b> for Donation in {0},Sie müssen <b>Zahlungskonto</b> für Spenden in {0} setzen
 You need to set <b>Payment Account</b> for Membership in {0},Sie müssen <b>Zahlungskonto</b> für Mitgliedschaften in {0} setzen
+A Customer with this organization name has a non-organization type. Staff review is required.,Ein Kunde mit diesem Organisationsnamen hat einen nicht passenden Kundentyp. Eine manuelle Prüfung ist erforderlich.
+An active non-Current Membership already exists for this identity. Staff review is required.,Für diese Identität besteht bereits eine aktive Mitgliedschaft mit einem anderen Status. Eine manuelle Prüfung ist erforderlich.
+Another Member creation for this identity is still being processed.,Eine andere Mitgliederstellung für diese Identität wird noch verarbeitet.
+Country is required.,Land ist erforderlich.
+Email is required.,E-Mail ist erforderlich.
+Existing Address (Optional),Bestehende Adresse (optional)
+Existing Contact (Optional),Bestehender Kontakt (optional)
+Good Connector identity matching is required for guided Member creation.,Für die geführte Mitgliederstellung ist der Identitätsabgleich von Good Connector erforderlich.
+More than one Contact has this exact name and email. Staff review is required.,Mehr als ein Kontakt hat genau diesen Namen und diese E-Mail-Adresse. Eine manuelle Prüfung ist erforderlich.
+More than one exact Address matches this identity. Staff review is required.,Mehr als eine genaue Adresse passt zu dieser Identität. Eine manuelle Prüfung ist erforderlich.
+More than one Organization Customer matches this name. Staff review is required.,Mehr als ein Organisationskunde passt zu diesem Namen. Eine manuelle Prüfung ist erforderlich.
+Select Individual or Organization.,Wählen Sie Privatperson oder Organisation.
+"Street and house number, postal code, and city must be provided together.","Strasse und Hausnummer, Postleitzahl und Ort müssen gemeinsam angegeben werden."
+The Customer has a different email. Staff review is required.,Der Kunde hat eine andere E-Mail-Adresse. Eine manuelle Prüfung ist erforderlich.
+The Customer has a different primary Contact. Staff review is required.,Der Kunde hat einen anderen primären Kontakt. Eine manuelle Prüfung ist erforderlich.
+The Organization Customer has a different address. Staff review is required.,Der Organisationskunde hat eine andere Adresse. Eine manuelle Prüfung ist erforderlich.
+The Organization Customer is linked to an individual Member. Staff review is required.,Der Organisationskunde ist mit einem privaten Mitglied verknüpft. Eine manuelle Prüfung ist erforderlich.
+The resolved Member does not represent an individual. Staff review is required.,Das ermittelte Mitglied stellt keine Privatperson dar. Eine manuelle Prüfung ist erforderlich.
+The resolved Member has a different email. Staff review is required.,Das ermittelte Mitglied hat eine andere E-Mail-Adresse. Eine manuelle Prüfung ist erforderlich.
+The selected Contact needs a primary email address.,Der ausgewählte Kontakt benötigt eine primäre E-Mail-Adresse.
+This Contact is linked to more than one individual Customer. Staff review is required.,Dieser Kontakt ist mit mehr als einem Privatkunden verknüpft. Eine manuelle Prüfung ist erforderlich.
+This Contact is linked to more than one Member. Staff review is required.,Dieser Kontakt ist mit mehr als einem Mitglied verknüpft. Eine manuelle Prüfung ist erforderlich.
+This email belongs to a different or ambiguous Contact. Staff review is required.,Diese E-Mail-Adresse gehört zu einem anderen oder nicht eindeutigen Kontakt. Eine manuelle Prüfung ist erforderlich.
+This email is linked to a different or ambiguous Member. Staff review is required.,Diese E-Mail-Adresse ist mit einem anderen oder nicht eindeutigen Mitglied verknüpft. Eine manuelle Prüfung ist erforderlich.
+This individual Member is linked to a non-individual Customer. Staff review is required.,Dieses private Mitglied ist mit einem nicht privaten Kunden verknüpft. Eine manuelle Prüfung ist erforderlich.
+This Organization Customer is linked to more than one Member. Staff review is required.,Dieser Organisationskunde ist mit mehr als einem Mitglied verknüpft. Eine manuelle Prüfung ist erforderlich.
+{0} is required.,{0} ist erforderlich.
+"Enter first name, last name, and email for the organization contact person.","Geben Sie Vorname, Nachname und E-Mail-Adresse der Kontaktperson der Organisation ein."
+From Date,Gültig ab
+Street and House Number,Strasse und Hausnummer
 Zahlung abschließen,Zahlung abschließen
 "chapters/chapter_name
 leave blank automatically set after saving chapter.","chapters/chapter_name
