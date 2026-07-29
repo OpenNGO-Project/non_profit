@@ -16,6 +16,7 @@ jinja = {
 }
 
 after_install = "non_profit.setup.setup_non_profit"
+after_app_install = "non_profit.setup.after_app_install"
 after_migrate = "non_profit.setup.after_migrate"
 before_uninstall = "non_profit.setup.before_uninstall"
 

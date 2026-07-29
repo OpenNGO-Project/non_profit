@@ -692,6 +692,13 @@ on `after_migrate`) drives the `stage` field. It is code-owned:
 The definition is **hash-stamped** (`WORKFLOW_VERSION_KEY` global default): the
 Workflow is rebuilt only when the shipped states/transitions/role change, so a
 migrate never reverts operator edits (roles, extra transitions, `is_active=0`).
+When the optional `workflow_visualizer` app is installed, setup also enables
+**Visible on Doctype** for this Workflow. If Workflow Visualizer is installed
+after Non Profit, Frappe calls `non_profit.setup.after_app_install` after the
+visualizer has created its custom field, and the handler applies the opt-in
+immediately. The handler reacts only to `workflow_visualizer`; it does not make
+the app a required dependency. The opt-in is repaired independently and does
+not rebuild or overwrite the operator-edited Workflow definition.
 
 `major_gifts.advance_major_gift_to_stage(doc, target_stage)` moves a gift
 forward programmatically. Because the active Workflow rejects backward moves, it
@@ -785,9 +792,11 @@ where that field is mandatory. When HRMS is installed, it also creates the
 `Email Account/Jobs` test record expected by HRMS 16's module-level bootstrap;
 current Frappe test fixtures no longer provide that legacy record.
 
-CI runs the server suite with the declared ERPNext dependency, proving that Good
-Connector remains optional without requiring this OpenNGO repository to access a
-private cross-organization app. The provider's review-only candidate contract
-and uninstalled behavior are covered by non_profit's unit tests. Connector-backed
-QRR registration tests run in authorized integration environments where the
-coordinated Good Connector API is installed.
+CI runs the server suite with the declared ERPNext dependency. It also installs
+the optional Workflow Visualizer from its `version-16` branch after Non Profit,
+so the install-order integration and process-rail opt-in cannot be skipped; this
+CI fixture is not listed in `required_apps`. Good Connector remains optional.
+Its provider's review-only candidate contract and uninstalled behavior are
+covered by non_profit's unit tests, while connector-backed QRR registration
+tests run in authorized integration environments where the coordinated Good
+Connector API is installed.

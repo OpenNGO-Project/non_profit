@@ -108,6 +108,15 @@ def after_migrate():
 	ensure_fundraising_fixtures()
 
 
+def after_app_install(app_name: str) -> None:
+	if app_name != "workflow_visualizer":
+		return
+
+	from non_profit.non_profit.major_gifts import ensure_major_gift_workflow
+
+	ensure_major_gift_workflow()
+
+
 def make_custom_fields(update=True):
 	custom_fields = get_custom_fields()
 	if custom_fields:

@@ -3,6 +3,8 @@ from unittest.mock import patch
 import frappe
 from frappe.tests import IntegrationTestCase
 
+from non_profit import hooks as non_profit_hooks
+from non_profit import setup as non_profit_setup
 from non_profit.non_profit import fundraising_setup
 
 
@@ -55,3 +57,32 @@ class TestFundraisingSetup(IntegrationTestCase):
 		self.assertEqual(
 			frappe.db.get_value("Email Template", "Donation Thank You DE", "response"), operator_html
 		)
+
+	def test_visualizer_installed_after_non_profit_opts_in_major_gift_workflow(self) -> None:
+		if not frappe.get_meta("Workflow").has_field("visible_on_doctype"):
+			self.skipTest("workflow_visualizer is not installed")
+		self.assertEqual(non_profit_hooks.after_app_install, "non_profit.setup.after_app_install")
+
+		from non_profit.non_profit.major_gifts import (
+			WORKFLOW_NAME,
+			WORKFLOW_ROLES,
+			WORKFLOW_VERSION_KEY,
+			_workflow_definition_hash,
+		)
+
+		edit_role = next(role for role in WORKFLOW_ROLES if frappe.db.exists("Role", role))
+		frappe.db.set_default(WORKFLOW_VERSION_KEY, _workflow_definition_hash(edit_role))
+		frappe.db.set_value(
+			"Workflow",
+			WORKFLOW_NAME,
+			{"visible_on_doctype": 0, "send_email_alert": 1},
+			update_modified=False,
+		)
+
+		non_profit_setup.after_app_install("workflow_visualizer")
+
+		workflow_values = frappe.db.get_value(
+			"Workflow", WORKFLOW_NAME, ["visible_on_doctype", "send_email_alert"], as_dict=True
+		)
+		self.assertTrue(workflow_values.visible_on_doctype)
+		self.assertTrue(workflow_values.send_email_alert)

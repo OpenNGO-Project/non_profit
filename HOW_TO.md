@@ -12,6 +12,11 @@ bench --site development16.localhost migrate
 
 ERPNext must already be installed.
 
+Workflow Visualizer is optional and may be installed before or after Non Profit.
+When it is installed later, Non Profit immediately enables the Major Gift
+Pipeline rail through Frappe's app-install hook; no additional migrate is needed
+for that opt-in.
+
 NPO desk operators need `Non Profit Manager` or `Non Profit Member` with Desk Access. Setup repairs those roles and existing users during install/migrate. If an SSO-created user gets **Insufficient Permission for List Filter** on a non_profit list, run migrate/setup and have the user log in again.
 
 The shipped **Non Profit** workspace and sidebar expose current fundraising,
@@ -420,8 +425,10 @@ the action sends the invitation and moves it to **In Progress**.
 ## Major Gifts — Next Actions
 
 A **Major Gift** is one cultivation "ask"; a **Donor Interaction** logs a
-touchpoint. The "next action" on either is tracked as a real **Task**, not a
-text note:
+touchpoint. When Workflow Visualizer is installed, saved Major Gift forms show
+the pipeline stages and permitted Back/Proceed actions above the form. New,
+unsaved records show the pipeline after their first save. The "next action" on
+either record is tracked as a real **Task**, not a text note:
 
 1. Open a Major Gift (or Donor Interaction) and choose **Actions → Set Next
    Action**.

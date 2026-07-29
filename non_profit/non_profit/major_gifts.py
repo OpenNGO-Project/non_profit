@@ -386,10 +386,10 @@ def ensure_major_gift_workflow() -> None:
 		return
 
 	definition_hash = _workflow_definition_hash(edit_role)
-	if (
-		frappe.db.exists("Workflow", WORKFLOW_NAME)
-		and frappe.db.get_default(WORKFLOW_VERSION_KEY) == definition_hash
-	):
+	workflow_exists = frappe.db.exists("Workflow", WORKFLOW_NAME)
+	if workflow_exists:
+		_ensure_workflow_visualizer_opt_in()
+	if workflow_exists and frappe.db.get_default(WORKFLOW_VERSION_KEY) == definition_hash:
 		# Already built from the current shipped definition — leave it (and any
 		# operator edits) untouched.
 		return
@@ -416,6 +416,8 @@ def ensure_major_gift_workflow() -> None:
 	workflow.workflow_state_field = "stage"
 	workflow.is_active = 1
 	workflow.send_email_alert = 0
+	if frappe.get_meta("Workflow").has_field("visible_on_doctype"):
+		workflow.visible_on_doctype = 1
 
 	# One row per state / transition (not per role) so the stage list is not
 	# duplicated. Transitions are gated to a single role; Administrator bypasses
@@ -440,6 +442,14 @@ def ensure_major_gift_workflow() -> None:
 	workflow.flags.ignore_permissions = True
 	workflow.save()
 	frappe.db.set_default(WORKFLOW_VERSION_KEY, definition_hash)
+
+
+def _ensure_workflow_visualizer_opt_in() -> None:
+	"""Enable the optional process rail without rebuilding operator-edited workflow rows."""
+	if not frappe.get_meta("Workflow").has_field("visible_on_doctype"):
+		return
+	if not frappe.db.get_value("Workflow", WORKFLOW_NAME, "visible_on_doctype"):
+		frappe.db.set_value("Workflow", WORKFLOW_NAME, "visible_on_doctype", 1, update_modified=False)
 
 
 # Programmatic stage advancement. The active Workflow blocks inserting a Major
