@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 import frappe
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.tests import IntegrationTestCase
 
 from non_profit import hooks as non_profit_hooks
@@ -60,7 +61,21 @@ class TestFundraisingSetup(IntegrationTestCase):
 
 	def test_visualizer_installed_after_non_profit_opts_in_major_gift_workflow(self) -> None:
 		if not frappe.get_meta("Workflow").has_field("visible_on_doctype"):
-			self.skipTest("workflow_visualizer is not installed")
+			create_custom_fields(
+				{
+					"Workflow": [
+						{
+							"fieldname": "visible_on_doctype",
+							"label": "Visible on Doctype",
+							"fieldtype": "Check",
+							"default": "0",
+							"insert_after": "enable_action_confirmation",
+						}
+					]
+				},
+				update=True,
+			)
+			frappe.clear_cache(doctype="Workflow")
 		self.assertEqual(non_profit_hooks.after_app_install, "non_profit.setup.after_app_install")
 
 		from non_profit.non_profit.major_gifts import (

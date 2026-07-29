@@ -82,25 +82,17 @@ jobs:
       - name: Install
         working-directory: /home/runner/frappe-bench
         run: |
-          if [ -z "$PRIVATE_APP_TOKEN" ]; then
-            echo "::error::Set CI_GITHUB_TOKEN or GH_PAT with read access to SpendeDirekt/workflow_visualizer."
-            exit 1
-          fi
-          git config --global url."https://x-access-token:${PRIVATE_APP_TOKEN}@github.com/".insteadOf "https://github.com/"
           bench get-app erpnext --branch version-16
           bench get-app payments --branch version-16
           bench get-app non_profit $GITHUB_WORKSPACE
-          bench get-app workflow_visualizer --branch version-16 https://github.com/SpendeDirekt/workflow_visualizer
           bench setup requirements --dev
           bench new-site --db-root-password root --admin-password admin test_site
           bench --site test_site install-app erpnext
           bench --site test_site install-app payments
           bench --site test_site install-app non_profit
-          bench --site test_site install-app workflow_visualizer
           bench build
         env:
           CI: "Yes"
-          PRIVATE_APP_TOKEN: ${{ secrets.CI_GITHUB_TOKEN || secrets.GH_PAT }}
 
       - name: Run Tests
         working-directory: /home/runner/frappe-bench
