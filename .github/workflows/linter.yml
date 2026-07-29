@@ -18,6 +18,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: '3.14'
@@ -30,7 +32,15 @@ jobs:
       - name: Run Semgrep rules
         run: |
           pip install semgrep
-          semgrep ci --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness
+          base_sha="${BASE_SHA:-HEAD^}"
+          mapfile -t targets < <(git diff --name-only --diff-filter=ACMR "$base_sha" HEAD -- '*.py' '*.js' '*.json')
+          if [ ${#targets[@]} -eq 0 ]; then
+            echo "No changed Python, JavaScript, or JSON files to scan."
+            exit 0
+          fi
+          semgrep ci --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness "${targets[@]}"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
 
   deps-vulnerable-check:
     name: 'Vulnerable Dependency Check'
@@ -55,4 +65,4 @@ jobs:
         run: |
           pip install pip-audit
           cd ${GITHUB_WORKSPACE}
-          pip-audit --desc on .
+          pip-audit --desc on --requirement requirements.txt

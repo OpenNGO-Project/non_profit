@@ -560,6 +560,8 @@ class TestMember(unittest.TestCase):
 		)
 
 	def test_guided_organization_allows_omitting_contact_and_address(self):
+		if "good_connector" not in frappe.get_installed_apps():
+			self.skipTest("good_connector identity matching is not installed")
 		unique = frappe.generate_hash(length=8)
 		values = {
 			"member_kind": "Organization",
@@ -579,6 +581,8 @@ class TestMember(unittest.TestCase):
 		self.assertFalse(first["address"])
 
 	def test_guided_organization_preserves_uncollected_address_values_on_reuse(self):
+		if "good_connector" not in frappe.get_installed_apps():
+			self.skipTest("good_connector identity matching is not installed")
 		unique = frappe.generate_hash(length=8)
 		values = {
 			"member_kind": "Organization",
@@ -611,6 +615,8 @@ class TestMember(unittest.TestCase):
 		self.assertEqual(address.phone, "+41 31 555 10 10")
 
 	def test_guided_organization_rejects_same_name_individual_customer(self):
+		if "good_connector" not in frappe.get_installed_apps():
+			self.skipTest("good_connector identity matching is not installed")
 		unique = frappe.generate_hash(length=8)
 		organization_name = f"Contradictory Organization {unique}"
 		frappe.get_doc(
@@ -632,6 +638,8 @@ class TestMember(unittest.TestCase):
 			)
 
 	def test_guided_organization_normalizes_name_whitespace_for_reuse(self):
+		if "good_connector" not in frappe.get_installed_apps():
+			self.skipTest("good_connector identity matching is not installed")
 		unique = frappe.generate_hash(length=8)
 		values = {
 			"member_kind": "Organization",
