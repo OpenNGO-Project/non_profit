@@ -38,7 +38,7 @@ jobs:
             echo "No changed Python, JavaScript, or JSON files to scan."
             exit 0
           fi
-          semgrep ci --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness "${targets[@]}"
+          semgrep scan --error --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness "${targets[@]}"
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
 
