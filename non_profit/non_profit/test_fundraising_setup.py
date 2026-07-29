@@ -1,12 +1,11 @@
 from unittest.mock import patch
 
 import frappe
-from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.tests import IntegrationTestCase
 
 from non_profit import hooks as non_profit_hooks
 from non_profit import setup as non_profit_setup
-from non_profit.non_profit import fundraising_setup
+from non_profit.non_profit import fundraising_setup, major_gifts
 
 
 class TestFundraisingSetup(IntegrationTestCase):
@@ -59,45 +58,42 @@ class TestFundraisingSetup(IntegrationTestCase):
 			frappe.db.get_value("Email Template", "Donation Thank You DE", "response"), operator_html
 		)
 
-	def test_visualizer_installed_after_non_profit_opts_in_major_gift_workflow(self) -> None:
-		if not frappe.get_meta("Workflow").has_field("visible_on_doctype"):
-			create_custom_fields(
-				{
-					"Workflow": [
-						{
-							"fieldname": "visible_on_doctype",
-							"label": "Visible on Doctype",
-							"fieldtype": "Check",
-							"default": "0",
-							"insert_after": "enable_action_confirmation",
-						}
-					]
-				},
-				update=True,
-			)
-			frappe.clear_cache(doctype="Workflow")
+	def test_after_app_install_dispatches_only_for_workflow_visualizer(self) -> None:
 		self.assertEqual(non_profit_hooks.after_app_install, "non_profit.setup.after_app_install")
 
-		from non_profit.non_profit.major_gifts import (
-			WORKFLOW_NAME,
-			WORKFLOW_ROLES,
-			WORKFLOW_VERSION_KEY,
-			_workflow_definition_hash,
-		)
+		with patch.object(major_gifts, "ensure_major_gift_workflow") as ensure_workflow:
+			non_profit_setup.after_app_install("good_connector")
+			ensure_workflow.assert_not_called()
 
-		edit_role = next(role for role in WORKFLOW_ROLES if frappe.db.exists("Role", role))
-		frappe.db.set_default(WORKFLOW_VERSION_KEY, _workflow_definition_hash(edit_role))
-		frappe.db.set_value(
+			non_profit_setup.after_app_install("workflow_visualizer")
+			ensure_workflow.assert_called_once_with()
+
+	def test_workflow_visualizer_opt_in_is_idempotent(self) -> None:
+		workflow_meta = frappe._dict(has_field=lambda fieldname: fieldname == "visible_on_doctype")
+		with (
+			patch.object(frappe, "get_meta", return_value=workflow_meta),
+			patch.object(frappe.db, "get_value", side_effect=[0, 1]),
+			patch.object(frappe.db, "set_value") as set_value,
+		):
+			major_gifts._ensure_workflow_visualizer_opt_in()
+			major_gifts._ensure_workflow_visualizer_opt_in()
+
+		set_value.assert_called_once_with(
 			"Workflow",
-			WORKFLOW_NAME,
-			{"visible_on_doctype": 0, "send_email_alert": 1},
+			major_gifts.WORKFLOW_NAME,
+			"visible_on_doctype",
+			1,
 			update_modified=False,
 		)
 
-		non_profit_setup.after_app_install("workflow_visualizer")
+	def test_workflow_visualizer_opt_in_skips_missing_field(self) -> None:
+		workflow_meta = frappe._dict(has_field=lambda _fieldname: False)
+		with (
+			patch.object(frappe, "get_meta", return_value=workflow_meta),
+			patch.object(frappe.db, "get_value") as get_value,
+			patch.object(frappe.db, "set_value") as set_value,
+		):
+			major_gifts._ensure_workflow_visualizer_opt_in()
 
-		workflow_values = frappe.db.get_value(
-			"Workflow", WORKFLOW_NAME, ["visible_on_doctype", "send_email_alert"], as_dict=True
-		)
-		self.assertTrue(workflow_values.visible_on_doctype)
-		self.assertTrue(workflow_values.send_email_alert)
+		get_value.assert_not_called()
+		set_value.assert_not_called()

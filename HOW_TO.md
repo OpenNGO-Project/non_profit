@@ -427,8 +427,10 @@ the action sends the invitation and moves it to **In Progress**.
 A **Major Gift** is one cultivation "ask"; a **Donor Interaction** logs a
 touchpoint. When Workflow Visualizer is installed, saved Major Gift forms show
 the pipeline stages and permitted Back/Proceed actions above the form. New,
-unsaved records show the pipeline after their first save. The "next action" on
-either record is tracked as a real **Task**, not a text note:
+unsaved records show the pipeline after their first save. Non Profit owns this
+opt-in and re-enables **Visible on Doctype** during setup/migrate if it is
+cleared. The "next action" on either record is tracked as a real **Task**, not a
+text note:
 
 1. Open a Major Gift (or Donor Interaction) and choose **Actions → Set Next
    Action**.
