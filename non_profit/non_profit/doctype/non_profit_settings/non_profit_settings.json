@@ -28,6 +28,7 @@
   "donation_payment_account",
   "default_thank_you_template",
   "default_receipt_country",
+  "swiss_donation_receipt_print_format",
   "section_break_27",
   "creation_user",
   "major_gifts_section",
@@ -195,11 +196,18 @@
    "options": "Email Template"
   },
   {
-   "default": "Germany",
+   "default": "Switzerland",
    "fieldname": "default_receipt_country",
    "fieldtype": "Link",
    "label": "Default Receipt Country",
    "options": "Country"
+  },
+  {
+   "description": "Select only a Swiss Donation Receipt format approved by the responsible organisation. The shipped Donation Receipt DE format is not valid here.",
+   "fieldname": "swiss_donation_receipt_print_format",
+   "fieldtype": "Link",
+   "label": "Approved Swiss Donation Receipt Print Format",
+   "options": "Print Format"
   },
   {
    "fieldname": "section_break_27",

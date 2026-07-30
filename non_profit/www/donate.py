@@ -9,6 +9,7 @@ from non_profit.non_profit.doctype.donor.donor import (
 	find_donor_by_email,
 	get_or_create_customer_for_donor,
 )
+from non_profit.non_profit.identity_lock import acquire_public_email_identity_lock
 
 try:
 	from good_connector.captcha import (
@@ -58,11 +59,23 @@ def donation_confirm_query(donation_name: str) -> str:
 
 
 def _get_active_campaigns():
+	company = _resolve_donation_company()
+	if not company:
+		return []
+	cost_centers = frappe.get_all(
+		"Cost Center",
+		filters={"company": company, "is_group": 0, "disabled": 0},
+		pluck="name",
+		limit_page_length=0,
+	)
+	if not cost_centers:
+		return []
 	return frappe.get_all(
 		"Donation Campaign",
-		filters={"status": "Active"},
+		filters={"status": "Active", "cost_center": ["in", cost_centers]},
 		fields=["name", "campaign_name"],
 		order_by="campaign_name",
+		limit_page_length=0,
 	)
 
 
@@ -79,6 +92,7 @@ def _handle_submission(form):
 	if not donor_name or not email or not amount_raw:
 		frappe.throw(_("Please fill in name, email and amount"))
 	validate_email_address(email, throw=True)
+	acquire_public_email_identity_lock(email)
 	if str(consent or "").lower() not in {"1", "true", "yes", "on"}:
 		frappe.throw(_("Please agree to the storage of your data."))
 
@@ -95,10 +109,12 @@ def _handle_submission(form):
 		frappe.throw(_("Amount must be positive"))
 	if frequency not in {"one_off", "Monthly", "Quarterly", "Yearly"}:
 		frappe.throw(_("Invalid donation frequency"))
-	if campaign and not frappe.db.exists("Donation Campaign", {"name": campaign, "status": "Active"}):
-		frappe.throw(_("Selected campaign is not available."))
-
 	settings = frappe.get_single("Non Profit Settings")
+	company = _resolve_donation_company(settings)
+	if not company:
+		frappe.throw(_("No Company configured on Non Profit Settings"))
+	if campaign and not _public_campaign_matches_company(campaign, company):
+		frappe.throw(_("Selected campaign is not available for the Donation company."))
 
 	donor_type = settings.default_donor_type or "Individual"
 	if not frappe.db.exists("Donor Type", donor_type):
@@ -129,12 +145,6 @@ def _handle_submission(form):
 				_("Public donation form submitted a different donor name: {0}").format(donor_name),
 			)
 	get_or_create_customer_for_donor(donor, email=email)
-
-	company = settings.donation_company or frappe.db.get_default("company")
-	if not company:
-		company = frappe.db.get_value("Company", {}, "name")
-	if not company:
-		frappe.throw(_("No Company configured on Non Profit Settings"))
 
 	if frequency == "one_off":
 		donation = frappe.get_doc(
@@ -173,6 +183,42 @@ def _handle_submission(form):
 	rec.advance_next_date()
 	rec.save(ignore_permissions=True)
 	return donation.name
+
+
+def _resolve_donation_company(settings=None) -> str | None:
+	settings_company = (
+		settings.donation_company
+		if settings
+		else frappe.db.get_single_value("Non Profit Settings", "donation_company")
+	)
+	return (
+		settings_company
+		or frappe.db.get_default("company")
+		or frappe.db.get_value("Company", {}, "name", order_by="name asc")
+	)
+
+
+def _public_campaign_matches_company(campaign: str, company: str) -> bool:
+	campaign_row = frappe.db.get_value(
+		"Donation Campaign",
+		campaign,
+		["status", "cost_center"],
+		as_dict=True,
+	)
+	if not campaign_row or campaign_row.status != "Active" or not campaign_row.cost_center:
+		return False
+	cost_center = frappe.db.get_value(
+		"Cost Center",
+		campaign_row.cost_center,
+		["company", "is_group", "disabled"],
+		as_dict=True,
+	)
+	return bool(
+		cost_center
+		and cost_center.company == company
+		and not cost_center.is_group
+		and not cost_center.disabled
+	)
 
 
 def _captcha_site_key() -> str:

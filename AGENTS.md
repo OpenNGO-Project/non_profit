@@ -48,6 +48,23 @@
   on the Company and rejects active same-company Donation/Sales Invoice collisions.
 - Preserve valid stored QRRs as immutable compatibility data. Generate only a
   missing Donation reference through Good Connector's Donation namespace.
+- Public Donor, Customer, Contact, Member, and Membership creation shares the
+  hashed `non-profit-identity` Redis lock namespace. Normalized individual
+  emails use identity type `Individual`; leases renew while the transaction is
+  open, are revalidated before commit, and release on commit or rollback. Keep
+  renewal bounded and fail the transaction if ownership is lost.
+- Donation Receipt submission and yearly generation lock complete current
+  Donation/receipt ownership state. Yearly generation is permission-aware and
+  chained in bounded batches grouped by Company, Company currency, Donor,
+  country, and period. Later cursor pages must extend the locked exact-match
+  draft instead of splitting one logical group; never restore the former
+  synchronous unbounded flow.
+- Swiss receipt email delivery requires a submitted issued receipt, deterministic
+  issuer/recipient Addresses, and the operator-selected approved Swiss Print
+  Format. `Donation Receipt DE` is never valid for that send path.
+- `before_tests` may bootstrap an entirely empty test site and refresh app-owned
+  fixtures, but must never delete shared rows, rename ERPNext records, or mutate
+  global Customer, Fiscal Year, Address, Item Price, or Email Account state.
 - Fundraising setup owns `Donation Receipt DE` and `Donation Slip CH` only while
   their HTML matches a known shipped hash. Keep the managed-hash allowlists
   append-only when changing shipped HTML so untouched rows upgrade; never add an

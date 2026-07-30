@@ -10,6 +10,7 @@ from non_profit.non_profit.doctype.donor.donor import (
 	find_donor_customer_candidates,
 	get_or_create_customer_for_donor,
 )
+from non_profit.non_profit.identity_lock import acquire_public_email_identity_lock
 
 ValuesProvider = Callable[[dict], dict | None]
 ExistingDonorHandler = Callable[[object], None]
@@ -30,6 +31,7 @@ def resolve_donor_customer_identity(
 	"""Resolve one Donor/Customer identity with caller-owned presentation policy."""
 	email = cstr(email).strip().lower()
 	validate_email_address(email, throw=True)
+	acquire_public_email_identity_lock(email)
 	if ambiguous_email_policy not in ("latest", "reject"):
 		raise ValueError(f"Unsupported ambiguous email policy: {ambiguous_email_policy}")
 	donor_names, customer_names = find_donor_customer_candidates(email)

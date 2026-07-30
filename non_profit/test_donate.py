@@ -121,6 +121,27 @@ class TestDonatePage(FrappeTestCase):
 			with self.assertRaisesRegex(frappe.ValidationError, "invalid CAPTCHA configuration"):
 				donate._captcha_site_key()
 
+	def test_public_campaign_requires_active_cost_center_in_donation_company(self) -> None:
+		def get_value(doctype, name, fields, **kwargs):
+			if doctype == "Donation Campaign":
+				return frappe._dict(status="Active", cost_center="CROSS-COMPANY")
+			if doctype == "Cost Center":
+				return frappe._dict(company="Other Company", is_group=0, disabled=0)
+			raise AssertionError((doctype, name, fields, kwargs))
+
+		with patch.object(frappe.db, "get_value", side_effect=get_value):
+			self.assertFalse(donate._public_campaign_matches_company("CAMPAIGN", "Donation Company"))
+
+	def test_public_campaign_options_are_scoped_to_company_cost_centers(self) -> None:
+		with (
+			patch("non_profit.www.donate._resolve_donation_company", return_value="Donation Company"),
+			patch.object(frappe, "get_all", side_effect=[["CC-DONATION"], []]) as get_all,
+		):
+			self.assertEqual(donate._get_active_campaigns(), [])
+
+		campaign_filters = get_all.call_args_list[1].kwargs["filters"]
+		self.assertEqual(campaign_filters["cost_center"], ["in", ["CC-DONATION"]])
+
 
 class TestHardenedWhitelistedMethods(FrappeTestCase):
 	"""run_doc_method only enforces read permission; the four write-action doc

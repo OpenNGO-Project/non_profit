@@ -13,12 +13,16 @@ frappe.ui.form.on("Donation Receipt", {
 						args: {
 							fiscal_year: frm.doc.fiscal_year,
 							donor: frm.doc.donor,
+							company: frm.doc.company,
 						},
 						freeze: true,
 						freeze_message: __("Spenden werden geladen..."),
 					})
 					.then((r) => {
 						const rows = (r.message && r.message.donations) || [];
+						if (r.message && r.message.currency) {
+							frm.set_value("currency", r.message.currency);
+						}
 						frm.clear_table("donations");
 						rows.forEach((donation) => {
 							const row = frm.add_child("donations");

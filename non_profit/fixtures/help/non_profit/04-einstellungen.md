@@ -25,6 +25,9 @@ Prüfen Sie die Einstellungen nach der Installation, nach einem Firmenwechsel od
   Payment Entries, Debit-/Zahlungskonto und Standard-Dankesmail.
 - **Default Receipt Country**: Datenstandard; ändert nicht den Rechtstext eines
   Print Formats.
+- **Approved Swiss Donation Receipt Print Format**: rechtlich freigegebene
+  Schweizer Vorlage für den automatischen Versand. **Donation Receipt DE** ist
+  hier unzulässig.
 - **Creation User**: technischer Benutzer für automatisierte Dokumente.
 - **Major Donor Threshold**: Schwelle für automatische Grossspender-Markierung.
 
@@ -44,5 +47,7 @@ Prüfen Sie zuerst die Non Profit Settings und danach die Einstellungen der kund
 Nein. Branding, Briefpapier und Demo-Oberflächen gehören in die jeweilige Kunden- oder Präsentations-App.
 
 **Kann ich Donation Receipt DE in der Schweiz verwenden?**
-Nicht ohne fachliche Freigabe. Die Vorlage enthält deutsches Steuerrecht. Das
-Feld **Default Receipt Country** lokalisiert die Vorlage nicht.
+Nein, nicht über den automatischen Schweizer Versand. Die Vorlage enthält
+deutsches Steuerrecht und wird dort ausdrücklich abgelehnt. Das Feld **Default
+Receipt Country** lokalisiert die Vorlage nicht; installieren und wählen Sie eine
+von der Organisation freigegebene Schweizer Vorlage.

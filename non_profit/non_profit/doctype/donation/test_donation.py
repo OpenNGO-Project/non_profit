@@ -1,6 +1,8 @@
 # Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from unittest.mock import patch
 
 import erpnext
@@ -153,9 +155,22 @@ class TestDonation(unittest.TestCase):
 		log_error.assert_called()
 
 	def test_payment_authorization_keeps_base_accounting_and_dispatch_order(self):
+		from good_npo.constants import GOOD_NPO_COMPANY
+
 		donation = frappe.new_doc("Donation")
+		donation.name = "NPO-DONATION-AUTHORIZATION-ORDER"
+		donation.company = GOOD_NPO_COMPANY
+		locked_state = frappe._dict(
+			name=donation.name,
+			docstatus=1,
+			paid=0,
+			advance_paid=0,
+			amount=25,
+			company=GOOD_NPO_COMPANY,
+		)
 		calls = []
 		with (
+			patch("good_npo.checkout._payrexx_donation_values", return_value=locked_state) as current_state,
 			patch.object(donation, "db_set") as db_set,
 			patch.object(donation, "load_from_db"),
 			patch.object(donation, "create_payment_entry", side_effect=lambda: calls.append("accounting")),
@@ -173,6 +188,7 @@ class TestDonation(unittest.TestCase):
 
 		self.assertEqual(calls, ["accounting", "thank_you", "rollup"])
 		db_set.assert_called_once_with("paid", 1)
+		current_state.assert_called_once_with(donation.name, for_update=True)
 
 	def test_unsuccessful_payment_status_does_not_change_donation(self):
 		donation = frappe.new_doc("Donation")
@@ -298,7 +314,8 @@ class TestDonation(unittest.TestCase):
 
 	def test_yearly_receipts_include_thanked_donations_without_receipt(self):
 		from non_profit.non_profit.doctype.donation_receipt.donation_receipt import (
-			generate_yearly_receipts,
+			DONATION_RECEIPT_NAMING_SERIES,
+			_create_yearly_receipt_batch,
 		)
 
 		donation_date = get_active_fiscal_year_date()
@@ -329,10 +346,25 @@ class TestDonation(unittest.TestCase):
 		).insert(ignore_permissions=True)
 		donation.submit()
 
-		result = generate_yearly_receipts(fiscal_year)
+		fiscal_year_doc = frappe.get_doc("Fiscal Year", fiscal_year)
+		with patch(
+			"non_profit.non_profit.doctype.donation_receipt.donation_receipt._yearly_receipt_candidates",
+			return_value=[frappe._dict(name=donation.name)],
+		):
+			result = _create_yearly_receipt_batch(
+				fiscal_year=fiscal_year,
+				period_from=str(fiscal_year_doc.year_start_date),
+				period_to=str(fiscal_year_doc.year_end_date),
+				country="Switzerland",
+				language="de",
+			)
 
 		receipt_names = result.get("receipts", [])
 		self.assertTrue(receipt_names)
+		self.assertEqual(
+			frappe.db.get_value("Donation Receipt", receipt_names[0], "naming_series"),
+			DONATION_RECEIPT_NAMING_SERIES,
+		)
 		self.assertEqual(
 			frappe.db.get_value("Donation Receipt", receipt_names[0], "country"),
 			"Switzerland",
@@ -349,24 +381,8 @@ class TestDonation(unittest.TestCase):
 
 class TestDonationPaymentEntryInvariants(IntegrationTestCase):
 	def setUp(self):
-		company, receivable_account, cash_account = get_company_and_accounts()
-		create_donor_type()
-		create_mode_of_payment(company)
-
-		settings = frappe.get_doc("Non Profit Settings")
-		values = {
-			"company": company,
-			"donation_company": company,
-			"default_donor_type": "_Test Donor",
-			"automate_donation_payment_entries": 1,
-			"donation_debit_account": receivable_account,
-			"donation_payment_account": cash_account,
-			"creation_user": "Administrator",
-		}
-		if any(settings.get(field) != value for field, value in values.items()):
-			settings.update(values)
-			settings.flags.ignore_permissions = True
-			settings.save()
+		self._concurrency_global_state = _capture_concurrency_global_state()
+		_configure_donation_payment_entry_test_settings()
 
 	def test_second_allocation_uses_remaining_outstanding(self):
 		donation = create_submitted_donation(100)
@@ -404,6 +420,85 @@ class TestDonationPaymentEntryInvariants(IntegrationTestCase):
 
 		with self.assertRaises(frappe.ValidationError):
 			stale_payment.submit()
+
+	def test_submit_allocation_validation_uses_current_read_and_excludes_current_document(self):
+		from non_profit.non_profit.custom_doctype.payment_entry import (
+			_validate_donation_allocation_totals,
+		)
+
+		payment_entry = frappe._dict(
+			name="NP-CURRENT-PE",
+			references=[
+				frappe._dict(
+					reference_doctype="Donation",
+					reference_name="NP-CURRENT-DONATION",
+					allocated_amount=30,
+				)
+			],
+		)
+		states = {"NP-CURRENT-DONATION": frappe._dict(amount=100)}
+		with patch(
+			"non_profit.non_profit.custom_doctype.payment_entry._submitted_donation_payment_total",
+			return_value=80,
+		) as submitted_total:
+			with self.assertRaisesRegex(frappe.ValidationError, "only 20"):
+				_validate_donation_allocation_totals(payment_entry, states)
+
+		submitted_total.assert_called_once_with(
+			"NP-CURRENT-DONATION",
+			"NP-CURRENT-PE",
+			for_update=True,
+		)
+
+	def test_two_connections_allow_exactly_one_normal_full_allocation_submit(self):
+		if frappe.db.db_type != "mariadb":
+			self.skipTest("The REPEATABLE READ regression targets MariaDB/InnoDB")
+
+		# This test must commit its fixture for the worker connections. Discard
+		# uncommitted rows from earlier methods in this class before doing so.
+		frappe.db.rollback()
+		self._concurrency_global_state = _capture_concurrency_global_state()
+		_configure_donation_payment_entry_test_settings()
+		donation = create_submitted_donation(100)
+		donor = donation.donor
+		payment_entries = [insert_donation_payment_entry(donation).name for _index in range(2)]
+		frappe.db.commit()
+		try:
+			barrier = Barrier(2)
+			with ThreadPoolExecutor(max_workers=2) as executor:
+				results = list(
+					executor.map(
+						_run_concurrent_allocation,
+						[frappe.local.site, frappe.local.site],
+						payment_entries,
+						[donation.name, donation.name],
+						[barrier, barrier],
+					)
+				)
+
+			submitted_results = [result for result in results if result.endswith("submitted")]
+			rejected_results = [result for result in results if result.endswith("rejected")]
+			self.assertEqual(len(submitted_results), 1)
+			self.assertEqual(len(rejected_results), 1)
+			self.assertEqual(
+				frappe.db.count("Payment Entry", {"name": ["in", payment_entries], "docstatus": 1}),
+				1,
+			)
+			self.assertEqual(
+				frappe.utils.flt(
+					frappe.db.get_value(
+						"Donation",
+						donation.name,
+						"advance_paid",
+					)
+				),
+				100,
+			)
+		finally:
+			frappe.db.rollback()
+			_cleanup_concurrent_allocation_fixture(payment_entries, donation.name, donor)
+			_restore_concurrency_global_state(self._concurrency_global_state)
+			frappe.db.commit()
 
 	def test_fully_allocated_donation_payment_helper_is_rejected(self):
 		donation = create_submitted_donation(100)
@@ -478,24 +573,7 @@ class TestDonationPaymentEntryHooks(IntegrationTestCase):
 	"""
 
 	def setUp(self):
-		company, receivable_account, cash_account = get_company_and_accounts()
-		create_donor_type()
-		create_mode_of_payment(company)
-
-		settings = frappe.get_doc("Non Profit Settings")
-		values = {
-			"company": company,
-			"donation_company": company,
-			"default_donor_type": "_Test Donor",
-			"automate_donation_payment_entries": 1,
-			"donation_debit_account": receivable_account,
-			"donation_payment_account": cash_account,
-			"creation_user": "Administrator",
-		}
-		if any(settings.get(field) != value for field, value in values.items()):
-			settings.update(values)
-			settings.flags.ignore_permissions = True
-			settings.save()
+		_configure_donation_payment_entry_test_settings()
 
 	def test_payment_entry_for_unpaid_donation_marks_paid(self):
 		# The exact path that fails when ERPNext's generic reference-details
@@ -622,6 +700,163 @@ class TestDonationPaymentEntryHooks(IntegrationTestCase):
 		)
 		self.assertEqual(frappe.utils.flt(grand_total), 100)
 		self.assertEqual(frappe.utils.flt(advance_paid), 40)
+
+
+def _capture_concurrency_global_state() -> dict:
+	settings_fields = (
+		"company",
+		"donation_company",
+		"default_donor_type",
+		"automate_donation_payment_entries",
+		"donation_debit_account",
+		"donation_payment_account",
+		"creation_user",
+	)
+	mode_of_payment = None
+	if frappe.db.exists("Mode of Payment", "Debit Card"):
+		mode_of_payment = frappe.get_doc("Mode of Payment", "Debit Card").as_dict()
+	return {
+		"settings": {
+			fieldname: frappe.db.get_single_value("Non Profit Settings", fieldname)
+			for fieldname in settings_fields
+		},
+		"donor_type_exists": bool(frappe.db.exists("Donor Type", "_Test Donor")),
+		"mode_of_payment": mode_of_payment,
+	}
+
+
+def _configure_donation_payment_entry_test_settings() -> None:
+	company, receivable_account, cash_account = get_company_and_accounts()
+	create_donor_type()
+	create_mode_of_payment(company)
+
+	settings = frappe.get_doc("Non Profit Settings")
+	values = {
+		"company": company,
+		"donation_company": company,
+		"default_donor_type": "_Test Donor",
+		"automate_donation_payment_entries": 1,
+		"donation_debit_account": receivable_account,
+		"donation_payment_account": cash_account,
+		"creation_user": "Administrator",
+	}
+	if any(settings.get(field) != value for field, value in values.items()):
+		settings.update(values)
+		settings.flags.ignore_permissions = True
+		settings.save()
+
+
+def _restore_concurrency_global_state(state: dict) -> None:
+	for fieldname, value in state["settings"].items():
+		filters = {"doctype": "Non Profit Settings", "field": fieldname}
+		if value is None:
+			frappe.db.delete("Singles", filters)
+		elif frappe.db.exists("Singles", filters):
+			frappe.db.set_value("Singles", filters, "value", value, update_modified=False)
+		else:
+			single_value = frappe.qb.DocType("Singles")
+			(
+				frappe.qb.into(single_value)
+				.columns(single_value.doctype, single_value.field, single_value.value)
+				.insert("Non Profit Settings", fieldname, value)
+			).run()
+
+	if not state["donor_type_exists"] and frappe.db.exists("Donor Type", "_Test Donor"):
+		frappe.delete_doc("Donor Type", "_Test Donor")
+
+	frappe.clear_cache(doctype="Non Profit Settings")
+	stored_mode = state["mode_of_payment"]
+	if not stored_mode:
+		if frappe.db.exists("Mode of Payment", "Debit Card"):
+			frappe.delete_doc("Mode of Payment", "Debit Card")
+		return
+	mode_of_payment = frappe.get_doc("Mode of Payment", "Debit Card")
+	mode_of_payment.set("accounts", stored_mode.get("accounts") or [])
+	mode_of_payment.save(ignore_permissions=True)
+
+
+def _run_concurrent_allocation(
+	site: str,
+	payment_entry_name: str,
+	donation_name: str,
+	barrier: Barrier,
+) -> str:
+	from non_profit.non_profit.custom_doctype.payment_entry import (
+		_submitted_donation_payment_total,
+	)
+
+	frappe.init(site=site)
+	frappe.connect()
+	frappe.set_user("Administrator")
+	frappe.flags.in_test = True
+	try:
+		deadlocked = False
+		last_deadlock = None
+		for attempt in range(3):
+			try:
+				payment_entry = frappe.get_doc("Payment Entry", payment_entry_name)
+				payment_entry.flags.ignore_mandatory = True
+				# Establish the stale REPEATABLE READ snapshot that caused the original race.
+				_submitted_donation_payment_total(donation_name)
+				if attempt == 0:
+					barrier.wait(timeout=30)
+				payment_entry.submit()
+				frappe.db.commit()
+				return "retried_submitted" if deadlocked else "submitted"
+			except frappe.QueryDeadlockError as error:
+				# A request retry must restart the complete transaction, including
+				# reloading the Payment Entry and rebuilding its locking reads.
+				last_deadlock = error
+				deadlocked = True
+				frappe.db.rollback()
+			except frappe.ValidationError:
+				frappe.db.rollback()
+				return "retried_rejected" if deadlocked else "rejected"
+		if last_deadlock:
+			raise last_deadlock
+		raise AssertionError("Concurrent allocation retry ended without an outcome")
+	finally:
+		frappe.destroy()
+
+
+def _cleanup_concurrent_payment_entries(payment_entries: list[str]) -> None:
+	from erpnext.accounts.utils import _delete_accounting_ledger_entries, _delete_adv_pl_entries
+
+	for payment_entry_name in payment_entries:
+		if not frappe.db.exists("Payment Entry", payment_entry_name):
+			continue
+		payment_entry = frappe.get_doc("Payment Entry", payment_entry_name)
+		if payment_entry.docstatus == 1:
+			payment_entry.cancel()
+		_delete_accounting_ledger_entries("Payment Entry", payment_entry_name)
+		_delete_adv_pl_entries("Payment Entry", payment_entry_name)
+		frappe.delete_doc("Payment Entry", payment_entry_name, delete_permanently=True)
+
+	for ledger_doctype in ("GL Entry", "Payment Ledger Entry", "Advance Payment Ledger Entry"):
+		if frappe.db.count(
+			ledger_doctype,
+			{"voucher_type": "Payment Entry", "voucher_no": ["in", payment_entries]},
+		):
+			raise AssertionError(f"{ledger_doctype} rows leaked from concurrent Payment Entry fixtures")
+	if any(frappe.db.exists("Payment Entry", name) for name in payment_entries):
+		raise AssertionError("Concurrent Payment Entry fixtures were not deleted")
+
+
+def _cleanup_concurrent_allocation_fixture(
+	payment_entries: list[str],
+	donation_name: str,
+	donor_name: str,
+) -> None:
+	_cleanup_concurrent_payment_entries(payment_entries)
+	if frappe.db.exists("Donation", donation_name):
+		donation = frappe.get_doc("Donation", donation_name)
+		if donation.docstatus == 1:
+			donation.cancel()
+		frappe.delete_doc("Donation", donation_name, delete_permanently=True)
+	if frappe.db.exists("Donor", donor_name):
+		frappe.delete_doc("Donor", donor_name, delete_permanently=True)
+	if frappe.db.exists("Donation", donation_name) or frappe.db.exists("Donor", donor_name):
+		raise AssertionError("Concurrent Donation fixtures were not deleted")
 
 
 def get_company_and_accounts():

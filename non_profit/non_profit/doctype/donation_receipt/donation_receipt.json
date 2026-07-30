@@ -11,12 +11,15 @@
   "donor",
   "donor_name",
   "email",
+  "company",
   "column_break_main",
   "fiscal_year",
   "period_from",
   "period_to",
   "country",
   "language",
+  "company_address",
+  "recipient_address",
   "section_donations",
   "donations",
   "total_amount",
@@ -61,6 +64,15 @@
    "read_only": 1
   },
   {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
    "fieldname": "column_break_main",
    "fieldtype": "Column Break"
   },
@@ -102,6 +114,22 @@
    "reqd": 1
   },
   {
+   "fieldname": "company_address",
+   "fieldtype": "Link",
+   "label": "Company Issuer Address",
+   "no_copy": 1,
+   "options": "Address",
+   "read_only": 1
+  },
+  {
+   "fieldname": "recipient_address",
+   "fieldtype": "Link",
+   "label": "Recipient Address",
+   "no_copy": 1,
+   "options": "Address",
+   "read_only": 1
+  },
+  {
    "fieldname": "section_donations",
    "fieldtype": "Section Break",
    "label": "Donations"
@@ -125,7 +153,8 @@
    "fieldtype": "Link",
    "label": "Currency",
    "options": "Currency",
-   "read_only": 1
+   "read_only": 1,
+   "reqd": 1
   },
   {
    "fieldname": "section_status",

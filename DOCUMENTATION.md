@@ -183,7 +183,11 @@ identity DocType.
 - `before_uninstall = non_profit.setup.before_uninstall` clears this app's
   Workspace Sidebar ownership so developer-mode uninstall does not delete the
   shipped sidebar JSON.
-- `before_tests = non_profit.non_profit.utils.before_tests` refreshes the same fundraising fixtures after the CI/test setup wizard creates a Company.
+- `before_tests = non_profit.non_profit.utils.before_tests` shortens the local
+  in-process test URL, runs the setup wizard only on a site with no Company, and
+  refreshes app-owned fundraising fixtures. It does not rename ERPNext records,
+  delete Item Prices, or alter global Customer, Address, Fiscal Year, or Email
+  Account data on an existing shared site.
 - `doc_events["Membership"]["validate"] = non_profit.non_profit.membership_sync.validate_no_overlap`
   blocks overlapping active Memberships by default. Callers can set
   `doc.flags.warn_on_membership_overlap = True` before validation when an
@@ -200,11 +204,14 @@ identity DocType.
   new data loads and restores the mobile scroll position after replacement.
 - Daily scheduler jobs expire memberships and process recurring donations.
 - Recurring Donation processing creates submitted, unpaid Donation rows for due
-  active schedules, locks and rechecks each schedule against the `next_date`
-  observed by that invocation, reuses any existing non-cancelled installment for
-  the same schedule/date, advances `next_date` at most once per invocation,
-  cancels schedules that pass `end_date`, and commits or rolls back each schedule
-  independently.
+  active schedules. It obtains the complete current schedule document in one
+  locking read, checks that current state is still active and due, and performs
+  a locking lookup before reusing or creating the installment for that
+  schedule/date. It advances `next_date` at most once, cancels schedules that
+  pass `end_date`, and commits or rolls back each schedule independently. A
+  two-connection regression runs the real worker helper and proves that two due
+  workers create one installment. The POST-only manual action also discards its
+  caller's stale state and acts on the complete locking read.
 - `Payment Entry` is extended through `doc_events` hooks, not
   `override_doctype_class`: the override resolves to the last installed app
   (hrms wins on this bench), while doc_events fire for every Payment Entry
@@ -223,30 +230,48 @@ found" messages. Real Loyalty Program records are left untouched.
 ## Whitelisted API Contracts
 
 Mutation endpoints must check permissions and let Frappe manage the request
-transaction. `DonationReceipt.generate_yearly_receipts` is restricted to
-`Non Profit Manager` or `System Manager` and creates draft receipts for
-submitted, paid Donations without an existing receipt link or active draft
-receipt row. Validation, submit, selected-year lookup, and yearly generation
-share one bulk context loader for Donation fields and active Donation Receipt
-Item ownership. Active ownership is resolved by joining receipt items to
-non-cancelled receipts, so draft/submitted exclusion semantics remain intact
-without per-row reads. Yearly generation groups the loaded rows in Python rather
-than using database-specific `GroupConcat`; submit/cancel receipt-link writes are
-set-based and cancellation clears only Donations still owned by that receipt.
+transaction. The POST-only `DonationReceipt.generate_yearly_receipts` is restricted to
+`Non Profit Manager` or `System Manager`, verifies normal Donation read and
+Donation Receipt create/write permission, and queues a deduplicated background chain
+under the requesting user. Each transaction considers at most 200
+permission-visible candidate Donations, locks and reloads complete current
+Donation/active-receipt/Company-currency state, and groups draft receipts by
+Company, Company currency, Donor, country, and period. The current Company row
+serializes exact-group draft creation; later cursor pages lock and extend the
+earliest draft matching Company, currency, Donor, fiscal year, period, country,
+and language. After selecting that draft under lock, Frappe's
+`get_doc(..., for_update=True)` loader hydrates both its parent and child rows as
+locking current reads, so a waiter cannot save an older child snapshot and
+remove a row added by another cursor page. MariaDB error 1020 and ordinary
+deadlocks surface as `QueryDeadlockError`; the worker rolls back the failed
+transaction before retrying the complete same cursor page, with at most three
+attempts. One 201-Donation group therefore remains one draft instead of
+splitting at the page boundary. A draft receipt item reserves its Donation from
+later batches. The worker never uses `ignore_permissions` and does not commit
+inside the request or document hook.
+Validation, submit, selected-year lookup, and yearly generation use bounded bulk
+context loaders rather than per-row reads or database-specific `GroupConcat`;
+submit/cancel receipt-link writes are set-based and cancellation clears only
+Donations still owned by that receipt.
 `get_donations_for_selected_year` is an authenticated, permission-aware helper
 used by the Donation Receipt form action to populate a draft receipt with all
-submitted paid Donations for the selected Donor and Fiscal Year. Donation
-Receipts can be saved before donation rows are added, but submit requires at
-least one Donation and validates that every row is submitted, paid, in the
-receipt period, belongs to the receipt Donor, and is not already linked to
-another active receipt. The period comparison normalizes Frappe Date values and
-Desk JSON string dates before validation. Donation Receipt country defaults to
+submitted paid Donations for the selected Donor, Fiscal Year, and Company; it
+also returns the Company's currency for the draft. Donation Receipt now stores
+required Company and currency plus the issuer and recipient Address identities
+used for delivery. Receipts can be saved before donation rows are added when the
+Company/currency identity is available, but submit requires at least one
+Donation and validates that every row is submitted, paid, in the receipt period,
+belongs to the receipt Donor and Company/currency group, and is not already
+linked to another active receipt. Donation Receipt country defaults to
 `Switzerland` in DocType metadata, the yearly-generation dialog, and the backend
-fallback when no country argument is supplied.
+fallback when no country argument is supplied. The post-model patch
+`backfill_donation_receipt_company_currency` fills deterministic historical
+identity and logs cross-Company or conflicting receipts for manual review.
 
-Submit locks selected Donation rows in name order and reloads Donation and
-active-receipt ownership under those locks before validating. Concurrent drafts
-therefore cannot both claim the same Donation from stale validation snapshots.
+Submit locks selected Donation rows in name order and reloads Donation,
+active-receipt ownership, and Company currencies under those locks before
+validating. Concurrent drafts therefore cannot both claim the same Donation from
+stale validation snapshots.
 
 Published Grant Application pages never render applicant email and apply
 explicit HTML escaping to applicant-provided display values. Authenticated users
@@ -255,18 +280,21 @@ contract.
 
 ### Receipt jurisdiction contract
 
-`Donation Receipt DE` is the only seeded/send-time receipt print format. Its
-body contains German tax-law language (`§ 10b EStG`, `§ 5 KStG`, and related
-German provisions). `default_receipt_country = Switzerland` is only a data
-default; it does not translate, validate, or approve the print format for
-Switzerland. Deployments must install a legally approved jurisdiction-specific
-format before issuing tax certificates. The app does not provide invented Swiss
-legal wording.
+`Donation Receipt DE` remains a seeded Print Format whose body contains German
+tax-law language (`§ 10b EStG`, `§ 5 KStG`, and related German provisions).
+`default_receipt_country = Switzerland` is only a data default; it does not
+translate or approve that format. Deployments must install a legally approved
+Swiss format and select it in **Non Profit Settings → Approved Swiss Donation
+Receipt Print Format**. The app does not provide invented Swiss legal wording.
 
-`DonationReceipt.send_to_donor()` currently attaches `Donation Receipt DE`
-explicitly. Do not use that action for another jurisdiction until the send
-contract is deliberately extended; manually printing an approved replacement is
-the safe interim path.
+`DonationReceipt.send_to_donor()` is an explicit Swiss-only gate. It requires a
+submitted receipt in `Issued` state, rejects `Donation Receipt DE` by name,
+checks that the configured Print Format is enabled and targets Donation Receipt,
+resolves one Company-linked Swiss issuer Address and one unambiguous recipient
+Address, and requires street, postal code, city, and country on both. The chosen
+Address names are persisted on the receipt before the approved format is
+attached. Other jurisdictions require a separately implemented, approved send
+contract rather than silently reusing this path.
 
 Fundraising setup inserts `Donation Receipt DE` and `Donation Slip CH` when they
 are missing. Existing Print Format HTML is treated as app-managed only when its
@@ -298,16 +326,17 @@ confirmation path.
 Public donation pages that delegate to `non_profit.www.donate._handle_submission`
 must pass server-side validation for donor name, email syntax, positive amount,
 accepted consent, allowed frequency (`one_off`, `Monthly`, `Quarterly`,
-`Yearly`), and an active Donation Campaign when a campaign is selected. Browser
-`required` attributes are UX only. The handler is rate-limited. Every guest
-submission must include a valid GoodVantage CAPTCHA response. Missing Good
-Connector or missing/unreadable CAPTCHA configuration fails closed; the app can
-still be installed without Good Connector, but public donation submission is
-unavailable until CAPTCHA support is installed and configured. The submit
-control starts disabled and follows the shared loader's `data-load-state`: only
-`loaded` enables it, while loading, retrying, and error states keep it disabled.
-The loader's Retry action can recover the control after a successful reload;
-the server never trusts that browser state and verifies every guest token.
+`Yearly`). Company is resolved server-side; a selected or listed Donation
+Campaign must be active and backed by an enabled leaf Cost Center belonging to
+that Company. Before any Donor/Customer lookup or creation, the normalized email
+acquires the same hashed `Individual` identity lock used by guided and Good NPO
+Member flows through transaction completion. Browser `required` attributes are
+UX only. The handler is rate-limited. Every guest submission must include a
+valid GoodVantage CAPTCHA response. Missing Good Connector or missing/unreadable
+CAPTCHA configuration fails closed; the app can still be installed without Good
+Connector, but public donation submission is unavailable until CAPTCHA support
+is installed and configured. The submit control starts disabled and follows the
+shared loader's `data-load-state`; server verification remains authoritative.
 
 The base public page and confirmation label amounts as EUR, and the seeded
 `Donation Thank You DE` template formats EUR. The separate `Donation Slip CH`
@@ -399,6 +428,13 @@ masked by an invalid savepoint rollback. When an exact Address is reused, values
 the concise dialog does not collect (such as address line 2, canton/state, email,
 phone, and its existing title) are preserved.
 
+One request-scoped registry renews its five-minute Redis identity-lock leases
+every two minutes, revalidates every token immediately before commit, and
+releases all locks after commit or rollback. Renewal stops after 30 minutes;
+lease loss or that cap aborts commit and asks the caller to retry, while the
+finite Redis TTL still recovers from worker/process failure. Lock keys contain a
+hash of the normalized identity type/value rather than PII.
+
 Individual creation stores the resolved person in `Member.contact`, links the
 Address to Contact/Customer/Member, and reuses a Member only through that
 canonical Contact. Same display names with different emails therefore remain
@@ -461,10 +497,15 @@ fallback therefore computes `outstanding = grand_total - advance_paid`, which
 is exactly the remaining Donation outstanding, so the active controller's
 `validate` passes under erpnext base, hrms, or any future override winner.
 A fully allocated Donation cannot create another Payment Entry. Final
-submission locks all referenced Donation rows in name order and rejects a
-cumulative allocation above the Donation amount, so a stale or concurrent
-draft cannot post a second settlement. Donation references must use the
-Donation company and its expected Donor receivable account: the configured
+submission locks all referenced Donation rows in name order and obtains complete
+Donation amount/Company/Donor state, account configuration, and submitted
+allocations through current locking reads. The prior-allocation query excludes
+the current Payment Entry, and cumulative allocation above the current Donation
+amount is rejected, so a REPEATABLE READ snapshot cannot let a waiting draft post
+a second settlement. The two-connection regression submits both competing
+Payment Entry drafts through normal `Payment Entry.submit()` lifecycle, proving
+the installed controller and non_profit doc-events run rather than testing raw
+row insertion. Donation references must use the Donation company and its expected Donor receivable account: the configured
 Donation Debit Account when it belongs to that company, otherwise ERPNext's
 company-specific Donor party account. Cancellation recalculates the paid flag
 and `advance_paid` from the remaining submitted Payment Entries.
@@ -782,16 +823,20 @@ bench --site development16.localhost run-tests --app non_profit
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.household.test_household
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.major_gift.test_major_gift
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.donor_interaction.test_donor_interaction
+bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.donation.test_donation --test TestDonationPaymentEntryInvariants.test_two_connections_allow_exactly_one_full_allocation
+bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.donation_receipt.test_donation_receipt
+bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.recurring_donation.test_recurring_donation
 bench --site development16.localhost run-tests --module miki_app.tests.test_end_to_end
 ```
 
-`non_profit.non_profit.utils.before_tests` also normalizes local ERPNext bootstrap
-preconditions before the suite runs: it uses a short in-process test host URL,
-renames fixed ERPNext test Customers when local Customer naming is set to naming
-series, and pre-creates ERPNext test Addresses with `pincode` for Swiss benches
-where that field is mandatory. When HRMS is installed, it also creates the
-`Email Account/Jobs` test record expected by HRMS 16's module-level bootstrap;
-current Frappe test fixtures no longer provide that legacy record.
+`non_profit.non_profit.utils.before_tests` uses a short in-process test host URL,
+runs the setup wizard only when the site has no Company, and refreshes app-owned
+fundraising fixtures. It deliberately does not rename ERPNext test Customers,
+change Customer naming, pre-create shared Addresses/Fiscal Years/Email Accounts,
+or delete Item Prices. Tests that need those records must create namespaced local
+fixtures and restore any committed global state themselves. The Donation
+allocation regression uses two real MariaDB connections to establish stale
+REPEATABLE READ snapshots and verifies that exactly one full allocation commits.
 
 CI runs the server suite with the declared ERPNext dependency. Focused setup
 tests mock the optional Workflow Visualizer field and Frappe's late-install hook

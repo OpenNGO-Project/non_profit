@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from hashlib import sha256
 from typing import Any
 
 import frappe
 from frappe import _
 from frappe.utils import cstr, getdate, validate_email_address
 
+from non_profit.non_profit.identity_lock import acquire_identity_lock
 from non_profit.non_profit.utils import ensure_person_contact, role_uses_canonical_person
 
 MUTATED_IDENTITY_DOCTYPES = ("Contact", "Address", "Customer", "Member", "Membership")
@@ -762,29 +762,11 @@ def _acquire_identity_locks(identities: list[tuple[str, str]]) -> None:
 
 
 def _acquire_identity_lock(identity_type: str, identity_value: str) -> None:
-	digest = sha256(f"{identity_type}\n{_normalized_text(identity_value)}".encode()).hexdigest()
-	lock_key = frappe.cache.make_key(f"non-profit-member:{digest}")
-	locks = getattr(frappe.local, "non_profit_member_identity_locks", None)
-	if locks is None:
-		locks = frappe.local.non_profit_member_identity_locks = {}
-	if lock_key in locks:
-		return
-
-	lock = frappe.cache.lock(lock_key, timeout=300, blocking_timeout=30)
-	if not lock.acquire():
-		frappe.throw(_("Another Member creation for this identity is still being processed."))
-	locks[lock_key] = lock
-
-	def release() -> None:
-		owned_lock = locks.pop(lock_key, None)
-		if owned_lock:
-			try:
-				owned_lock.release()
-			except Exception:
-				frappe.log_error(title="Non Profit Member identity lock release failed")
-
-	frappe.db.after_commit.add(release)
-	frappe.db.after_rollback.add(release)
+	acquire_identity_lock(
+		identity_type,
+		identity_value,
+		busy_message=_("Another Member creation for this identity is still being processed."),
+	)
 
 
 def _required(value: Any, label: str) -> str:

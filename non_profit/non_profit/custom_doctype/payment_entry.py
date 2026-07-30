@@ -40,8 +40,13 @@ def validate_donation_payment_entry_companies(doc, method: str | None = None) ->
 	fail before normal ``validate`` doc-events run, so this invariant belongs in
 	``before_validate`` as well as the full account check below.
 	"""
+	donation_states = _locked_donation_states(doc) if doc.get("_action") == "submit" else {}
 	for donation_name in _donation_reference_names(doc):
-		donation_company = frappe.db.get_value("Donation", donation_name, "company")
+		donation_company = (
+			donation_states[donation_name].company
+			if donation_name in donation_states
+			else frappe.db.get_value("Donation", donation_name, "company")
+		)
 		if donation_company and doc.company != donation_company:
 			frappe.throw(
 				_("Donation {0} belongs to company {1}, but the Payment Entry company is {2}.").format(
@@ -71,10 +76,12 @@ def validate_donation_payment_entry_references(doc, method: str | None = None) -
 			if row.reference_doctype != "Donation":
 				frappe.throw(_("Reference Doctype must be one of {0}").format(comma_or([_("Donation")])))
 
-	_validate_donation_reference_accounts(doc)
 	if doc.get("_action") == "submit":
-		_lock_referenced_donations(doc)
-		_validate_donation_allocation_totals(doc)
+		donation_states = _locked_donation_states(doc)
+		_validate_donation_reference_accounts(doc, donation_states)
+		_validate_donation_allocation_totals(doc, donation_states)
+	else:
+		_validate_donation_reference_accounts(doc)
 
 
 def sync_donation_reconciliation_state_on_payment_entry_change(doc, method: str | None = None) -> None:
@@ -243,20 +250,34 @@ def sync_donation_advance_paid(donation_name: str) -> None:
 		frappe.db.set_value("Donation", donation_name, "advance_paid", submitted_total, update_modified=False)
 
 
-def _submitted_donation_payment_total(donation_name: str, exclude_payment_entry: str | None = None) -> float:
+def _submitted_donation_payment_total(
+	donation_name: str,
+	exclude_payment_entry: str | None = None,
+	*,
+	for_update: bool = False,
+) -> float:
 	payment_entry = frappe.qb.DocType("Payment Entry")
 	payment_reference = frappe.qb.DocType("Payment Entry Reference")
 	query = (
 		frappe.qb.from_(payment_reference)
 		.inner_join(payment_entry)
 		.on(payment_entry.name == payment_reference.parent)
-		.select(Sum(payment_reference.allocated_amount))
 		.where(payment_entry.docstatus == 1)
 		.where(payment_reference.reference_doctype == "Donation")
 		.where(payment_reference.reference_name == donation_name)
 	)
 	if exclude_payment_entry:
 		query = query.where(payment_entry.name != exclude_payment_entry)
+	if for_update:
+		rows = (
+			query.select(payment_reference.allocated_amount)
+			.orderby(payment_entry.name)
+			.orderby(payment_reference.name)
+			.for_update()
+		).run()
+		return sum(flt(row[0]) for row in rows)
+
+	query = query.select(Sum(payment_reference.allocated_amount))
 	total = query.run()[0][0]
 	return flt(total)
 
@@ -267,7 +288,9 @@ def _donation_outstanding_amount(donation_name: str, exclude_payment_entry: str 
 	return max(amount - allocated, 0)
 
 
-def _expected_donation_party_account(donation) -> str:
+def _expected_donation_party_account(donation, *, for_update: bool = False) -> str:
+	if for_update:
+		return _current_expected_donation_party_account(donation)
 	configured_account = frappe.db.get_single_value("Non Profit Settings", "donation_debit_account")
 	if (
 		configured_account
@@ -275,6 +298,86 @@ def _expected_donation_party_account(donation) -> str:
 	):
 		return configured_account
 	return get_party_account("Donor", donation.donor, donation.company)
+
+
+def _current_expected_donation_party_account(donation) -> str:
+	"""Resolve the expected account exclusively through current locking reads."""
+	configured_account = _current_single_value("Non Profit Settings", "donation_debit_account")
+	if configured_account:
+		account_company = frappe.db.get_value(
+			"Account",
+			configured_account,
+			"company",
+			for_update=True,
+		)
+		if account_company == donation.company:
+			return configured_account
+
+	party_account = frappe.db.get_value(
+		"Party Account",
+		{
+			"parenttype": "Donor",
+			"parent": donation.donor,
+			"company": donation.company,
+		},
+		"account",
+		order_by="name asc",
+		for_update=True,
+	)
+
+	general_ledger = frappe.qb.DocType("GL Entry")
+	ledger_rows = (
+		frappe.qb.from_(general_ledger)
+		.select(general_ledger.account, general_ledger.account_currency)
+		.where(general_ledger.docstatus == 1)
+		.where(general_ledger.is_cancelled == 0)
+		.where(general_ledger.company == donation.company)
+		.where(general_ledger.party_type == "Donor")
+		.where(general_ledger.party == donation.donor)
+		.orderby(general_ledger.name)
+		.limit(1)
+		.for_update()
+	).run()
+	if ledger_rows:
+		ledger_account, ledger_currency = ledger_rows[0]
+		if party_account:
+			account_currency = frappe.db.get_value(
+				"Account",
+				party_account,
+				"account_currency",
+				for_update=True,
+			)
+			if account_currency != ledger_currency:
+				party_account = ledger_account
+		else:
+			party_account = ledger_account
+	if party_account:
+		return party_account
+
+	account_type = frappe.db.get_value("Party Type", "Donor", "account_type", for_update=True)
+	if not account_type:
+		return ""
+	company = frappe.qb.DocType("Company")
+	default_account_field = f"default_{account_type.lower()}_account"
+	rows = (
+		frappe.qb.from_(company)
+		.select(getattr(company, default_account_field))
+		.where(company.name == donation.company)
+		.for_update()
+	).run()
+	return rows[0][0] if rows else ""
+
+
+def _current_single_value(doctype: str, fieldname: str) -> str | None:
+	single_value = frappe.qb.DocType("Singles")
+	rows = (
+		frappe.qb.from_(single_value)
+		.select(single_value.value)
+		.where(single_value.doctype == doctype)
+		.where(single_value.field == fieldname)
+		.for_update()
+	).run()
+	return rows[0][0] if rows else None
 
 
 def _donation_reference_names(payment_entry) -> list[str]:
@@ -287,14 +390,44 @@ def _donation_reference_names(payment_entry) -> list[str]:
 	)
 
 
-def _lock_referenced_donations(payment_entry) -> None:
-	for donation_name in _donation_reference_names(payment_entry):
-		frappe.db.get_value("Donation", donation_name, "name", for_update=True)
+def _locked_donation_states(payment_entry) -> dict[str, frappe._dict]:
+	donation_names = _donation_reference_names(payment_entry)
+	if not donation_names:
+		return {}
+
+	cached = payment_entry.flags.get("non_profit_locked_donation_states")
+	if cached and cached.get("signature") == tuple(donation_names):
+		return cached["states"]
+
+	donation = frappe.qb.DocType("Donation")
+	rows = (
+		frappe.qb.from_(donation)
+		.select(donation.name, donation.amount, donation.company, donation.donor)
+		.where(donation.name.isin(donation_names))
+		.orderby(donation.name)
+		.for_update()
+	).run(as_dict=True)
+	states = {row.name: row for row in rows}
+	missing = next((name for name in donation_names if name not in states), None)
+	if missing:
+		frappe.throw(_("Donation {0} does not exist.").format(frappe.bold(missing)))
+	payment_entry.flags.non_profit_locked_donation_states = {
+		"signature": tuple(donation_names),
+		"states": states,
+	}
+	return states
 
 
-def _validate_donation_reference_accounts(payment_entry) -> None:
+def _validate_donation_reference_accounts(
+	payment_entry,
+	donation_states: dict[str, frappe._dict] | None = None,
+) -> None:
 	for donation_name in _donation_reference_names(payment_entry):
-		donation = frappe.get_doc("Donation", donation_name)
+		donation = (
+			donation_states[donation_name]
+			if donation_states is not None
+			else frappe.get_doc("Donation", donation_name)
+		)
 		if payment_entry.company != donation.company:
 			frappe.throw(
 				_("Donation {0} belongs to company {1}, but the Payment Entry company is {2}.").format(
@@ -302,7 +435,10 @@ def _validate_donation_reference_accounts(payment_entry) -> None:
 				)
 			)
 
-		expected_account = _expected_donation_party_account(donation)
+		expected_account = _expected_donation_party_account(
+			donation,
+			for_update=donation_states is not None,
+		)
 		if payment_entry.party_account != expected_account:
 			frappe.throw(
 				_("Donation {0} requires Donor party account {1}, but the Payment Entry uses {2}.").format(
@@ -311,7 +447,10 @@ def _validate_donation_reference_accounts(payment_entry) -> None:
 			)
 
 
-def _validate_donation_allocation_totals(payment_entry) -> None:
+def _validate_donation_allocation_totals(
+	payment_entry,
+	donation_states: dict[str, frappe._dict],
+) -> None:
 	current_allocations = {}
 	for row in payment_entry.get("references"):
 		if row.reference_doctype == "Donation" and row.reference_name and flt(row.allocated_amount):
@@ -320,8 +459,12 @@ def _validate_donation_allocation_totals(payment_entry) -> None:
 			)
 
 	for donation_name in sorted(current_allocations):
-		donation_amount = flt(frappe.db.get_value("Donation", donation_name, "amount"))
-		already_allocated = _submitted_donation_payment_total(donation_name, payment_entry.name)
+		donation_amount = flt(donation_states[donation_name].amount)
+		already_allocated = _submitted_donation_payment_total(
+			donation_name,
+			payment_entry.name,
+			for_update=True,
+		)
 		if already_allocated + current_allocations[donation_name] > donation_amount:
 			remaining = max(donation_amount - already_allocated, 0)
 			frappe.throw(

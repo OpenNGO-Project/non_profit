@@ -23,13 +23,12 @@ frappe.listview_settings["Donation Receipt"] = {
 					frappe.call({
 						method: "non_profit.non_profit.doctype.donation_receipt.donation_receipt.generate_yearly_receipts",
 						args: values,
-						freeze: true,
-						freeze_message: __("Spendenbescheinigungen werden erstellt..."),
 						callback: (r) => {
 							frappe.msgprint(
-								__("{0} Spendenbescheinigungen erstellt", [r.message.created])
+								__("Die Erstellung wurde als Hintergrundauftrag eingereiht: {0}", [
+									r.message.job_id,
+								])
 							);
-							listview.refresh();
 						},
 					});
 				},

@@ -57,7 +57,10 @@ The seeded **Donation Receipt DE** contains German tax-law wording (`§ 10b EStG
 and related German provisions). Setting the receipt country to Switzerland does
 not localize or legally approve that wording. Do not issue it as a Swiss tax
 certificate. Install a jurisdiction-specific format approved by the responsible
-organisation; this app intentionally does not invent Swiss legal text.
+organisation, then select it under **Non Profit Settings → Approved Swiss
+Donation Receipt Print Format**; this app intentionally does not invent Swiss
+legal text. The automated Swiss send action explicitly rejects **Donation
+Receipt DE**.
 
 You may edit **Donation Receipt DE**, **Donation Slip CH**, and **Donation Thank
 You DE** in Desk. Migrate updates a Print Format only while its HTML still
@@ -78,9 +81,15 @@ the form so the chart does not push the Desk page sideways on mobile. Changing
 the chart year keeps the mobile scroll position stable.
 
 Public donation forms must submit donor name, a valid email, positive amount,
-consent, an allowed frequency, and only active Donation Campaigns. Keep those
-checks server-side in `non_profit.www.donate._handle_submission`; browser
-validation is only a convenience. Guest POSTs are rate-limited and always
+consent, and an allowed frequency. A public campaign must be active and use an
+enabled leaf Cost Center belonging to the server-resolved Donation Company;
+cross-Company, group, disabled, and unassigned Cost Centers are rejected. Keep
+those checks server-side in `non_profit.www.donate._handle_submission`; browser
+validation is only a convenience. Guest identity lookup/creation is serialized
+by normalized email through commit or rollback. The lock renews during a long
+transaction and is checked again before commit; if the request reports that
+identity serialization expired, no identity write was committed and the user
+can retry. Guest POSTs are rate-limited and always
 require GoodVantage CAPTCHA. Install Good Connector and configure both CAPTCHA
 keys before exposing `/donate`; missing or unreadable configuration blocks
 submission instead of creating Donor/Donation records without bot protection.
@@ -128,25 +137,35 @@ or `en`, but operators get the standard enabled-language lookup.
 `Donation.thank_you_sent` is a standard field for **Verdankungen**. It is set automatically when `Donation.send_thank_you()` queues an email and can also be used by presentation apps for manual acknowledgement queues. `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` keep the audit trail. This is intentionally separate from `Donation.receipt`, which links to **Donation Receipt** / **Spendenbescheinigung** tax certificates generated yearly or ad hoc.
 
 Yearly Donation Receipt generation is an operator action for users with
-`Non Profit Manager` or `System Manager`. It creates draft receipts for
-submitted, paid Donations in the selected fiscal year that do not already link
-to a submitted receipt or another active draft receipt; it does not commit
-mid-request, so Frappe can roll back the whole operation if receipt creation
-fails. The default receipt country is
+`Non Profit Manager` or `System Manager` who also have normal Donation read and
+Donation Receipt create access. The list action queues a deduplicated background
+chain; each transaction processes at most 200 visible candidates and creates
+drafts grouped by Company, Company currency, Donor, country, and period. If one
+group crosses the 200-row cursor boundary, later pages append to the same locked
+draft rather than creating another receipt. Transient MariaDB snapshot or
+deadlock conflicts automatically roll back and retry the complete cursor page,
+up to three attempts. Check Background Jobs/Error Log only after those attempts
+are exhausted, then run the list action again after correction; existing draft
+rows reserve their Donations, so a retry does not duplicate completed groups.
+The default receipt country is
 `Switzerland` on the form, yearly-generation dialog, and server fallback.
 Donation Receipts may also be saved before donation rows are added. On a draft
 receipt, use **Actions → Spenden aus Geschäftsjahr hinzufügen** after choosing a
 Donor and Fiscal Year to populate all unreceipted paid Donations from that year.
 Submitting a receipt validates that every row is paid, submitted, in the selected
-period, belongs to the receipt Donor, and is not already attached to another
-active receipt. Large yearly runs load eligible Donations and active receipt
-ownership in batches; the operator workflow and all validation rules are the
-same as for an individual receipt.
+period, belongs to the receipt Donor and Company/currency group, and is not
+already attached to another active receipt. Company and currency are required
+receipt identity; old rows are backfilled only when migration can determine them
+without crossing Companies.
 
-The yearly action creates drafts only. Review donor, period, country, language,
-donations, address, and the approved print format before submitting or sending.
-The built-in **Spendenbescheinigung senden** action attaches `Donation Receipt
-DE`; use it only where that German wording has been approved.
+The yearly action creates drafts only. Review donor, Company, currency, period,
+country, language, and Donations before submitting. The built-in
+**Spendenbescheinigung senden** action works only for a submitted Swiss receipt.
+It resolves one complete Company-linked Swiss issuer Address and one unambiguous
+complete recipient Address, stores both on the receipt, and attaches only the
+approved Swiss Print Format configured in Non Profit Settings. It never attaches
+**Donation Receipt DE**. Correct missing/ambiguous Address links or configure the
+approved format before retrying.
 
 When a payment gateway authorizes a Donation, `Donation.on_payment_authorized()`
 marks the Donation paid and, when enabled, creates the configured automatic
@@ -171,6 +190,8 @@ to match the Donation company and the Donor side to use the configured Donation
 Debit Account for that company, or the derived Donor party account when no
 company-valid Donation Debit Account is configured. Cancelling the Payment Entry
 recalculates the Donation paid flag from the remaining submitted Payment Entries.
+Submission uses current locking reads for Donation/account/allocation state, so
+two concurrent full allocations cannot both pass from stale database snapshots.
 
 Audit historical Donation accounting invariants without changing data:
 

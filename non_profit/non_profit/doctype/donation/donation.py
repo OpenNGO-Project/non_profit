@@ -57,6 +57,9 @@ class Donation(Document):
 			frappe.throw(_("Major Gift {0} belongs to a different donor.").format(self.major_gift))
 
 	def create_donor_for_website_user(self):
+		from non_profit.non_profit.identity_lock import acquire_public_email_identity_lock
+
+		acquire_public_email_identity_lock(frappe.session.user)
 		donor_name = find_donor_by_email(frappe.session.user)
 
 		if not donor_name:
