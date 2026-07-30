@@ -7,6 +7,7 @@ from frappe.utils import nowdate
 from non_profit.non_profit.correspondence import (
 	AMBIGUOUS_ADDRESS,
 	MAX_SOURCE_REFERENCES,
+	_fetch_rows,
 	get_correspondence_profile,
 	get_correspondence_profiles,
 )
@@ -112,6 +113,54 @@ class TestCorrespondenceProfile(IntegrationTestCase):
 			canonical_profile["related_sources"],
 			[{"doctype": "Contact", "name": contact.name}],
 		)
+
+	def test_permission_aware_profile_ignores_inaccessible_household(self) -> None:
+		self._ensure_language("de", "German")
+		contact = self._contact("Visible", "Person", preferred_language="de")
+		household = frappe.get_doc(
+			{
+				"doctype": "Household",
+				"household_name": f"Hidden Household {frappe.generate_hash(length=8)}",
+				"members": [{"contact": contact.name, "from_date": nowdate()}],
+			}
+		).insert(ignore_permissions=True)
+		self._address("Household", household.name)
+		real_get_list = frappe.get_list
+
+		def permission_filtered_get_list(doctype, *args, **kwargs):
+			if doctype == "Household":
+				return []
+			return real_get_list(doctype, *args, **kwargs)
+
+		with patch(
+			"non_profit.non_profit.correspondence.frappe.get_list",
+			side_effect=permission_filtered_get_list,
+		):
+			profile = get_correspondence_profile(
+				"Contact",
+				contact.name,
+				respect_permissions=True,
+			)
+
+		self.assertIsNone(profile["household"])
+		self.assertIsNone(profile["address"])
+
+	def test_permission_aware_optional_fetch_skips_unreadable_doctype(self) -> None:
+		with (
+			patch("non_profit.non_profit.correspondence.frappe.has_permission", return_value=False),
+			patch("non_profit.non_profit.correspondence.frappe.get_list") as get_list,
+		):
+			self.assertEqual(
+				_fetch_rows(
+					"Customer",
+					{"CUSTOMER-HIDDEN"},
+					["name"],
+					respect_permissions=True,
+				),
+				{},
+			)
+
+		get_list.assert_not_called()
 
 	def test_canonical_profile_uses_related_donor_language_and_address(self) -> None:
 		self._ensure_language("fr", "French")

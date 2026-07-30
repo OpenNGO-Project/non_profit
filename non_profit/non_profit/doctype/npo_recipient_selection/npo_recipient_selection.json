@@ -1,0 +1,216 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:selection_name",
+ "creation": "2026-07-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "overview_section",
+  "selection_name",
+  "enabled",
+  "description",
+  "overview_column",
+  "candidate_count",
+  "last_evaluated_on",
+  "channels_section",
+  "available_for_newsletter",
+  "channels_column",
+  "available_for_direct_mail",
+  "sources_section",
+  "include_contacts",
+  "contact_tag",
+  "member_source_column",
+  "include_members",
+  "membership_type",
+  "membership_status",
+  "membership_active_on",
+  "donor_source_column",
+  "include_donors",
+  "donor_type"
+ ],
+ "fields": [
+  {
+   "fieldname": "overview_section",
+   "fieldtype": "Section Break",
+   "label": "Selection"
+  },
+  {
+   "fieldname": "selection_name",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Selection Name",
+   "reqd": 1,
+   "set_only_once": 1,
+   "unique": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "in_global_search": 1,
+   "label": "Description"
+  },
+  {
+   "fieldname": "overview_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "candidate_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Canonical Candidates",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_evaluated_on",
+   "fieldtype": "Datetime",
+   "label": "Last Evaluated On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "channels_section",
+   "fieldtype": "Section Break",
+   "label": "Available Channels"
+  },
+  {
+   "default": "1",
+   "fieldname": "available_for_newsletter",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Available for Newsletter"
+  },
+  {
+   "fieldname": "channels_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "available_for_direct_mail",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Available for Direct Mail"
+  },
+  {
+   "fieldname": "sources_section",
+   "fieldtype": "Section Break",
+   "label": "Recipient Sources"
+  },
+  {
+   "default": "0",
+   "fieldname": "include_contacts",
+   "fieldtype": "Check",
+   "label": "Include Contacts"
+  },
+  {
+   "depends_on": "eval:doc.include_contacts",
+   "fieldname": "contact_tag",
+   "fieldtype": "Link",
+   "label": "Contact Tag",
+   "options": "Tag"
+  },
+  {
+   "fieldname": "member_source_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "include_members",
+   "fieldtype": "Check",
+   "label": "Include Members"
+  },
+  {
+   "depends_on": "eval:doc.include_members",
+   "fieldname": "membership_type",
+   "fieldtype": "Link",
+   "label": "Membership Type",
+   "options": "Membership Type"
+  },
+  {
+   "default": "Current",
+   "depends_on": "eval:doc.include_members",
+   "fieldname": "membership_status",
+   "fieldtype": "Select",
+   "label": "Membership Status",
+   "options": "\nNew\nCurrent\nExpired\nPending\nCancelled"
+  },
+  {
+   "default": "Today",
+   "depends_on": "eval:doc.include_members",
+   "fieldname": "membership_active_on",
+   "fieldtype": "Date",
+   "label": "Membership Active On",
+   "mandatory_depends_on": "eval:doc.include_members"
+  },
+  {
+   "fieldname": "donor_source_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "include_donors",
+   "fieldtype": "Check",
+   "label": "Include Donors"
+  },
+  {
+   "depends_on": "eval:doc.include_donors",
+   "fieldname": "donor_type",
+   "fieldtype": "Link",
+   "label": "Donor Type",
+   "options": "Donor Type"
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-30 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Non Profit",
+ "name": "NPO Recipient Selection",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Non Profit Manager",
+   "select": 1,
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "restrict_to_domain": "Non Profit",
+ "search_fields": "selection_name,description",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "selection_name",
+ "track_changes": 1
+}

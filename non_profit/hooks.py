@@ -60,6 +60,10 @@ good_connector_ebics_reconciliation_providers = [
 	"non_profit.non_profit.bank_integration.get_ebics_reconciliation_candidates",
 ]
 
+good_newsletter_audience_providers = [
+	"non_profit.non_profit.recipient_selection.newsletter_audience_provider",
+]
+
 scheduler_events = {
 	"daily": [
 		"non_profit.non_profit.doctype.membership.membership.set_expired_status",
@@ -82,5 +86,6 @@ global_search_doctypes = {
 		{"doctype": "Donor Type", "index": 10},
 		{"doctype": "Membership Type", "index": 11},
 		{"doctype": "Major Gift", "index": 12},
+		{"doctype": "NPO Recipient Selection", "index": 13},
 	]
 }

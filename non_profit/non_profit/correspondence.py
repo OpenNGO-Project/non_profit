@@ -133,6 +133,7 @@ def get_correspondence_profile(
 	donors: Sequence[str] | None = None,
 	customers: Sequence[str] | None = None,
 	as_of: Any | None = None,
+	respect_permissions: bool = False,
 ) -> dict[str, Any]:
 	"""Resolve one source or one already-consolidated canonical subject.
 
@@ -159,32 +160,49 @@ def get_correspondence_profile(
 					"donors": donors,
 					"customers": customers,
 				}
-			]
+			],
+			respect_permissions=respect_permissions,
 		)[0]
 	elif contacts or members or donors or customers:
 		frappe.throw(_("Related correspondence sources require a canonical subject."))
 
-	return get_correspondence_profiles([(cstr(source_doctype), cstr(source_name))])[0]
+	return get_correspondence_profiles(
+		[(cstr(source_doctype), cstr(source_name))],
+		respect_permissions=respect_permissions,
+	)[0]
 
 
 def get_correspondence_profiles(
 	source_references: Iterable[Mapping[str, Any] | tuple[str, str]],
+	*,
+	respect_permissions: bool = False,
 ) -> list[dict[str, Any]]:
 	"""Resolve a bounded list of Direct Mail source references in input order.
 
 	The service is intentionally not whitelisted. A consuming app owns audience
 	permissions and policy; this function only resolves canonical NPO identity and
-	current correspondence candidates without writing to master data.
+	current correspondence candidates without writing to master data. Consumers
+	that expose results to the current user pass ``respect_permissions=True`` so
+	permission-invisible related masters cannot influence the profile.
 	"""
 	references = _normalize_source_references(source_references)
 	if not references:
 		return []
-	return _CorrespondenceProfileResolver(references).resolve()
+	return _CorrespondenceProfileResolver(
+		references,
+		respect_permissions=respect_permissions,
+	).resolve()
 
 
 class _CorrespondenceProfileResolver:
-	def __init__(self, references: list[_CorrespondenceReference]):
+	def __init__(
+		self,
+		references: list[_CorrespondenceReference],
+		*,
+		respect_permissions: bool = False,
+	):
 		self.references = references
+		self.respect_permissions = respect_permissions
 		self.source_rows: dict[tuple[str, str], Mapping[str, Any]] = {}
 		self.contacts: dict[str, Mapping[str, Any]] = {}
 		self.customers: dict[str, Mapping[str, Any]] = {}
@@ -212,7 +230,12 @@ class _CorrespondenceProfileResolver:
 				names_by_doctype[doctype].add(name)
 
 		for doctype, names in names_by_doctype.items():
-			rows = _fetch_rows(doctype, names, SOURCE_FIELDS[doctype])
+			rows = _fetch_rows(
+				doctype,
+				names,
+				SOURCE_FIELDS[doctype],
+				respect_permissions=self.respect_permissions,
+			)
 			for name, row in rows.items():
 				self.source_rows[(doctype, name)] = row
 			missing = sorted(names - set(rows))
@@ -245,7 +268,14 @@ class _CorrespondenceProfileResolver:
 			if doctype == "Donor" and row.get("subject_household"):
 				household_names.add(row["subject_household"])
 
-		self.customers.update(_fetch_rows("Customer", customer_names, CUSTOMER_FIELDS))
+		self.customers.update(
+			_fetch_rows(
+				"Customer",
+				customer_names,
+				CUSTOMER_FIELDS,
+				respect_permissions=self.respect_permissions,
+			)
+		)
 		for customer in self.customers.values():
 			for fieldname in ("npo_contact", "customer_primary_contact"):
 				if contact := customer.get(fieldname):
@@ -255,7 +285,14 @@ class _CorrespondenceProfileResolver:
 			if customer.get("npo_subject_type") == "Household":
 				if household := customer.get("npo_household") or customer.get("household"):
 					household_names.add(household)
-		self.households.update(_fetch_rows("Household", household_names, HOUSEHOLD_FIELDS))
+		self.households.update(
+			_fetch_rows(
+				"Household",
+				household_names,
+				HOUSEHOLD_FIELDS,
+				respect_permissions=self.respect_permissions,
+			)
+		)
 
 		if customer_names:
 			link_rows = frappe.get_all(
@@ -275,7 +312,14 @@ class _CorrespondenceProfileResolver:
 					self.customer_contacts[row.link_name].append(row.parent)
 				contact_names.add(row.parent)
 
-		self.contacts.update(_fetch_rows("Contact", contact_names, CONTACT_FIELDS))
+		self.contacts.update(
+			_fetch_rows(
+				"Contact",
+				contact_names,
+				CONTACT_FIELDS,
+				respect_permissions=self.respect_permissions,
+			)
+		)
 
 	def _resolve_reference(self, reference: _CorrespondenceReference) -> dict[str, Any]:
 		resolution = self._resolve_source(reference.source)
@@ -518,13 +562,29 @@ class _CorrespondenceProfileResolver:
 		_assert_related_row_limit(rows)
 		rows.sort(key=lambda row: (row.parent, -cint(row.is_primary), row.contact, cint(row.idx)))
 
-		for row in rows:
-			self.household_people[row.parent].append(row)
-			if row.parent not in self.contact_households[row.contact]:
-				self.contact_households[row.contact].append(row.parent)
 		household_names.update(row.parent for row in rows)
-		self.households.update(_fetch_rows("Household", household_names, HOUSEHOLD_FIELDS))
-		self.contacts.update(_fetch_rows("Contact", {row.contact for row in rows}, CONTACT_FIELDS))
+		self.households.update(
+			_fetch_rows(
+				"Household",
+				household_names,
+				HOUSEHOLD_FIELDS,
+				respect_permissions=self.respect_permissions,
+			)
+		)
+		self.contacts.update(
+			_fetch_rows(
+				"Contact",
+				{row.contact for row in rows},
+				CONTACT_FIELDS,
+				respect_permissions=self.respect_permissions,
+			)
+		)
+		for row in rows:
+			if row.parent not in self.households:
+				continue
+			self.household_people[row.parent].append(row)
+			if row.contact in self.contacts and row.parent not in self.contact_households[row.contact]:
+				self.contact_households[row.contact].append(row.parent)
 
 	def _build_profile(self, resolution: dict[str, Any]) -> dict[str, Any]:
 		doctype, name = resolution["source"]
@@ -568,6 +628,7 @@ class _CorrespondenceProfileResolver:
 			"household": household,
 			"people": people,
 			"household_people": household_people,
+			"inaccessible_contacts": self._inaccessible_contacts(resolution, household),
 			"addressee": addressee,
 			"name_components": name_components,
 			"language": language,
@@ -578,6 +639,28 @@ class _CorrespondenceProfileResolver:
 		}
 		profile["_address_targets"] = self._address_targets(profile, resolution)
 		return profile
+
+	def _inaccessible_contacts(
+		self,
+		resolution: Mapping[str, Any],
+		household: str | None,
+	) -> list[str]:
+		contact_names = {row.contact for row in self.household_people.get(cstr(household), []) if row.contact}
+		customer_names = {cstr(resolution.get("customer")).strip()} - {""}
+		for doctype, name in resolution.get("related_sources", ()):
+			if doctype == "Contact":
+				contact_names.add(name)
+			elif doctype == "Customer":
+				customer_names.add(name)
+			elif doctype in {"Member", "Donor"}:
+				row = self.source_rows[(doctype, name)]
+				if contact := cstr(row.get("contact")).strip():
+					contact_names.add(contact)
+				if customer := cstr(row.get("customer")).strip():
+					customer_names.add(customer)
+		for customer in customer_names:
+			contact_names.update(self.customer_contacts.get(customer, []))
+		return sorted(contact_names - set(self.contacts))
 
 	def _profile_people(
 		self, resolution: Mapping[str, Any], household_people: list[dict[str, Any]]
@@ -732,9 +815,9 @@ class _CorrespondenceProfileResolver:
 			if doctype not in {"Member", "Donor"}:
 				continue
 			row = self.source_rows[(doctype, name)]
-			if contact := cstr(row.get("contact")).strip():
+			if (contact := cstr(row.get("contact")).strip()) and contact in self.contacts:
 				pairs.add(("Contact", contact))
-			if customer := cstr(row.get("customer")).strip():
+			if (customer := cstr(row.get("customer")).strip()) and customer in self.customers:
 				pairs.add(("Customer", customer))
 		return pairs
 
@@ -807,6 +890,7 @@ class _CorrespondenceProfileResolver:
 			address_names,
 			ADDRESS_FIELDS,
 			extra_filters={"disabled": 0},
+			respect_permissions=self.respect_permissions,
 		)
 		for profile in profiles:
 			provenance_by_address: dict[str, set[tuple[str, str, str]]] = defaultdict(set)
@@ -939,11 +1023,15 @@ def _fetch_rows(
 	fields: Sequence[str],
 	*,
 	extra_filters: Mapping[str, Any] | None = None,
+	respect_permissions: bool = False,
 ) -> dict[str, Mapping[str, Any]]:
 	if not names:
 		return {}
+	if respect_permissions and not frappe.has_permission(doctype, "read"):
+		return {}
 	filters = {"name": ["in", sorted(names)], **dict(extra_filters or {})}
-	rows = frappe.get_all(
+	get_rows = frappe.get_list if respect_permissions else frappe.get_all
+	rows = get_rows(
 		doctype,
 		filters=filters,
 		fields=list(fields),

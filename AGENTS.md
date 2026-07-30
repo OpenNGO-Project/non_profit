@@ -78,6 +78,36 @@ must do), `DOCUMENTATION.md` (how it works), `HOW_TO.md` (operator
 procedures), and the code. Record new or changed requirements in
 `REQUIREMENTS.md` and keep all four in sync with every change.
 
+## Recipient Selection Contract
+
+- `NPO Recipient Selection` is the generic saved Contact/Member/Donor audience
+  definition. Keep channel-neutral selection and canonical identity behavior in
+  `non_profit.non_profit.recipient_selection`; consuming campaign apps must not
+  duplicate these joins.
+- `get_recipient_selection_rows(selection, channel)` returns deterministic raw
+  rows keyed by canonical Contact, Customer, or explicit Household and enforces
+  selection/source read permissions plus enabled/channel gates. Preserve its
+  compatibility with `good_direct_mail.services.preparation.merge_source_rows`.
+- `get_recipient_selection_configuration(selection)` is the versioned hashing
+  input for consumers. Add every result-affecting saved criterion before using a
+  new field in selection queries; do not include transient counts or timestamps.
+- Contacts include only blank/Person identity kinds. Members canonicalize
+  Contact first through active Membership rows; only Organization or blank legacy
+  subjects may fall back to Customer. Donors canonicalize explicit/compatible
+  legacy Household first, then Contact, with the same Organization/blank legacy
+  Customer fallback. Generic Endpoint, permission-invisible, unsupported, and
+  missing canonical identities never qualify. Keep evaluation bounded to 10,000
+  raw source rows.
+- The optional Good Newsletter provider remains import-free and resolves
+  correspondence profiles in batches of at most 500. It uses Customer email
+  before deterministic linked person Contacts, current Household people primary
+  first, excludes `Contact.unsubscribed`, fails closed for inaccessible related
+  Contacts, batches complete permission-aware email reads, and deduplicates email
+  case-insensitively.
+- User-facing selection consumers call correspondence resolution with
+  `respect_permissions=True`; permission-invisible related identity and Address
+  rows must not influence names, language, email, or postal readiness.
+
 ## Household Model
 
 - **Household** + child **Household Person** (`contact`, `relationship`,
@@ -149,5 +179,5 @@ these doctypes have a `title_field` (auto standard filter) but no or partial
 - `Grant Application`: `search_fields: applicant_name,email`.
 - `Volunteer`: `search_fields: volunteer_name`.
 - Already complete: Donation, Donation Campaign, Donation Receipt,
-  Recurring Donation, Sponsor, Membership. Prompt-/field-named masters need
-  nothing (Chapter, Volunteer Type, …).
+  Recurring Donation, Sponsor, Membership, NPO Recipient Selection.
+  Prompt-/field-named masters need nothing (Chapter, Volunteer Type, …).

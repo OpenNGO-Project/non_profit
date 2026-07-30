@@ -13,6 +13,7 @@
 | `good_npo` | Generic Goodvantage NPO presentation layer. |
 | `good_demo` | Demo signup/reset layer that seeds non_profit demo records. |
 | `good_direct_mail` | Postal campaigns consume canonical correspondence profiles and Household Donors without reversing the dependency. |
+| `good_newsletter` | Optionally discovers saved NPO Recipient Selections through a provider hook; non_profit has no runtime import dependency on it. |
 
 Breaking changes are allowed while Miki is not production, but `miki_app` must be updated in the same change whenever shared membership behavior changes.
 
@@ -25,12 +26,14 @@ Breaking changes are allowed while Miki is not production, but `miki_app` must b
   Donation carries analysis dimensions `cost_center` (fetched from the campaign's cost center when empty) and `project` (both ERPNext doctypes) for downstream fundraising analytics (e.g. the `good_analytics` app).
 - **Sponsor**, **Sponsor Tier**, **Volunteer**, and **Grant Application** for broader NPO operations.
 - **Non Profit Settings** for company, donor type, billing, invoicing, payment account, and email defaults.
+- **NPO Recipient Selection** stores reusable channel-neutral Contact, Member,
+  and Donor criteria for optional newsletter and direct-mail consumers.
 - **Non Profit** Workspace and Workspace Sidebar for current Desk navigation,
   including Good Help, fundraising, Major Gifts, membership, community,
-  settings, and the Expiring Memberships report. Contact, Address, Household,
-  Customer, and Supplier are grouped together under **People**. The upstream
-  links remain permission-filtered by Frappe; Non Profit roles do not gain
-  broad access to those ERPNext masters.
+  Recipient Selections, settings, and the Expiring Memberships report. Contact,
+  Address, Household, Customer, and Supplier are grouped together under
+  **People**. The upstream links remain permission-filtered by Frappe; Non
+  Profit roles do not gain broad access to those ERPNext masters.
 
 ## Households
 
@@ -176,6 +179,113 @@ inactive lifecycle state, so every persisted matching Donor is active for this
 check. The helper deliberately creates neither a Household Customer nor another
 identity DocType.
 
+## Saved Recipient Selections
+
+`NPO Recipient Selection` is a normal parent DocType in module **Non Profit**,
+named by its unique, non-renamable `selection_name`. Campaign providers persist
+that stable key. System Manager and Non Profit Manager have
+full permissions; Non Profit Member has none. At least one channel and one source
+must be enabled, and Member selection requires `membership_active_on` (metadata
+defaults: Membership Status `Current`, active date `Today`). Saving evaluates
+the current source union and stores the unique canonical `candidate_count` plus
+`last_evaluated_on`. Those fields are an evaluation snapshot, not a live counter.
+
+The public internal contracts in
+`non_profit.non_profit.recipient_selection` are:
+
+- `get_recipient_selection_rows(selection, channel)` accepts a saved name or an
+  already-loaded document. Loading by name checks selection read permission. It
+  validates `enabled`, channel `newsletter` / `direct_mail`, the selection
+  contract, and read permission for every enabled source (`Contact`; both
+  `Member` and `Membership`; or `Donor`). Source and canonical-identity queries
+  apply normal row-level permissions, and evaluation fails closed above 10,000
+  raw source rows. It returns deterministic raw source
+  dictionaries with `canonical_subject_type`, `canonical_subject`, `label`,
+  `source_doctype`, `source_name`, and available `membership`, `contact`,
+  `member`, `customer`, `donor`, and `identity_name` values. This shape is
+  directly accepted by `good_direct_mail.services.preparation.merge_source_rows`.
+- `get_recipient_selection_configuration(selection)` returns a stable,
+  JSON-compatible mapping with `configuration_version = 1`, selection identity,
+  enabled/channel flags, and every source criterion. Direct Mail can include
+  this mapping in a preparation fingerprint so a filter change invalidates a
+  snapshot even when the resulting identities happen to remain equal.
+- `evaluate_recipient_selection(selection)` is the in-memory evaluator used by
+  validation and read-only preview. It applies the same selection and source
+  permission checks but deliberately has no enabled/channel gate, allowing a
+  disabled definition to be saved and previewed safely.
+
+Contact source rows include only blank legacy or explicit `Person`
+`Contact.npo_identity_kind`; optional `contact_tag` matches an exact Contact
+`Tag Link`. Member rows join `Membership -> Member`, apply selected status/type,
+and require `from_date <= membership_active_on <= to_date` (open-ended `to_date`
+qualifies). Contact is canonical when present; Organization uses Customer, blank
+legacy subjects may use Customer, and an Individual missing Contact fails closed.
+Donors apply optional Donor Type, use explicit Household subjects plus the
+compatible blank-subject Household form, then an explicit Individual Contact;
+Organization uses Customer and blank legacy subjects may use Contact or Customer,
+while unsupported subjects fail closed even if stale Contact/Customer links remain. Rows
+whose canonical identity is not permission-visible and canonical Contacts marked
+`Generic Endpoint` are removed. Final raw ordering is canonical type/name,
+source type/name, then Membership.
+
+The optional hook is:
+
+```python
+good_newsletter_audience_providers = [
+    "non_profit.non_profit.recipient_selection.newsletter_audience_provider",
+]
+```
+
+Its provider key is `npo_recipient_selection`. Source discovery uses
+permission-aware `frappe.get_list` and exposes only enabled records marked
+available for newsletters. Member extraction calls the permission-gated service
+again; it never trusts the earlier source list.
+
+Canonical candidates are enriched through
+`correspondence.get_correspondence_profiles` in batches of no more than 500
+canonical candidates and 5,000 related Contact/Member/Donor/Customer names.
+Selection consumers enable its permission-aware mode, which filters every
+related Contact, Customer, Household, and Address before it can influence the
+resolved addressee, language, email, or postal state.
+Contact and Customer email fields are then loaded set-wise. A Contact candidate
+uses its primary `Contact.email_id`. An Organization Customer candidate uses
+`Customer.email_id` first, but only attributes it to a person Contact when that
+Contact carries the same email; unrelated or Generic Endpoint primary Contacts
+are not exposed. A matching unsubscribed Contact or inaccessible related Contact
+rejects that Customer address; the resolver may then use a different eligible
+person Contact email. Customer and Contact fields are permission-filtered in
+complete 500-name queries, so large related sets are neither truncated nor read
+one row at a time. It then checks the profile's deterministic primary/linked person
+Contacts. A Household uses current Household Person contacts in profile
+order (primary first, then Contact name). An email selected through an
+unsubscribed Contact is excluded, and final email addresses are deduplicated
+case-insensitively in canonical-candidate order.
+
+Provider rows contain `email`, `contact`, `first_name`, `last_name`, complete
+gender-neutral `salutation`, and `language`. Correspondence language variants
+normalize to Good Newsletter's supported `de` / `fr` / `it` / `en`; unsupported
+or missing values remain blank so the target Audience applies its configured
+default. The complete neutral salutation uses the same default German greeting
+when language is blank, matching Good Newsletter's default Audience language,
+without inventing a stored language on the source identity.
+
+The typed, GET-only `preview_recipient_selection(selection)` endpoint checks
+selection and source permissions, counts the complete canonical union, and
+enriches only its first 50 deterministic candidates. Each row contains subject
+type/name, label, email, language, and `postal_ready`; structured postal fields
+never cross the endpoint. `postal_ready` means correspondence resolved one active
+Address containing address line, postal code, city, and country.
+
+The form script uses the Actions menu. Every action rejects a dirty form so it
+cannot evaluate or materialize stale persisted criteria. Preview is available on
+every saved selection. Newsletter campaign creation is shown only for an enabled Newsletter
+channel and create permission on both optional Good Newsletter Campaign and
+Audience DocTypes; it invokes
+`good_newsletter.api.campaign.create_from_source` with provider
+`npo_recipient_selection`. Direct Mail routing is shown only for its enabled
+channel and Good Direct Mail Run create permission; `frappe.new_doc` receives
+only `recipient_selection` and `title`, so no server dependency is introduced.
+
 ## Hooks
 
 - `after_install = non_profit.setup.setup_non_profit`
@@ -188,6 +298,8 @@ identity DocType.
   refreshes app-owned fundraising fixtures. It does not rename ERPNext records,
   delete Item Prices, or alter global Customer, Address, Fiscal Year, or Email
   Account data on an existing shared site.
+- `good_newsletter_audience_providers` registers the optional
+  `npo_recipient_selection` provider factory without importing Good Newsletter.
 - `doc_events["Membership"]["validate"] = non_profit.non_profit.membership_sync.validate_no_overlap`
   blocks overlapping active Memberships by default. Callers can set
   `doc.flags.warn_on_membership_overlap = True` before validation when an
@@ -813,7 +925,8 @@ installed-content hash.
 
 The Workspace and Workspace Sidebar are both source fixtures. The sidebar uses
 `app: "non_profit"`, `module: "Non Profit"`, and `standard: 1`; the
-`before_uninstall` hook preserves its source file in developer mode.
+`before_uninstall` hook preserves its source file in developer mode. Both expose
+the channel-neutral **Recipient Selections** section.
 
 ## Test Commands
 
@@ -826,6 +939,7 @@ bench --site development16.localhost run-tests --module non_profit.non_profit.do
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.donation.test_donation --test TestDonationPaymentEntryInvariants.test_two_connections_allow_exactly_one_full_allocation
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.donation_receipt.test_donation_receipt
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.recurring_donation.test_recurring_donation
+bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.npo_recipient_selection.test_npo_recipient_selection
 bench --site development16.localhost run-tests --module miki_app.tests.test_end_to_end
 ```
 

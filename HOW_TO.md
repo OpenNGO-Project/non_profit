@@ -69,6 +69,47 @@ thank-you Email Template is create-only and is never refreshed after insertion.
 To adopt a later shipped Print Format after customizing it, review the new
 shipped body and apply or replace the local version manually.
 
+## Saved Recipient Selections
+
+Open **Recipient Selections → NPO Recipient Selection** to save a reusable,
+channel-neutral audience. Only **Non Profit Manager** and **System Manager** can
+manage these records.
+
+1. Enter a unique **Selection Name** and keep **Enabled** selected while the
+   audience may be used. The name becomes the stable campaign source key and
+   cannot be renamed later.
+2. Enable Newsletter, Direct Mail, or both under **Available Channels**.
+3. Enable at least one source: Contacts, Members, or Donors.
+4. Optionally restrict Contacts to one exact Tag, Members by Membership Type,
+   Status, and active date, or Donors by Donor Type.
+5. Save. **Canonical Candidates** counts unique Contact, Customer, or explicit
+   Household identities, not source rows; one person who is both Member and
+   Donor counts once.
+6. Use **Actions → Preview Recipients** to inspect up to 50 labels, email and
+   language results, and whether a complete postal address can be resolved. The
+   preview never displays the postal address itself.
+
+Contact sources include person Contacts only. Member selection uses Membership
+validity on **Membership Active On** and resolves Member Contact before Customer.
+Donor selection uses an explicit or compatible legacy Household subject first,
+then an Individual Contact; Organization uses Customer, and blank legacy subjects
+may use Contact or Customer. Unsupported identities fail closed even if stale
+links remain, and Generic Endpoint Contacts never become recipients. Evaluation
+and correspondence enrichment use normal row-level permissions and ask you to
+narrow the filters if more than 10,000 raw source rows match.
+
+When Good Newsletter is installed and the user can create both a Campaign and
+Audience, **Actions → Create Newsletter Campaign** creates an additive audience
+snapshot. Choose **Import as Pending** unless an existing consent or relationship
+permits mailing. Contact opt-outs are excluded and duplicate email addresses are
+collapsed case-insensitively. When Good Direct Mail is installed and permitted,
+**Actions → Create Direct Mail Run** opens a new Run with this selection and its
+title prefilled. Neither optional action appears without its app/permissions.
+
+The count and **Last Evaluated On** are refreshed when the selection is saved.
+Source data may change later; save the selection again before comparing its
+stored count, and let the consuming campaign create its own current snapshot.
+
 ## Donations
 
 Use **Donor** (Spender), **Donation Campaign** (Spendenkampagne), **Donation** (Spende), and **Donation Receipt** (Spendenbescheinigung) for fundraising workflows.
