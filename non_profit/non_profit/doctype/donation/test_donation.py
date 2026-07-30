@@ -735,26 +735,30 @@ def _configure_donation_payment_entry_test_settings() -> None:
 
 
 def _restore_concurrency_global_state(state: dict) -> None:
-	for fieldname, value in state["settings"].items():
-		filters = {"doctype": "Non Profit Settings", "field": fieldname}
-		if value is None:
-			frappe.db.delete("Singles", filters)
-		elif frappe.db.exists("Singles", filters):
-			frappe.db.set_value("Singles", filters, "value", value, update_modified=False)
-		else:
-			single_value = frappe.qb.DocType("Singles")
-			(
-				frappe.qb.into(single_value)
-				.columns(single_value.doctype, single_value.field, single_value.value)
-				.insert("Non Profit Settings", fieldname, value)
-			).run()
+	settings = state["settings"]
+	frappe.db.delete(
+		"Singles",
+		{"doctype": "Non Profit Settings", "field": ["in", list(settings)]},
+	)
+	rows = [
+		("Non Profit Settings", fieldname, value)
+		for fieldname, value in settings.items()
+		if value is not None
+	]
+	if rows:
+		single_value = frappe.qb.DocType("Singles")
+		(
+			frappe.qb.into(single_value)
+			.columns(single_value.doctype, single_value.field, single_value.value)
+			.insert(*rows)
+		).run()
 
 	frappe.clear_document_cache("Non Profit Settings", "Non Profit Settings")
 	if not state["donor_type_exists"] and frappe.db.exists("Donor Type", "_Test Donor"):
 		restored_donor_type = frappe.db.get_single_value(
 			"Non Profit Settings", "default_donor_type", cache=False
 		)
-		if restored_donor_type != state["settings"]["default_donor_type"]:
+		if restored_donor_type != settings["default_donor_type"]:
 			raise AssertionError("Non Profit Settings.default_donor_type was not restored")
 		if restored_donor_type != "_Test Donor":
 			# The two-connection test can leave core's local Single-value cache on
