@@ -751,7 +751,20 @@ def _restore_concurrency_global_state(state: dict) -> None:
 
 	frappe.clear_document_cache("Non Profit Settings", "Non Profit Settings")
 	if not state["donor_type_exists"] and frappe.db.exists("Donor Type", "_Test Donor"):
-		frappe.delete_doc("Donor Type", "_Test Donor")
+		restored_donor_type = frappe.db.get_single_value(
+			"Non Profit Settings", "default_donor_type", cache=False
+		)
+		if restored_donor_type != state["settings"]["default_donor_type"]:
+			raise AssertionError("Non Profit Settings.default_donor_type was not restored")
+		if restored_donor_type != "_Test Donor":
+			# The two-connection test can leave core's local Single-value cache on
+			# the test fixture. The persisted setting was verified above, so ignore
+			# only that stale Single link while removing the fixture it created.
+			frappe.delete_doc(
+				"Donor Type",
+				"_Test Donor",
+				ignore_doctypes=["Non Profit Settings"],
+			)
 
 	stored_mode = state["mode_of_payment"]
 	if not stored_mode:
