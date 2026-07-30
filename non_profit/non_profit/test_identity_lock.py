@@ -86,14 +86,17 @@ class TestPublicIdentityLock(UnitTestCase):
 
 	def test_commit_fails_closed_after_bounded_hold_period(self) -> None:
 		lock = Mock()
-		with patch("non_profit.non_profit.identity_lock.Thread"):
+		with (
+			patch("non_profit.non_profit.identity_lock.Thread"),
+			patch("non_profit.non_profit.identity_lock.monotonic", return_value=0),
+		):
 			registry = _IdentityLockRegistry()
 		registry.add("key", lock)
 
 		with (
 			patch(
 				"non_profit.non_profit.identity_lock.monotonic",
-				return_value=registry._acquired_at + IDENTITY_LOCK_MAX_HOLD_SECONDS,
+				return_value=IDENTITY_LOCK_MAX_HOLD_SECONDS,
 			),
 			self.assertRaisesRegex(frappe.ValidationError, "Identity serialization expired"),
 		):

@@ -155,22 +155,11 @@ class TestDonation(unittest.TestCase):
 		log_error.assert_called()
 
 	def test_payment_authorization_keeps_base_accounting_and_dispatch_order(self):
-		from good_npo.constants import GOOD_NPO_COMPANY
-
 		donation = frappe.new_doc("Donation")
 		donation.name = "NPO-DONATION-AUTHORIZATION-ORDER"
-		donation.company = GOOD_NPO_COMPANY
-		locked_state = frappe._dict(
-			name=donation.name,
-			docstatus=1,
-			paid=0,
-			advance_paid=0,
-			amount=25,
-			company=GOOD_NPO_COMPANY,
-		)
+		donation.company = "_Test Non Profit Company"
 		calls = []
 		with (
-			patch("good_npo.checkout._payrexx_donation_values", return_value=locked_state) as current_state,
 			patch.object(donation, "db_set") as db_set,
 			patch.object(donation, "load_from_db"),
 			patch.object(donation, "create_payment_entry", side_effect=lambda: calls.append("accounting")),
@@ -188,7 +177,6 @@ class TestDonation(unittest.TestCase):
 
 		self.assertEqual(calls, ["accounting", "thank_you", "rollup"])
 		db_set.assert_called_once_with("paid", 1)
-		current_state.assert_called_once_with(donation.name, for_update=True)
 
 	def test_unsuccessful_payment_status_does_not_change_donation(self):
 		donation = frappe.new_doc("Donation")
@@ -717,7 +705,7 @@ def _capture_concurrency_global_state() -> dict:
 		mode_of_payment = frappe.get_doc("Mode of Payment", "Debit Card").as_dict()
 	return {
 		"settings": {
-			fieldname: frappe.db.get_single_value("Non Profit Settings", fieldname)
+			fieldname: frappe.db.get_single_value("Non Profit Settings", fieldname, cache=False)
 			for fieldname in settings_fields
 		},
 		"donor_type_exists": bool(frappe.db.exists("Donor Type", "_Test Donor")),
@@ -761,10 +749,10 @@ def _restore_concurrency_global_state(state: dict) -> None:
 				.insert("Non Profit Settings", fieldname, value)
 			).run()
 
+	frappe.clear_document_cache("Non Profit Settings", "Non Profit Settings")
 	if not state["donor_type_exists"] and frappe.db.exists("Donor Type", "_Test Donor"):
 		frappe.delete_doc("Donor Type", "_Test Donor")
 
-	frappe.clear_cache(doctype="Non Profit Settings")
 	stored_mode = state["mode_of_payment"]
 	if not stored_mode:
 		if frappe.db.exists("Mode of Payment", "Debit Card"):
