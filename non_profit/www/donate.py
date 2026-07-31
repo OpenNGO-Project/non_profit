@@ -1,3 +1,4 @@
+from math import isfinite
 from urllib.parse import urlencode
 
 import frappe
@@ -5,6 +6,7 @@ from frappe import _
 from frappe.rate_limiter import rate_limit
 from frappe.utils import nowdate, validate_email_address
 
+from non_profit.non_profit.campaign_gate import campaign_matches_company
 from non_profit.non_profit.doctype.donor.donor import (
 	find_donor_by_email,
 	get_or_create_customer_for_donor,
@@ -105,6 +107,12 @@ def _handle_submission(form):
 	except ValueError:
 		frappe.throw(_("Invalid amount"))
 
+	# "inf", "-inf", "nan" and overflowing literals such as "1e400" all parse as
+	# floats. `nan` compares False against every bound, so the positivity check
+	# below lets it through and a non-finite amount reaches the Donation row and
+	# every total/allocation computed from it. Reject non-finite values first.
+	if not isfinite(amount):
+		frappe.throw(_("Invalid amount"))
 	if amount <= 0:
 		frappe.throw(_("Amount must be positive"))
 	if frequency not in {"one_off", "Monthly", "Quarterly", "Yearly"}:
@@ -113,7 +121,7 @@ def _handle_submission(form):
 	company = _resolve_donation_company(settings)
 	if not company:
 		frappe.throw(_("No Company configured on Non Profit Settings"))
-	if campaign and not _public_campaign_matches_company(campaign, company):
+	if campaign and not campaign_matches_company(campaign, company):
 		frappe.throw(_("Selected campaign is not available for the Donation company."))
 
 	donor_type = settings.default_donor_type or "Individual"
@@ -195,29 +203,6 @@ def _resolve_donation_company(settings=None) -> str | None:
 		settings_company
 		or frappe.db.get_default("company")
 		or frappe.db.get_value("Company", {}, "name", order_by="name asc")
-	)
-
-
-def _public_campaign_matches_company(campaign: str, company: str) -> bool:
-	campaign_row = frappe.db.get_value(
-		"Donation Campaign",
-		campaign,
-		["status", "cost_center"],
-		as_dict=True,
-	)
-	if not campaign_row or campaign_row.status != "Active" or not campaign_row.cost_center:
-		return False
-	cost_center = frappe.db.get_value(
-		"Cost Center",
-		campaign_row.cost_center,
-		["company", "is_group", "disabled"],
-		as_dict=True,
-	)
-	return bool(
-		cost_center
-		and cost_center.company == company
-		and not cost_center.is_group
-		and not cost_center.disabled
 	)
 
 

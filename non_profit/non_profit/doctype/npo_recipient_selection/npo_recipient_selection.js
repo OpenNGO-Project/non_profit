@@ -18,11 +18,11 @@ frappe.ui.form.on("NPO Recipient Selection", {
 		if (
 			frm.doc.enabled &&
 			frm.doc.available_for_direct_mail &&
-			frappe.model.can_create("Good Direct Mail Run")
+			frappe.model.can_create("Good Direct Mail Campaign")
 		) {
 			frm.page.add_action_item(__("Create Direct Mail Run"), () => {
 				assertSaved(frm);
-				frappe.new_doc("Good Direct Mail Run", {
+				frappe.new_doc("Good Direct Mail Campaign", {
 					recipient_selection: frm.doc.name,
 					title: frm.doc.selection_name,
 				});
@@ -52,16 +52,20 @@ async function previewRecipients(frm) {
 			</tr>`
 		)
 		.join("");
+	const headerCells = [
+		__("Type"),
+		__("Recipient"),
+		__("Email"),
+		__("Language"),
+		__("Postal Ready"),
+	]
+		.map((label) => `<th>${label}</th>`)
+		.join("");
+	const table = `<div class="table-responsive"><table class="table table-bordered">
+			<thead><tr>${headerCells}</tr></thead><tbody>${rows}</tbody></table></div>`;
 	frappe.msgprint({
 		title: __("{0} Canonical Candidates", [result.total]),
-		message: rows
-			? `<div class="table-responsive"><table class="table table-bordered">
-				<thead><tr><th>${__("Type")}</th><th>${__("Recipient")}</th><th>${__("Email")}</th><th>${__(
-					"Language"
-			  )}</th><th>${__(
-					"Postal Ready"
-			  )}</th></tr></thead><tbody>${rows}</tbody></table></div>`
-			: `<p>${__("No matching recipients.")}</p>`,
+		message: rows ? table : `<p>${__("No matching recipients.")}</p>`,
 		wide: true,
 	});
 }

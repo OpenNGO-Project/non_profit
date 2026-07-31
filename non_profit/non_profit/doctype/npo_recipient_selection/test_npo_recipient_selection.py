@@ -11,6 +11,7 @@ from non_profit.non_profit.doctype.npo_recipient_selection.npo_recipient_selecti
 )
 from non_profit.non_profit.recipient_selection import (
 	MAX_SELECTION_SOURCE_ROWS,
+	PROVIDER_KEY,
 	_assert_source_row_limit,
 	_candidate_email,
 	_donor_canonical_subject,
@@ -411,11 +412,87 @@ class TestNPORecipientSelection(IntegrationTestCase):
 		members = newsletter_selection_members(selection.name)
 
 		expected_contact = min(contact.name for contact in active_contacts)
+		reachable = [row for row in members if row["email"]]
 		self.assertEqual(selection.candidate_count, 3)
-		self.assertEqual(len(members), 1)
-		self.assertEqual(members[0]["contact"], expected_contact)
-		self.assertEqual(members[0]["email"].casefold(), f"shared-{self.suffix}@example.com")
-		self.assertTrue(members[0]["salutation"].startswith("Guten Tag "))
+		self.assertEqual(len(reachable), 1)
+		self.assertEqual(reachable[0]["contact"], expected_contact)
+		self.assertEqual(reachable[0]["email"].casefold(), f"shared-{self.suffix}@example.com")
+		self.assertTrue(reachable[0]["salutation"].startswith("Guten Tag "))
+		# The opted-out candidate stays in the payload with an empty email so the
+		# newsletter import can report it as skipped-without-email.
+		self.assertEqual(len([row for row in members if not row["email"]]), 1)
+
+	def test_newsletter_members_refuse_a_selection_without_the_newsletter_flag(self) -> None:
+		tag = f"refused-selection-{self.suffix}"
+		contact = self._contact("Delta", self.suffix, f"delta-{self.suffix}@example.com")
+		contact.add_tag(tag)
+		direct_mail_only = self._insert_selection(
+			include_contacts=1,
+			contact_tag=tag,
+			available_for_newsletter=0,
+			available_for_direct_mail=1,
+		)
+		disabled = self._insert_selection(
+			selection_name=f"Refused Disabled {self.suffix}",
+			include_contacts=1,
+			contact_tag=tag,
+			enabled=0,
+		)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "not available for newsletter"):
+			newsletter_selection_members(direct_mail_only.name)
+		with self.assertRaisesRegex(frappe.ValidationError, "is disabled"):
+			newsletter_selection_members(disabled.name)
+
+	def test_newsletter_import_confirms_subscribers_and_reports_missing_email(self) -> None:
+		if "good_newsletter" not in frappe.get_installed_apps():
+			self.skipTest("good_newsletter is not installed on this site")
+		from good_newsletter.api.audience import run_import
+
+		tag = f"import-selection-{self.suffix}"
+		reachable = [
+			self._contact("Import One", self.suffix, f"import-one-{self.suffix}@example.com"),
+			self._contact(
+				"Import Two",
+				self.suffix,
+				f"import-two-{self.suffix}@example.com",
+				preferred_language="fr",
+			),
+		]
+		without_email = self._contact("Import Three", self.suffix, None)
+		for contact in (*reachable, without_email):
+			contact.add_tag(tag)
+
+		selection = self._insert_selection(include_contacts=1, contact_tag=tag)
+		audience = frappe.get_doc(
+			{
+				"doctype": "Good Newsletter Audience",
+				"title": f"_GNL Selection Import {self.suffix}",
+				"default_language": "de",
+				"double_opt_in_required": 1,
+			}
+		).insert(ignore_permissions=True)
+
+		totals = run_import(audience.name, PROVIDER_KEY, selection.name, 0, "Administrator")
+
+		self.assertEqual(totals["imported"], 2)
+		self.assertEqual(totals["skipped_no_email"], 1)
+		subscribers = frappe.get_all(
+			"Good Newsletter Subscriber",
+			filters={"audience": audience.name},
+			fields=["email", "status", "salutation", "language", "contact"],
+			order_by="email asc",
+		)
+		self.assertEqual(len(subscribers), 2)
+		self.assertEqual({row.status for row in subscribers}, {"Confirmed"})
+		self.assertEqual({row.contact for row in subscribers}, {contact.name for contact in reachable})
+		by_email = {row.email: row for row in subscribers}
+		german = by_email[f"import-one-{self.suffix}@example.com"]
+		french = by_email[f"import-two-{self.suffix}@example.com"]
+		self.assertEqual(german.language, "de")
+		self.assertTrue(german.salutation.startswith("Guten Tag "))
+		self.assertEqual(french.language, "fr")
+		self.assertTrue(french.salutation.startswith("Bonjour "))
 
 	def test_provider_sources_require_enabled_newsletter_flag(self) -> None:
 		tag = f"provider-selection-{self.suffix}"
@@ -490,9 +567,10 @@ class TestNPORecipientSelection(IntegrationTestCase):
 		self,
 		first_name: str,
 		last_name: str,
-		email: str,
+		email: str | None,
 		*,
 		unsubscribed: int = 0,
+		preferred_language: str = "de",
 	):
 		return frappe.get_doc(
 			{
@@ -500,9 +578,9 @@ class TestNPORecipientSelection(IntegrationTestCase):
 				"first_name": first_name,
 				"last_name": last_name,
 				"npo_identity_kind": "Person",
-				"preferred_language": "de",
+				"preferred_language": preferred_language,
 				"unsubscribed": unsubscribed,
-				"email_ids": [{"email_id": email, "is_primary": 1}],
+				"email_ids": [{"email_id": email, "is_primary": 1}] if email else [],
 			}
 		).insert(ignore_permissions=True)
 

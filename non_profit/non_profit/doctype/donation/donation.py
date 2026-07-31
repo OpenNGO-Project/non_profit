@@ -2,10 +2,12 @@
 # For license information, please see license.txt
 
 
+from math import isfinite
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import cint, get_link_to_form, getdate, now_datetime
+from frappe.utils import cint, flt, get_link_to_form, getdate, now_datetime
 
 from non_profit.non_profit.doctype.donor.donor import (
 	find_donor_by_email,
@@ -22,6 +24,7 @@ class Donation(Document):
 			self.confirmation_key = frappe.generate_hash(length=32)
 
 	def validate(self):
+		self._validate_amount()
 		if self.meta.has_field("grand_total"):
 			# Mirrors Sales Invoice semantics: ERPNext's generic Payment Entry
 			# reference-details fallback computes Donation outstanding amounts
@@ -47,6 +50,18 @@ class Donation(Document):
 		from non_profit.non_profit.custom_doctype.payment_entry import sync_donation_advance_paid
 
 		sync_donation_advance_paid(self.name)
+
+	def _validate_amount(self):
+		# Controller-level invariant: every write path (public forms, portal,
+		# imports, bank reconciliation, Desk) must produce a real amount. Python
+		# and MariaDB both accept `inf`/`nan` doubles, and `nan` compares False
+		# against every bound, so a caller-side `amount <= 0` check alone cannot
+		# keep a non-finite value out of totals, allocations and receipts.
+		amount = flt(self.amount)
+		if not isfinite(amount):
+			frappe.throw(_("Donation amount must be a finite number."))
+		if amount <= 0:
+			frappe.throw(_("Donation amount must be greater than zero."))
 
 	def _validate_major_gift_donor(self):
 		# A linked Major Gift must belong to the same Donor as this Donation.
