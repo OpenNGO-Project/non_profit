@@ -76,12 +76,12 @@ def _supports_automatic_currency_matching(
 	if not bank_account or get_account_currency(bank_account) != bank_transaction.currency:
 		return False
 
-	from non_profit.non_profit.custom_doctype.payment_entry import _expected_donation_party_account
+	from non_profit.non_profit.custom_doctype.payment_entry import expected_donation_party_account
 
 	donation = frappe.db.get_value("Donation", donation_name, ["company", "donor"], as_dict=True)
 	if not donation or donation.company != bank_transaction.company:
 		return False
-	party_account = _expected_donation_party_account(
+	party_account = expected_donation_party_account(
 		frappe._dict(company=donation.company, donor=donation.donor)
 	)
 	return bool(party_account and get_account_currency(party_account) == bank_transaction.currency)
@@ -113,9 +113,9 @@ def get_ebics_reconciliation_candidates(
 def build_ebics_payment_entry(*, bank_transaction, candidate: dict, amount: Decimal, bank_account: str):
 	if not _supports_automatic_currency_matching(candidate["reference_name"], bank_transaction, bank_account):
 		frappe.throw(_("Donation automatic bank matching requires company-currency party and bank accounts."))
-	from non_profit.non_profit.custom_doctype.payment_entry import _build_donation_payment_entry
+	from non_profit.non_profit.custom_doctype.payment_entry import build_donation_payment_entry
 
-	return _build_donation_payment_entry(
+	return build_donation_payment_entry(
 		dt="Donation",
 		dn=candidate["reference_name"],
 		party_amount=flt(amount),

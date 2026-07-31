@@ -104,10 +104,10 @@ def get_donation_payment_entry(
 	if dt != "Donation":
 		frappe.throw(_("Only Donation payment entries are supported here"))
 	frappe.has_permission(dt, "read", doc=dn, throw=True)
-	return _build_donation_payment_entry(dt, dn, party_amount, bank_account, bank_amount)
+	return build_donation_payment_entry(dt, dn, party_amount, bank_account, bank_amount)
 
 
-def _build_donation_payment_entry(
+def build_donation_payment_entry(
 	dt: str,
 	dn: str,
 	party_amount: float | None = None,
@@ -121,7 +121,7 @@ def _build_donation_payment_entry(
 
 	doc = frappe.get_doc(dt, dn)
 
-	party_account = _expected_donation_party_account(doc)
+	party_account = expected_donation_party_account(doc)
 	party_account_currency = doc.get("party_account_currency") or get_account_currency(party_account)
 	grand_total = flt(doc.amount)
 	outstanding_amount = _donation_outstanding_amount(doc.name)
@@ -288,7 +288,7 @@ def _donation_outstanding_amount(donation_name: str, exclude_payment_entry: str 
 	return max(amount - allocated, 0)
 
 
-def _expected_donation_party_account(donation, *, for_update: bool = False) -> str:
+def expected_donation_party_account(donation, *, for_update: bool = False) -> str:
 	if for_update:
 		return _current_expected_donation_party_account(donation)
 	configured_account = frappe.db.get_single_value("Non Profit Settings", "donation_debit_account")
@@ -435,7 +435,7 @@ def _validate_donation_reference_accounts(
 				)
 			)
 
-		expected_account = _expected_donation_party_account(
+		expected_account = expected_donation_party_account(
 			donation,
 			for_update=donation_states is not None,
 		)
@@ -660,7 +660,7 @@ def audit_donation_payment_entry_invariants() -> dict[str, Any]:
 				}
 			)
 
-		expected_account = _expected_donation_party_account(
+		expected_account = expected_donation_party_account(
 			frappe._dict(company=row.donation_company, donor=row.donor)
 		)
 		party_account = row.paid_from if row.payment_type == "Receive" else row.paid_to

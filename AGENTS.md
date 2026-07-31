@@ -109,7 +109,9 @@ procedures), and the code. Record new or changed requirements in
   before deterministic linked person Contacts, current Household people primary
   first, excludes `Contact.unsubscribed`, fails closed for inaccessible related
   Contacts, batches complete permission-aware email reads, and deduplicates email
-  case-insensitively.
+  case-insensitively. A candidate it cannot reach still yields a row with an
+  empty `email` so good_newsletter can report it as `skipped_no_email`; do not
+  "clean up" those rows out of the payload.
 - User-facing selection consumers call correspondence resolution with
   `respect_permissions=True`; permission-invisible related identity and Address
   rows must not influence names, language, email, or postal readiness.

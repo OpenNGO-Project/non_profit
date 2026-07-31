@@ -102,7 +102,12 @@ When Good Newsletter is installed and the user can create both a Campaign and
 Audience, **Actions → Create Newsletter Campaign** creates an additive audience
 snapshot. Choose **Import as Pending** unless an existing consent or relationship
 permits mailing. Contact opt-outs are excluded and duplicate email addresses are
-collapsed case-insensitively. When Good Direct Mail is installed and permitted,
+collapsed case-insensitively. The same selection can also be picked from the
+Audience form in Good Newsletter (**Import Subscribers → NPO Recipient
+Selection**); only enabled selections with **Available for Newsletter** appear
+there. Candidates with no reachable email address are reported in the import
+summary as skipped without an email — fix the missing Contact email and import
+again. When Good Direct Mail is installed and permitted,
 **Actions → Create Direct Mail Run** opens a new Run with this selection and its
 title prefilled. Neither optional action appears without its app/permissions.
 

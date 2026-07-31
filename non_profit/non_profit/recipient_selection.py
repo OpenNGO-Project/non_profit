@@ -513,12 +513,21 @@ def _merge_candidates(rows: list[dict[str, Any]]) -> list[_RecipientCandidate]:
 
 
 def _newsletter_members(candidates: list[_RecipientCandidate]) -> list[dict[str, str]]:
+	"""Return at most one import row per canonical candidate.
+
+	A candidate that resolves to no reachable address keeps a row with an empty
+	``email`` so good_newsletter's import summary can report it as
+	skipped-without-email instead of silently losing it.
+	"""
 	members = []
 	seen_emails: set[str] = set()
 	for _candidate, _profile, email_data in _candidate_delivery_rows(candidates):
 		email = email_data["email"]
+		if not email:
+			members.append(email_data)
+			continue
 		email_key = email.casefold()
-		if not email or email_key in seen_emails:
+		if email_key in seen_emails:
 			continue
 		seen_emails.add(email_key)
 		members.append(email_data)

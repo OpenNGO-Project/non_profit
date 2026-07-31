@@ -18,11 +18,11 @@ frappe.ui.form.on("NPO Recipient Selection", {
 		if (
 			frm.doc.enabled &&
 			frm.doc.available_for_direct_mail &&
-			frappe.model.can_create("Good Direct Mail Run")
+			frappe.model.can_create("Good Direct Mail Campaign")
 		) {
 			frm.page.add_action_item(__("Create Direct Mail Run"), () => {
 				assertSaved(frm);
-				frappe.new_doc("Good Direct Mail Run", {
+				frappe.new_doc("Good Direct Mail Campaign", {
 					recipient_selection: frm.doc.name,
 					title: frm.doc.selection_name,
 				});
