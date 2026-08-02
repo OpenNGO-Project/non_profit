@@ -453,7 +453,7 @@ class TestDonationPaymentEntryInvariants(IntegrationTestCase):
 		donation = create_submitted_donation(100)
 		donor = donation.donor
 		payment_entries = [insert_donation_payment_entry(donation).name for _index in range(2)]
-		frappe.db.commit()
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit
 		try:
 			barrier = Barrier(2)
 			with ThreadPoolExecutor(max_workers=2) as executor:
@@ -489,7 +489,7 @@ class TestDonationPaymentEntryInvariants(IntegrationTestCase):
 			frappe.db.rollback()
 			_cleanup_concurrent_allocation_fixture(payment_entries, donation.name, donor)
 			_restore_concurrency_global_state(self._concurrency_global_state)
-			frappe.db.commit()
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit
 
 	def test_fully_allocated_donation_payment_helper_is_rejected(self):
 		donation = create_submitted_donation(100)

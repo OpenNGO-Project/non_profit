@@ -17,3 +17,9 @@
 - Rule: `frappe-manual-commit`
 - What it prevents: Manual transaction commits in ordinary request or document lifecycle code.
 - Why this override is safe: This is an operator-invoked bench smoke script, not a request handler or DocType hook. It deliberately commits the isolated fixture it creates so a separate PDF render command can read it.
+
+## `frappe-manual-commit` in `non_profit/non_profit/doctype/donation/test_donation.py`
+
+- Rule: `frappe-manual-commit`
+- What it prevents: Manual commits in application paths that could expose partial writes outside Frappe's request transaction.
+- Why this override is safe: The annotated calls are test-only boundaries for a two-connection allocation race. The first makes fixtures visible to independent database connections; the second durably removes those fixtures and restores global settings in `finally`. Production code does not execute either call.
