@@ -8,19 +8,29 @@ from hashlib import sha256
 
 import frappe
 
-DONATION_RECEIPT_DE_HTML = """
+DONATION_TAX_RECEIPT_PRINT_FORMAT = "Spendenbescheinigung"
+
+# German Spendenbescheinigung for `Donation Tax Receipt` (the single Bescheinigung
+# since non_profit 16.10.0). The layout, the German field wording and the
+# "Einzelspenden" table are carried over from the retired `Donation Receipt DE`
+# format; the German income-tax paragraphs (§ 10b EStG / § 5 KStG / § 9 GewStG)
+# are deliberately NOT carried over — this receipt is Swiss and CHF-only, and the
+# app has always rejected German-law wording on the Swiss send path.
+# The header stays address-free: donor address and issuer identity come from the
+# Letter Head, exactly like the legacy format.
+DONATION_TAX_RECEIPT_DE_HTML = """
 <div style="font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #222;">
     <div style="text-align: right; margin-bottom: 1em;">
-        <strong>Zuwendungsbestätigung</strong><br>
+        <strong>Spendenbescheinigung</strong><br>
         Nr.: {{ doc.name }}
     </div>
-    <h2 style="margin: 1em 0 0.3em 0;">Bestätigung über Geldzuwendungen / Mitgliedsbeiträge</h2>
-    <p style="font-style: italic; margin: 0 0 1.5em 0; font-size: 9pt;">im Sinne des § 10b des Einkommensteuergesetzes an eine der in § 5 Abs. 1 Nr. 9 des Körperschaftsteuergesetzes bezeichneten Körperschaften, Personenvereinigungen oder Vermögensmassen</p>
+    <h2 style="margin: 1em 0 0.3em 0;">Bestätigung über Geldzuwendungen</h2>
+    <p style="font-style: italic; margin: 0 0 1.5em 0; font-size: 9pt;">Jahresbescheinigung über die im Steuerjahr {{ doc.tax_year }} geleisteten Zuwendungen</p>
 
     <table style="width: 100%; margin-bottom: 1.5em;">
         <tr>
-            <td style="width: 35%; vertical-align: top;"><strong>Name und Anschrift des Zuwendenden:</strong></td>
-            <td>{{ doc.donor_name }}{% if doc.email %}<br>{{ doc.email }}{% endif %}</td>
+            <td style="width: 35%; vertical-align: top;"><strong>Name des Zuwendenden:</strong></td>
+            <td>{{ doc.donor_name }}</td>
         </tr>
     </table>
 
@@ -31,7 +41,7 @@ DONATION_RECEIPT_DE_HTML = """
         </tr>
         <tr>
             <td><strong>Tag der Zuwendung:</strong></td>
-            <td>Zeitraum vom {{ frappe.utils.format_date(doc.period_from, "dd.MM.yyyy") }} bis {{ frappe.utils.format_date(doc.period_to, "dd.MM.yyyy") }}</td>
+            <td>Steuerjahr {{ doc.tax_year }} (01.01.{{ doc.tax_year }} bis 31.12.{{ doc.tax_year }})</td>
         </tr>
     </table>
 
@@ -45,9 +55,9 @@ DONATION_RECEIPT_DE_HTML = """
             </tr>
         </thead>
         <tbody>
-            {% for row in doc.donations %}
+            {% for row in frappe.utils.parse_json(doc.donation_details) or [] %}
             <tr>
-                <td style="border: 1px solid #ccc; padding: 4px 8px;">{{ frappe.utils.format_date(row.donation_date, "dd.MM.yyyy") }}</td>
+                <td style="border: 1px solid #ccc; padding: 4px 8px;">{{ frappe.utils.format_date(row.date, "dd.MM.yyyy") }}</td>
                 <td style="border: 1px solid #ccc; padding: 4px 8px;">{{ row.donation }}</td>
                 <td style="text-align: right; border: 1px solid #ccc; padding: 4px 8px;">{{ frappe.utils.fmt_money(row.amount, currency=doc.currency) }}</td>
             </tr>
@@ -61,7 +71,9 @@ DONATION_RECEIPT_DE_HTML = """
 
     <p style="margin-top: 2em; font-size: 10pt;">Es handelt sich nicht um den Verzicht auf Erstattung von Aufwendungen.</p>
 
-    <p style="margin-top: 1em; font-size: 9pt;">Wir bestätigen, dass die Zuwendung nur zur Förderung steuerbegünstigter Zwecke im Sinne des Freistellungsbescheids verwendet wird.</p>
+    <p style="margin-top: 1em; font-size: 10pt;">Wir bestätigen, dass die aufgeführten Zuwendungen eingegangen sind und ausschliesslich zur Förderung der steuerbefreiten gemeinnützigen Zwecke unserer Organisation verwendet werden. Diese Bescheinigung dient als Nachweis für Ihre Steuererklärung.</p>
+
+    {% if doc.remarks %}<p style="margin-top: 1em; font-size: 10pt;">{{ doc.remarks }}</p>{% endif %}
 
     <div style="margin-top: 3em;">
         <table style="width: 100%;">
@@ -72,16 +84,14 @@ DONATION_RECEIPT_DE_HTML = """
             </tr>
         </table>
     </div>
-
-    <p style="margin-top: 2em; font-size: 8pt; color: #666;">Hinweis: Wer vorsätzlich oder grob fahrlässig eine unrichtige Zuwendungsbestätigung erstellt oder wer veranlasst, dass Zuwendungen nicht zu den in der Zuwendungsbestätigung angegebenen steuerbegünstigten Zwecken verwendet werden, haftet für die entgangene Steuer (§ 10b Abs. 4 EStG, § 9 Abs. 3 KStG, § 9 Nr. 5 GewStG).</p>
 </div>
 """
 
 # Keep hashes of every previously shipped body. Matching content is app-managed
 # and may be upgraded; any other body belongs to the operator and is preserved.
-DONATION_RECEIPT_DE_MANAGED_HASHES = frozenset(
+DONATION_TAX_RECEIPT_DE_MANAGED_HASHES = frozenset(
 	{
-		"c1a06b2aa047d8de2c3d2c68358607b87be011593b11fac4d720f134c7317a23",
+		"36fdea4641a95c1ba07c644dbb5c16a2eab35b0fd3340dfcd8a9f736ee78740f",
 	}
 )
 
@@ -110,7 +120,7 @@ def ensure_fundraising_fixtures():
 	make_custom_fields()
 	disable_test_loyalty_auto_opt_in()
 	ensure_non_profit_desk_roles()
-	ensure_print_format()
+	ensure_tax_receipt_print_format()
 	ensure_swiss_qrbill_print_format()
 	ensure_email_template()
 	ensure_settings_defaults()
@@ -190,12 +200,12 @@ def ensure_swiss_qrbill_print_format():
 	)
 
 
-def ensure_print_format():
+def ensure_tax_receipt_print_format():
 	ensure_managed_print_format(
-		name="Donation Receipt DE",
-		doc_type="Donation Receipt",
-		html=DONATION_RECEIPT_DE_HTML,
-		managed_hashes=DONATION_RECEIPT_DE_MANAGED_HASHES,
+		name=DONATION_TAX_RECEIPT_PRINT_FORMAT,
+		doc_type="Donation Tax Receipt",
+		html=DONATION_TAX_RECEIPT_DE_HTML,
+		managed_hashes=DONATION_TAX_RECEIPT_DE_MANAGED_HASHES,
 	)
 
 
@@ -279,11 +289,6 @@ def ensure_settings_defaults():
 		"Email Template", "Donation Thank You DE"
 	):
 		settings.default_thank_you_template = "Donation Thank You DE"
-		changed = True
-	if (
-		not settings.default_receipt_country or settings.default_receipt_country == "Germany"
-	) and frappe.db.exists("Country", "Switzerland"):
-		settings.default_receipt_country = "Switzerland"
 		changed = True
 
 	if changed:

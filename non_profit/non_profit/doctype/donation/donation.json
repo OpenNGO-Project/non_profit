@@ -32,7 +32,6 @@
   "column_break_12",
   "payment_id",
   "confirmation_key",
-  "receipt",
   "amended_from"
  ],
  "fields": [
@@ -97,13 +96,6 @@
    "in_standard_filter": 1,
    "label": "Major Gift",
    "options": "Major Gift"
-  },
-  {
-   "fieldname": "receipt",
-   "fieldtype": "Link",
-   "label": "Receipt",
-   "options": "Donation Receipt",
-   "read_only": 1
   },
   {
    "fieldname": "column_break_4",

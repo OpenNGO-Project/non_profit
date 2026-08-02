@@ -17,7 +17,7 @@ Non Profit ist die gemeinsame fachliche Basis für Spenden, Mitglieder, Verdanku
 |---|---|
 | Spenden erfassen | **Donor**, **Donation**, **Donation Campaign** |
 | Verdankungen verwalten | **Donation** |
-| Spendenbescheinigungen erstellen | **Donation Receipt** |
+| Spendenbescheinigungen erstellen | **Donation Tax Receipt** |
 | Mitglieder und Haushalte führen | **Member**, **Household**, **Membership**, **Membership Type** |
 | Empfänger für Kommunikation auswählen | **NPO Recipient Selection** |
 | Wiederkehrende Spenden | **Recurring Donation** |

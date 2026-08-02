@@ -23,11 +23,6 @@ Prüfen Sie die Einstellungen nach der Installation, nach einem Firmenwechsel od
   optionales Invoice Print Format und Email Template.
 - **Donation Settings**: Donation Company, Default Donor Type, automatische
   Payment Entries, Debit-/Zahlungskonto und Standard-Dankesmail.
-- **Default Receipt Country**: Datenstandard; ändert nicht den Rechtstext eines
-  Print Formats.
-- **Approved Swiss Donation Receipt Print Format**: rechtlich freigegebene
-  Schweizer Vorlage für den automatischen Versand. **Donation Receipt DE** ist
-  hier unzulässig.
 - **Creation User**: technischer Benutzer für automatisierte Dokumente.
 - **Major Donor Threshold**: Schwelle für automatische Grossspender-Markierung.
 
@@ -46,8 +41,8 @@ Prüfen Sie zuerst die Non Profit Settings und danach die Einstellungen der kund
 **Soll ich kundenspezifisches Branding hier pflegen?**
 Nein. Branding, Briefpapier und Demo-Oberflächen gehören in die jeweilige Kunden- oder Präsentations-App.
 
-**Kann ich Donation Receipt DE in der Schweiz verwenden?**
-Nein, nicht über den automatischen Schweizer Versand. Die Vorlage enthält
-deutsches Steuerrecht und wird dort ausdrücklich abgelehnt. Das Feld **Default
-Receipt Country** lokalisiert die Vorlage nicht; installieren und wählen Sie eine
-von der Organisation freigegebene Schweizer Vorlage.
+**Wo stelle ich die Spendenbescheinigung ein?**
+Nirgends in Non Profit Settings. Die Vorlage ist das mitgelieferte Print Format
+**Spendenbescheinigung** für **Donation Tax Receipt**. Bearbeiten Sie es, sobald
+Ihre Organisation eine eigene rechtlich freigegebene Fassung braucht — ein
+bearbeitetes Format wird bei Updates nicht überschrieben.

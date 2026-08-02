@@ -4,9 +4,8 @@
 "Donor Name","Spender"
 "Donation","Spende"
 "Donations","Spenden"
-"Donation Receipt","Spendenbescheinigung"
-"Donation Receipts","Spendenbescheinigungen"
-"Receipt","Spendenbescheinigung"
+"Donation Tax Receipt","Spendenbescheinigung"
+"Donation Tax Receipts","Spendenbescheinigungen"
 "Paid","Bezahlt"
 "Reconciled","Abgestimmt"
 "Reconciled On","Abgestimmt am"
@@ -23,11 +22,22 @@
 "Campaign","Kampagne"
 "Donation Campaign","Spendenkampagne"
 "Donation Campaigns","Spendenkampagnen"
-"Spendenbescheinigung senden","Spendenbescheinigung senden"
-"Spendenbescheinigung gesendet.","Spendenbescheinigung gesendet."
-"Jährliche Spendenbescheinigungen erstellen","Jährliche Spendenbescheinigungen erstellen"
-"Spendenbescheinigungen werden erstellt...","Spendenbescheinigungen werden erstellt..."
-"{0} Spendenbescheinigungen erstellt","{0} Spendenbescheinigungen erstellt"
+"Spendenbescheinigung per E-Mail senden","Spendenbescheinigung per E-Mail senden"
+"Die Spendenbescheinigung {0} als PDF an die Spenderin / den Spender senden?","Die Spendenbescheinigung {0} als PDF an die Spenderin / den Spender senden?"
+"Spendenbescheinigung wird gesendet...","Spendenbescheinigung wird gesendet..."
+"Spendenbescheinigung an {0} gesendet.","Spendenbescheinigung an {0} gesendet."
+"Spendenbescheinigung {0}","Spendenbescheinigung {0}"
+"Tax Year","Steuerjahr"
+"Donation Details","Einzelspenden"
+"Qualifying Donations","Berücksichtigte Spenden"
+"Issued","Ausgestellt"
+"Cancelled","Storniert"
+"Cancelled On","Storniert am"
+"Cancelled By","Storniert von"
+"Cancellation Reason","Stornierungsgrund"
+"Spendenbescheinigung stornieren","Spendenbescheinigung stornieren"
+"Stornierungsgrund","Stornierungsgrund"
+"Spendenbescheinigung wird storniert...","Spendenbescheinigung wird storniert..."
 "Verdankung senden","Verdankung senden"
 "Als extern verdankt markieren","Als extern verdankt markieren"
 "Verdankung gesendet.","Verdankung gesendet."
@@ -96,14 +106,12 @@ Customer {0} has been created succesfully.,Kunde {0} wurde erfolgreich erstellt.
 Customer {0} has been created successfully.,Kunde {0} wurde erfolgreich erstellt.
 Default Donation Campaign,Standard-Spendenkampagne
 Default Donor Type,Standard-Spendertyp
-Default Receipt Country,Standardland für Spendenbestätigung
 Default Thank You Email Template,Standard-E-Mail-Vorlage für Verdankung
 Demo payments are disabled on this site.,Demo-Zahlungen sind auf dieser Site deaktiviert.
 Die Zahlung muss durch einen konfigurierten Zahlungsanbieter bestätigt werden.,Die Zahlung muss durch einen konfigurierten Zahlungsanbieter bestätigt werden.
 Discuss ID,Discuss-ID
 Display Order,Anzeigereihenfolge
 Donation Payment To,Spendenzahlung an
-Donation Receipt Item,Artikel für Spendenbestätigung
 Donation Settings,Spendeneinstellungen
 Donor Contact Creation Failed,Spenderkontakt konnte nicht erstellt werden
 Donor Count,Spenderanzahl
@@ -210,7 +218,6 @@ Please select a Member,Bitte ein Mitglied auswählen
 Please set a Linked Item for Membership Type {0}.,Bitte einen verknüpften Artikel für Mitgliedschaftstyp {0} setzen.
 Please set a Linked Item for the Membership Type {0},Bitte einen verknüpften Artikel für den Mitgliedschaftstyp {0} setzen
 Preferred Language,Bevorzugte Sprache
-Receipt Delivery,Zustellung der Spendenbestätigung
 Recurring Donation,Wiederkehrende Spende
 Referenz,Referenz
 Referenz:,Referenz:
