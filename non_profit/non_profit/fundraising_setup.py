@@ -20,7 +20,7 @@ DONATION_RECEIPT_DE_HTML = """
     <table style="width: 100%; margin-bottom: 1.5em;">
         <tr>
             <td style="width: 35%; vertical-align: top;"><strong>Name und Anschrift des Zuwendenden:</strong></td>
-            <td>{{ doc.donor_name }}{% if doc.email %}<br>{{ doc.email }}{% endif %}</td>
+            <td>{{ doc.donor_name | e }}{% if doc.email %}<br>{{ doc.email | e }}{% endif %}</td>
         </tr>
     </table>
 
@@ -82,11 +82,12 @@ DONATION_RECEIPT_DE_HTML = """
 DONATION_RECEIPT_DE_MANAGED_HASHES = frozenset(
 	{
 		"c1a06b2aa047d8de2c3d2c68358607b87be011593b11fac4d720f134c7317a23",
+		"09a97a7a667e67b7f9177fde84127246a25626d4732619a412c38765b0e03776",
 	}
 )
 
 
-THANK_YOU_EMAIL_HTML = """<p>Liebe/r {{ doc.donor_name }},</p>
+THANK_YOU_EMAIL_HTML = """<p>Liebe/r {{ doc.donor_name | e }},</p>
 
 <p>herzlichen Dank für Ihre großzügige Spende in Höhe von <strong>{{ frappe.utils.fmt_money(doc.amount, currency="EUR") }}</strong>!</p>
 
@@ -149,7 +150,7 @@ DONATION_SLIP_CH_HTML = """
 	<table style="width: 100%; margin-bottom: 1em; border-collapse: collapse;">
 		<tr>
 			<td style="width: 35%; padding: 4px 0;"><strong>Spender:in</strong></td>
-			<td>{{ doc.donor_name }}{% if doc.email %}<br>{{ doc.email }}{% endif %}</td>
+			<td>{{ doc.donor_name | e }}{% if doc.email %}<br>{{ doc.email | e }}{% endif %}</td>
 		</tr>
 		<tr>
 			<td style="padding: 4px 0;"><strong>Betrag</strong></td>
@@ -176,6 +177,7 @@ DONATION_SLIP_CH_HTML = """
 DONATION_SLIP_CH_MANAGED_HASHES = frozenset(
 	{
 		"55df655758ecbdd705476175b4f13e628f106fc4e6268c46b0c374ce057b7d7c",
+		"930d2ea12fc6daae856332792577551e90089fa07a187556509cbfc99343f789",
 	}
 )
 

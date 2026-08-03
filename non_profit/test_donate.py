@@ -75,6 +75,14 @@ class TestDonatePage(FrappeTestCase):
 		self.assertIn("CAPTCHA is not configured. Please contact support.", template)
 		self.assertIn('data-testid="donate-submit" disabled', template)
 
+	def test_confirm_page_escapes_guest_controlled_donor_name(self) -> None:
+		# donor_name is guest-supplied and this page is reachable by anyone
+		# holding the confirmation-key link; Frappe website Jinja does not
+		# autoescape, so the field must carry the escape filter.
+		template = (Path(__file__).parent / "www" / "donate_confirm.html").read_text(encoding="utf-8")
+		self.assertIn("donation.donor_name | e", template)
+		self.assertNotIn("{{ donation.donor_name }}", template)
+
 	def test_captcha_loader_state_controls_submit_and_supports_retry(self) -> None:
 		template = (Path(__file__).parent / "www" / "donate.html").read_text(encoding="utf-8")
 		self.assertIn("new MutationObserver(syncSubmitState)", template)

@@ -17,14 +17,14 @@
 		{% else %}
 			<h2>{{ _("Zahlung abschließen") }}</h2>
 			{% if error %}
-				<div class="alert alert-danger">{{ error }}</div>
+				<div class="alert alert-danger">{{ error | e }}</div>
 			{% endif %}
 			<p class="text-muted">{{ _("Die Zahlung muss durch einen konfigurierten Zahlungsanbieter bestätigt werden.") }}</p>
 			<div class="card" style="margin-top: 1em; padding: 1em; border: 1px solid #ddd; border-radius: 6px;">
 				<table class="table" style="margin: 0;">
 					<tr><td>{{ _("Betrag") }}</td><td><strong data-testid="confirm-amount">{{ frappe.utils.fmt_money(donation.amount, currency="EUR") }}</strong></td></tr>
 					<tr><td>{{ _("Referenz") }}</td><td data-testid="confirm-ref">{{ donation.name }}</td></tr>
-					<tr><td>{{ _("Name") }}</td><td>{{ donation.donor_name }}</td></tr>
+					<tr><td>{{ _("Name") }}</td><td>{{ donation.donor_name | e }}</td></tr>
 				</table>
 			</div>
 			{% if mock_payments_enabled %}

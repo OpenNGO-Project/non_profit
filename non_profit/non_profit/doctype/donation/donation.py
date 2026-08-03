@@ -93,6 +93,13 @@ class Donation(Document):
 	def on_payment_authorized(self, status_changed_to: str | None = None, *args, **kwargs):
 		if status_changed_to not in (None, "Authorized", "Completed"):
 			return
+		# Idempotency: a duplicate or late gateway callback for an already-paid
+		# donation must not re-run allocation. create_payment_entry() raises
+		# "fully allocated" on such a donation, and the except-handler below
+		# would then flip a genuinely-paid donation back to paid=0. Re-read the
+		# stored flag so a stale in-memory instance cannot skip this guard.
+		if frappe.db.get_value("Donation", self.name, "paid"):
+			return
 		self.db_set("paid", 1)
 		self.load_from_db()
 		try:
