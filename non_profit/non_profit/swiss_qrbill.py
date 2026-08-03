@@ -1,7 +1,10 @@
 """Minimal Swiss QR-bill generator for Donation / Sales Invoice print formats.
 
-Uses the `qrbill` PyPI package (SIX-compliant). Creditor details come from
-`Non Profit Settings` so each NGO configures their own IBAN and address.
+Dispatches to ``non_profit_qr_bill_svg_providers`` hooks first, so private
+downstream apps can render richer, bank-grade slips without this public
+repository importing them. The standalone fallback uses the `qrbill` PyPI
+package (SIX-compliant) with creditor details from `Non Profit Settings`,
+so each NGO configures their own IBAN and address.
 
 Returns an inline error message when creditor details are not configured.
 """
@@ -12,6 +15,8 @@ from io import StringIO
 
 import frappe
 from frappe.utils import flt
+
+QR_BILL_SVG_PROVIDER_HOOK = "non_profit_qr_bill_svg_providers"
 
 
 def _resolve_creditor() -> tuple[str | None, dict | None]:
@@ -35,7 +40,19 @@ def swiss_qrbill_svg(doc) -> str:
 	`amount` or `grand_total`; debtor from `donor_name`/`customer_name`.
 	Errors are swallowed to a visible inline message so a bad config never
 	crashes the print format.
+
+	Providers registered under ``non_profit_qr_bill_svg_providers`` are
+	consulted first (private downstream apps deliver QRR-referenced slips
+	there); the standalone qrbill fallback below must stay free of
+	private-app imports — this repository is public.
 	"""
+	for method in frappe.get_hooks(QR_BILL_SVG_PROVIDER_HOOK) or []:
+		try:
+			if svg := frappe.get_attr(method)(doc):
+				return svg
+		except Exception:
+			frappe.log_error(title="non_profit QR-bill provider failed", message=frappe.get_traceback())
+
 	try:
 		iban, creditor = _resolve_creditor()
 		if not iban or not creditor:
@@ -52,22 +69,17 @@ def swiss_qrbill_svg(doc) -> str:
 		amount_raw = doc.get("amount") or doc.get("grand_total") or 0
 		amount = flt(amount_raw)
 		amount_str = f"{amount:.2f}" if amount > 0 else None
-		reference_number = None
-		if "good_connector" in frappe.get_installed_apps():
-			from good_connector.qr_bill import is_qr_iban, resolve_qrr_reference
-
-			if is_qr_iban(iban):
-				reference_doctype = doc.get("doctype") or "Donation"
-				reference_number = resolve_qrr_reference(
-					doc.get("name"),
-					doctype=reference_doctype,
-					stored_reference=doc.get("gc_qr_reference"),
-				)
 
 		# Debtor is optional on QR-bill — we only pass it if we have a
 		# complete address (postal code is mandatory in the spec). Otherwise
 		# the donor fills in their details on the printed slip.
 		debtor = None
+
+		# The registered QRR lives on the document itself (gc_qr_reference,
+		# written by this app's own reference registration on submit). It must
+		# reach the slip: a QR-IBAN account is invalid without a QRR, and a
+		# slip without the registered reference can never auto-reconcile.
+		reference = (doc.get("gc_qr_reference") or "").strip() or None
 
 		bill = QRBill(
 			account=iban,
@@ -75,7 +87,7 @@ def swiss_qrbill_svg(doc) -> str:
 			amount=amount_str,
 			currency="CHF",
 			debtor=debtor,
-			reference_number=reference_number,
+			reference_number=reference,
 			additional_information=doc.get("name") or "",
 			language="de",
 		)

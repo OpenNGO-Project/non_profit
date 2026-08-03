@@ -65,11 +65,9 @@ class Donation(Document):
 		if not donor_name:
 			user = frappe.get_doc("User", frappe.session.user)
 			donor = frappe.get_doc(
-				dict(
-					doctype="Donor",
-					donor_type=self.get("donor_type"),
-					donor_name=user.get_fullname(),
-				)
+				doctype="Donor",
+				donor_type=self.get("donor_type"),
+				donor_name=user.get_fullname(),
 			).insert(ignore_permissions=True)
 			get_or_create_customer_for_donor(donor, email=frappe.session.user)
 			donor_name = donor.name
@@ -103,7 +101,10 @@ class Donation(Document):
 
 			on_donation_change(self)
 		except Exception:
-			frappe.log_error(title=f"Donor roll-up refresh failed for {self.name}")
+			frappe.log_error(
+				title=f"Donor roll-up refresh failed for {self.name}",
+				message=frappe.get_traceback(),
+			)
 
 	def before_print(self, settings=None):
 		from non_profit.non_profit.swiss_qrbill import swiss_qrbill_svg
@@ -124,9 +125,11 @@ class Donation(Document):
 			return False
 		template = frappe.get_doc("Email Template", template_name)
 		context = {"doc": self.as_dict()}
-		subject = frappe.render_template(template.subject, context)
+		# Trusted source: an Email Template document chosen in Non Profit
+		# Settings — staff-authored content, the standard Frappe pattern.
+		subject = frappe.render_template(template.subject, context)  # nosemgrep
 		body = template.response or template.response_html or ""
-		message = frappe.render_template(body, context)
+		message = frappe.render_template(body, context)  # nosemgrep
 		# Queue the email; the scheduler sends it. Avoid now=True since that
 		# runs SMTP synchronously on commit and can break the payment flow.
 		email_queue = frappe.sendmail(

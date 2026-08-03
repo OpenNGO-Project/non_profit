@@ -8,13 +8,7 @@ from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.model.document import Document
 from frappe.utils import cstr, getdate, nowdate
 
-try:
-	from good_connector.identity_matching import (
-		resolve_or_create_contact_from_external_signup,
-	)
-except ImportError:
-	resolve_or_create_contact_from_external_signup = None
-
+from non_profit.non_profit.integration_hooks import CONTACT_RESOLUTION, first_provider
 from non_profit.non_profit.utils import (
 	ensure_canonical_contact_available,
 	ensure_person_contact,
@@ -38,11 +32,6 @@ class Member(Document):
 			self.subject_type = "Individual"
 			ensure_person_contact(self.contact)
 		self.set_derived_household()
-		if not self.member_name:
-			frappe.throw(_("Member Name is required."))
-
-		if self.email_id:
-			self.validate_email_type(self.email_id)
 
 	def set_member_name_from_customer(self) -> None:
 		if self.customer and not cstr(self.member_name).strip():
@@ -52,11 +41,6 @@ class Member(Document):
 		from non_profit.non_profit.doctype.household.household import get_current_household
 
 		self.household = get_current_household(self.contact) if self.contact else None
-
-	def validate_email_type(self, email):
-		from frappe.utils import validate_email_address
-
-		validate_email_address(email.strip(), True)
 
 	@frappe.whitelist()
 	def make_customer_and_link(self) -> None:
@@ -548,12 +532,12 @@ def create_customer(user_details, member=None):
 	customer.flags.ignore_mandatory = True
 	customer.insert(ignore_permissions=True)
 
-	if resolve_or_create_contact_from_external_signup:
+	if resolve_contact := first_provider(CONTACT_RESOLUTION):
 		first_name, last_name = _split_person_name(user_details.fullname)
 		links = [("Customer", customer.name)]
 		if member:
 			links.append(("Member", member))
-		resolve_or_create_contact_from_external_signup(
+		resolve_contact(
 			email=user_details.email,
 			first_name=first_name,
 			last_name=last_name,
@@ -587,6 +571,6 @@ def create_customer(user_details, member=None):
 
 	except Exception:
 		frappe.db.rollback(save_point="contact_creation")
-		frappe.log_error(frappe.get_traceback(), _("Contact Creation Failed"))
+		frappe.log_error(title=_("Contact Creation Failed"), message=frappe.get_traceback())
 
 	return customer.name

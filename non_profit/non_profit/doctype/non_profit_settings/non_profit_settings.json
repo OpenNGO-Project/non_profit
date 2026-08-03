@@ -33,9 +33,7 @@
   "creation_user",
   "major_gifts_section",
   "major_donor_threshold",
-  "column_break_mg",
-  "stale_interaction_days",
-  "lapsed_major_months"
+  "column_break_mg"
  ],
  "fields": [
   {
@@ -235,20 +233,6 @@
   {
    "fieldname": "column_break_mg",
    "fieldtype": "Column Break"
-  },
-  {
-   "default": "60",
-   "description": "Reserved — not yet wired. Intended threshold (days) for flagging open major gifts with no recent logged interaction.",
-   "fieldname": "stale_interaction_days",
-   "fieldtype": "Int",
-   "label": "Stale Interaction Days"
-  },
-  {
-   "default": "13",
-   "description": "Reserved — not yet wired. Intended threshold (months) for flagging lapsed major donors.",
-   "fieldname": "lapsed_major_months",
-   "fieldtype": "Int",
-   "label": "Lapsed Major Months"
   }
  ],
  "index_web_pages_for_search": 1,

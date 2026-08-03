@@ -119,11 +119,10 @@ def ensure_fundraising_fixtures():
 
 
 def ensure_good_connector_bank_integration() -> None:
-	if "good_connector" not in frappe.get_installed_apps():
-		return
-	from good_connector.setup import ensure_bank_integration_setup
+	from non_profit.non_profit.integration_hooks import BANK_INTEGRATION_SETUP
 
-	ensure_bank_integration_setup()
+	for dotted_path in frappe.get_hooks(BANK_INTEGRATION_SETUP) or []:
+		frappe.get_attr(dotted_path)()
 	from non_profit.non_profit.bank_integration import backfill_donation_qr_references
 
 	backfill_donation_qr_references()

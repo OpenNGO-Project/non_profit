@@ -10,17 +10,18 @@ from non_profit.non_profit.doctype.donor.donor import (
 	get_or_create_customer_for_donor,
 )
 from non_profit.non_profit.identity_lock import acquire_public_email_identity_lock
+from non_profit.non_profit.integration_hooks import CAPTCHA, first_provider
 
-try:
-	from good_connector.captcha import (
-		GOODVANTAGE_CAPTCHA_RESPONSE_FIELD,
-		get_goodvantage_captcha_site_key,
-		verify_goodvantage_captcha_response,
-	)
-except ImportError:
-	GOODVANTAGE_CAPTCHA_RESPONSE_FIELD = "gv-captcha-response"
-	get_goodvantage_captcha_site_key = None
-	verify_goodvantage_captcha_response = None
+DEFAULT_CAPTCHA_RESPONSE_FIELD = "gv-captcha-response"
+
+
+def _captcha_backend() -> dict:
+	"""Captcha config from the registered provider hook; empty dict when none.
+
+	Providers return {"response_field": str, "site_key": callable, "verify": callable}.
+	"""
+	provider = first_provider(CAPTCHA)
+	return provider() if provider else {}
 
 
 no_cache = 1
@@ -96,17 +97,10 @@ def _handle_submission(form):
 	if str(consent or "").lower() not in {"1", "true", "yes", "on"}:
 		frappe.throw(_("Please agree to the storage of your data."))
 
-	# `amount_raw` is a form value (str, or a list for a repeated param). Coerce
-	# to str so float() can only raise ValueError — a single except clause stays
-	# valid on Python <3.14 (a PEP 758 `except TypeError, ValueError:` tuple,
-	# which the shared py314 ruff formatter emits, would be a SyntaxError there).
-	try:
-		amount = float(str(amount_raw))
-	except ValueError:
-		frappe.throw(_("Invalid amount"))
+	from non_profit.non_profit.utils import validate_public_donation_amount
 
-	if amount <= 0:
-		frappe.throw(_("Amount must be positive"))
+	# Same bounds as every other public intake path (CHF 5 - 100'000).
+	amount = validate_public_donation_amount(str(amount_raw))
 	if frequency not in {"one_off", "Monthly", "Quarterly", "Yearly"}:
 		frappe.throw(_("Invalid donation frequency"))
 	settings = frappe.get_single("Non Profit Settings")
@@ -222,18 +216,18 @@ def _public_campaign_matches_company(campaign: str, company: str) -> bool:
 
 
 def _captcha_site_key() -> str:
-	if not get_goodvantage_captcha_site_key:
-		return ""
-	return get_goodvantage_captcha_site_key()
+	backend = _captcha_backend()
+	site_key = backend.get("site_key")
+	return site_key() if site_key else ""
 
 
 def _verify_captcha(form) -> None:
 	if frappe.session.user != "Guest":
 		return
-	if not _captcha_site_key():
+	backend = _captcha_backend()
+	if not _captcha_site_key() or not backend.get("verify"):
 		frappe.throw(_("CAPTCHA is not configured. Please contact support."))
-	if not verify_goodvantage_captcha_response:
-		frappe.throw(_("CAPTCHA is not configured. Please contact support."))
-	response = (form.get(GOODVANTAGE_CAPTCHA_RESPONSE_FIELD) or form.get("captcha_response") or "").strip()
-	if not verify_goodvantage_captcha_response(response):
+	response_field = backend.get("response_field") or DEFAULT_CAPTCHA_RESPONSE_FIELD
+	response = (form.get(response_field) or form.get("captcha_response") or "").strip()
+	if not backend["verify"](response):
 		frappe.throw(_("CAPTCHA failed. Please try again."))

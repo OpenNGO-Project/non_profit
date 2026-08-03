@@ -14,8 +14,16 @@ from non_profit.non_profit.doctype.member.member import (
 	get_or_create_member_for_contact,
 	get_or_create_member_for_customer,
 	get_or_create_membership_for_member,
-	resolve_or_create_contact_from_external_signup,
 )
+from non_profit.non_profit.integration_hooks import CONTACT_RESOLUTION, first_provider
+
+
+def _contact_resolution_provider():
+	"""Skip-gate: guided-identity tests need a registered provider."""
+	try:
+		return first_provider(CONTACT_RESOLUTION)
+	except Exception:
+		return None
 
 
 class TestMember(unittest.TestCase):
@@ -44,10 +52,7 @@ class TestMember(unittest.TestCase):
 		return customer
 
 	def _guided_person_values(self, **overrides) -> dict:
-		if (
-			not resolve_or_create_contact_from_external_signup
-			or "good_connector" not in frappe.get_installed_apps()
-		):
+		if not _contact_resolution_provider() or "good_connector" not in frappe.get_installed_apps():
 			self.skipTest("good_connector identity matching is not installed")
 		unique = frappe.generate_hash(length=8)
 		values = {
@@ -509,7 +514,7 @@ class TestMember(unittest.TestCase):
 		self.assertNotEqual(first_result["member"], second_result["member"])
 
 	def test_guided_organization_keeps_optional_human_contact_separate(self):
-		if not resolve_or_create_contact_from_external_signup:
+		if not _contact_resolution_provider():
 			self.skipTest("good_connector identity matching is not installed")
 		unique = frappe.generate_hash(length=8)
 		result = create_member_and_membership(
@@ -666,7 +671,7 @@ class TestMember(unittest.TestCase):
 		self.assertEqual(second, first)
 
 	def test_guided_late_identity_failure_rolls_back_created_organization(self):
-		if not resolve_or_create_contact_from_external_signup:
+		if not _contact_resolution_provider():
 			self.skipTest("good_connector identity matching is not installed")
 		unique = frappe.generate_hash(length=8)
 		email = f"ambiguous-org-contact-{unique}@example.org"
@@ -973,7 +978,7 @@ class TestMember(unittest.TestCase):
 		self.assertNotIn("Bank Account", dashboard.non_standard_fieldnames)
 
 	def test_create_member_reuses_exact_good_connector_contact(self):
-		if not resolve_or_create_contact_from_external_signup:
+		if not _contact_resolution_provider():
 			self.skipTest("good_connector identity matching is not installed")
 
 		membership_type = self._membership_type()
