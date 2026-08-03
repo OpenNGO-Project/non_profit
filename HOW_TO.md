@@ -115,6 +115,27 @@ The count and **Last Evaluated On** are refreshed when the selection is saved.
 Source data may change later; save the selection again before comparing its
 stored count, and let the consuming campaign create its own current snapshot.
 
+## Person-Level Contact Suppression
+
+Create an **NPO Contact Suppression** when a person must not be contacted on
+any channel — typically after a death notice or an explicit do-not-contact
+request. Only **Non Profit Manager** and **System Manager** can manage these
+records.
+
+1. Select the person's **Contact** (Members and Donors are matched through
+   their canonical Contact automatically).
+2. Choose the **Scope**: `Deceased` or `Do Not Contact`.
+3. Optionally record the **Date** and a **Reason** for the audit trail.
+4. Save. Installed campaign apps exclude the person during their next
+   recipient preparation or send; existing frozen postal snapshots and
+   already-queued emails are not rewritten.
+5. To retire a mistaken entry, clear **Active** instead of deleting the row so
+   the history remains.
+
+A contact suppression does not replace channel-specific opt-outs (newsletter
+unsubscribes, bounce suppression, postal suppressions). It is an additional
+person-level block on top of them.
+
 ## Donations
 
 Use **Donor** (Spender), **Donation Campaign** (Spendenkampagne), **Donation** (Spende), and **Donation Receipt** (Spendenbescheinigung) for fundraising workflows.
