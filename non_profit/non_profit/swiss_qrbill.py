@@ -51,7 +51,7 @@ def swiss_qrbill_svg(doc) -> str:
 			if svg := frappe.get_attr(method)(doc):
 				return svg
 		except Exception:
-			frappe.log_error(frappe.get_traceback(), "non_profit QR-bill provider failed")
+			frappe.log_error(title="non_profit QR-bill provider failed", message=frappe.get_traceback())
 
 	try:
 		iban, creditor = _resolve_creditor()

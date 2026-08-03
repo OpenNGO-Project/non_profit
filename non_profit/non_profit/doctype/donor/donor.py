@@ -393,7 +393,7 @@ def backfill_donor_customers(limit: int | None = None) -> dict[str, int]:
 			created_or_linked += 1
 		except Exception:
 			failed += 1
-			frappe.log_error(frappe.get_traceback(), _("Donor customer backfill failed"))
+			frappe.log_error(title=_("Donor customer backfill failed"), message=frappe.get_traceback())
 	return {"processed": len(donors), "linked": created_or_linked, "failed": failed}
 
 
@@ -592,7 +592,7 @@ def _create_contact_for_donor(donor, first_name: str, last_name: str, email: str
 		return contact_name
 	except Exception:
 		frappe.db.rollback(save_point="donor_contact_creation")
-		frappe.log_error(frappe.get_traceback(), _("Donor Contact Creation Failed"))
+		frappe.log_error(title=_("Donor Contact Creation Failed"), message=frappe.get_traceback())
 		return None
 
 

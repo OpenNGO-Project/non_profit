@@ -587,6 +587,6 @@ def create_customer(user_details, member=None):
 
 	except Exception:
 		frappe.db.rollback(save_point="contact_creation")
-		frappe.log_error(frappe.get_traceback(), _("Contact Creation Failed"))
+		frappe.log_error(title=_("Contact Creation Failed"), message=frappe.get_traceback())
 
 	return customer.name
