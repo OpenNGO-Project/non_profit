@@ -250,16 +250,18 @@ class TestDonationEbicsProvider(UnitTestCase):
 				output.write("<svg/>")
 
 		with (
-			patch("non_profit.non_profit.swiss_qrbill.frappe.get_installed_apps", return_value=[]),
+			# No SVG provider registered: the standalone fallback renders. A
+			# document without a stored reference emits none — a stored
+			# gc_qr_reference WOULD be emitted (payment identity, covered by
+			# test_qr_iban_slip_uses_shared_donation_reference).
+			patch("non_profit.non_profit.swiss_qrbill.frappe.get_hooks", return_value=[]),
 			patch(
 				"non_profit.non_profit.swiss_qrbill._resolve_creditor",
 				return_value=("CH4431999123000889012", {"name": "Test NGO"}),
 			),
 			patch.dict("sys.modules", {"qrbill": frappe._dict(QRBill=FakeQRBill)}),
 		):
-			result = swiss_qrbill_svg(
-				frappe._dict(amount=50, name="DON-TEST-005", gc_qr_reference=LEGACY_QRR)
-			)
+			result = swiss_qrbill_svg(frappe._dict(amount=50, name="DON-TEST-005"))
 
 		self.assertEqual(result, "<svg/>")
 		self.assertIsNone(captured["reference_number"])
@@ -334,12 +336,17 @@ class TestDonationEbicsProvider(UnitTestCase):
 
 	def test_uninstalled_good_connector_does_not_register_qrr(self):
 		donation = Mock(docstatus=1, name="NPO-DTN-2026-00001")
-		with patch("non_profit.non_profit.bank_integration.frappe.get_installed_apps", return_value=[]):
+		# No registration provider on the seam = the same no-op the old
+		# installed-apps guard produced.
+		with patch("non_profit.non_profit.integration_hooks.frappe.get_hooks", return_value=[]):
 			self.assertIsNone(register_donation_qr_reference(donation))
 		donation.db_set.assert_not_called()
 
 	def test_uninstalled_good_connector_setup_is_noop(self):
-		with patch("non_profit.non_profit.fundraising_setup.frappe.get_installed_apps", return_value=[]):
+		with (
+			patch("non_profit.non_profit.fundraising_setup.frappe.get_hooks", return_value=[]),
+			patch("non_profit.non_profit.integration_hooks.frappe.get_hooks", return_value=[]),
+		):
 			ensure_good_connector_bank_integration()
 
 	def test_duplicate_qrr_identities_are_not_filtered_by_amount(self):
