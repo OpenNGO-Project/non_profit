@@ -14,6 +14,8 @@ from frappe.utils import (
 	nowdate,
 )
 
+from non_profit.non_profit.mailer import send_referenced_email
+
 
 class Membership(Document):
 	def validate(self):
@@ -196,14 +198,14 @@ class Membership(Document):
 
 		if not frappe.flags.in_test:
 			frappe.enqueue(
-				method=frappe.sendmail,
+				method="non_profit.non_profit.mailer.send_referenced_email",
 				queue="short",
 				timeout=300,
 				is_async=True,
 				**email_args,
 			)
 		else:
-			frappe.sendmail(**email_args)
+			send_referenced_email(**email_args)
 
 	def generate_and_send_invoice(self):
 		from non_profit.non_profit.legacy_payments import (

@@ -8,6 +8,8 @@ from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.utils import get_url
 from frappe.website.website_generator import WebsiteGenerator
 
+from non_profit.non_profit.mailer import send_referenced_email
+
 
 class GrantApplication(WebsiteGenerator):
 	_website = frappe._dict(
@@ -52,7 +54,7 @@ def send_grant_review_emails(grant_application: str) -> None:
 		frappe.throw(_("Assessment Manager is required before sending a review invitation."))
 
 	url = get_url("grant-application/{0}".format(grant_application))
-	frappe.sendmail(
+	send_referenced_email(
 		recipients=grant.assessment_manager,
 		sender=frappe.session.user,
 		subject="Grant Application for {0}".format(grant.applicant_name),

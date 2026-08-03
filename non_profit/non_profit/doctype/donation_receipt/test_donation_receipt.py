@@ -514,7 +514,9 @@ class TestDonationReceipt(FrappeTestCase):
 				return_value="Approved Swiss Receipt",
 			),
 			patch.object(frappe, "attach_print", return_value={"fname": "receipt.pdf"}) as attach_print,
-			patch.object(frappe, "sendmail") as sendmail,
+			patch(
+				"non_profit.non_profit.doctype.donation_receipt.donation_receipt.send_referenced_email"
+			) as sendmail,
 			patch.object(receipt, "db_set"),
 		):
 			self.assertTrue(receipt.send_to_donor())
@@ -523,6 +525,8 @@ class TestDonationReceipt(FrappeTestCase):
 			"Donation Receipt", "RECEIPT-SWISS", print_format="Approved Swiss Receipt"
 		)
 		sendmail.assert_called_once()
+		self.assertEqual(sendmail.call_args.kwargs["reference_doctype"], "Donation Receipt")
+		self.assertEqual(sendmail.call_args.kwargs["reference_name"], "RECEIPT-SWISS")
 
 		draft = DonationReceipt({"doctype": "Donation Receipt", "docstatus": 0, "status": "Draft"})
 		with patch.object(draft, "check_permission"):

@@ -292,7 +292,10 @@ class TestDonation(unittest.TestCase):
 		).insert(ignore_permissions=True)
 		donation.submit()
 
-		with patch("frappe.sendmail", return_value=frappe._dict(name="EMAIL-Q-NPO")) as sendmail:
+		with patch(
+			"non_profit.non_profit.doctype.donation.donation.send_referenced_email",
+			return_value=frappe._dict(name="EMAIL-Q-NPO"),
+		) as sendmail:
 			self.assertTrue(donation.send_thank_you())
 
 		donation.reload()

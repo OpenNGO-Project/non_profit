@@ -317,6 +317,15 @@ only `recipient_selection` and `title`, so no server dependency is introduced.
   Account data on an existing shared site.
 - `good_newsletter_audience_providers` registers the optional
   `npo_recipient_selection` provider factory without importing Good Newsletter.
+- `non_profit_referenced_email_providers` (consumed by
+  `non_profit.non_profit.mailer.send_referenced_email`) lets a private
+  downstream app — usually good_npo via Good Connector's
+  `send_referenced_email` — deliver the app's doc-referenced emails
+  (Membership acknowledgement, Donation thank-you, Swiss Donation Receipt
+  send, Grant review invitation) with a Communication on the reference
+  document's timeline. The last registered provider wins; with no provider
+  the mailer falls back to plain `frappe.sendmail` with the same arguments.
+  Provider errors propagate — no fallback re-send after a provider failure.
 - `doc_events["Membership"]["validate"] = non_profit.non_profit.membership_sync.validate_no_overlap`
   blocks overlapping active Memberships by default. Callers can set
   `doc.flags.warn_on_membership_overlap = True` before validation when an

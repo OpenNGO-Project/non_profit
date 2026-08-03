@@ -14,6 +14,7 @@ from non_profit.non_profit.doctype.donor.donor import (
 	get_donor_email,
 	get_or_create_customer_for_donor,
 )
+from non_profit.non_profit.mailer import send_referenced_email
 
 
 class Donation(Document):
@@ -154,7 +155,7 @@ class Donation(Document):
 		message = frappe.render_template(body, context)  # nosemgrep
 		# Queue the email; the scheduler sends it. Avoid now=True since that
 		# runs SMTP synchronously on commit and can break the payment flow.
-		email_queue = frappe.sendmail(
+		email_queue = send_referenced_email(
 			recipients=[self.email],
 			subject=subject,
 			message=message,
