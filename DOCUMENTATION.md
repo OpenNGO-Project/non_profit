@@ -303,6 +303,27 @@ Audience DocTypes; it invokes
 channel and Good Direct Mail Campaign create permission; `frappe.new_doc` receives
 only `recipient_selection` and `title`, so no server dependency is introduced.
 
+## Person-Level Contact Suppression
+
+`NPO Contact Suppression` is a channel-neutral, person-level "never contact
+this person" flag keyed by canonical Contact (the suite's shared person
+identity — Members and Donors canonicalize to Contact first). Each row carries
+a required scope (`Do Not Contact` or `Deceased`), an `active` check
+(default on) so a mistaken row can be retired without deleting its history,
+and an optional date and reason. Generic Endpoint Contacts are rejected —
+they are not people. Permissions mirror `NPO Recipient Selection` (System
+Manager and Non Profit Manager, full non-child access) and changes are
+tracked.
+
+`non_profit.non_profit.contact_suppression.active_suppressed_contacts(contact_names)`
+is the single query seam for consumers: a trusted server-side read returning
+the subset of the passed Contact names that hold any active suppression row,
+chunked to 1,000 names per IN clause. Consuming campaign apps (postal or
+email) call it inside their own eligibility pipelines as one ADDITIONAL
+exclusion reason. It deliberately does not replace channel-owned
+consent/suppression machinery, and non_profit itself imports no consumer app —
+the helper is a neutral seam like the audience provider hooks.
+
 ## Hooks
 
 - `after_install = non_profit.setup.setup_non_profit`

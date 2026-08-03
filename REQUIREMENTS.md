@@ -142,6 +142,11 @@ Explicitly out of scope / dependencies:
 - REQ-NP-SETUP-04: Setup disables `auto_opt_in` on ERPNext's known loyalty test fixtures (`Test Single Loyalty`, `Test Multiple Loyalty`) when they exist, leaving real Loyalty Program records untouched. [Trace: `non_profit/non_profit/erpnext_loyalty.py` via setup; Tests: `doctype/non_profit_settings/test_non_profit_settings.py`]
 - REQ-NP-SETUP-05: `before_tests` may shorten the in-process test host URL, run the setup wizard only when the site has no Company, and refresh app-owned fundraising fixtures. It must not delete shared Item Prices, rename/create ERPNext bootstrap Customers or Addresses, alter Customer naming, create global Fiscal Years or HRMS Email Accounts, or otherwise persist operator-owned global test-site changes. [Trace: `non_profit/non_profit/utils.py::before_tests`, `hooks.py`; Tests: `non_profit/non_profit/test_before_tests.py`]
 
+### 2.13 Person-Level Contact Suppression
+
+- REQ-NP-CSUP-01: `NPO Contact Suppression` records a channel-neutral person-level contact block keyed by canonical Contact — the shared person identity of this suite — with a required scope (`Do Not Contact` or `Deceased`), an `active` flag (default on), and optional date and reason. Generic Endpoint Contacts are rejected because they are not people. Permissions mirror `NPO Recipient Selection`: full non-child access for System Manager and Non Profit Manager only. [Trace: `non_profit/non_profit/doctype/npo_contact_suppression/`; Tests: `doctype/npo_contact_suppression/test_npo_contact_suppression.py`]
+- REQ-NP-CSUP-02: `non_profit.non_profit.contact_suppression.active_suppressed_contacts(contact_names)` returns the subset of the given Contact names holding any active suppression row, using bounded IN-clause chunks and a trusted server-side read. It is enrichment for consuming channel apps' eligibility pipelines (an additional exclusion reason only): consumers keep their own authoritative consent/suppression machinery, and this public app neither imports nor references any private consumer. [Trace: `non_profit/non_profit/contact_suppression.py`; Tests: `doctype/npo_contact_suppression/test_npo_contact_suppression.py`]
+
 ## 3. Non-Functional Requirements
 
 ### 3.1 Security and Permissions
