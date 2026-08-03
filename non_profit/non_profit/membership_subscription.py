@@ -121,12 +121,15 @@ def ensure_membership_subscription(
 	if not subscription_company:
 		frappe.throw(_("Set a Default Company in Non Profit Settings before creating a Subscription."))
 
+	# The plan is shared by every member of the type, so an individual
+	# membership's (possibly discounted) amount must never reprice it —
+	# without an explicit cost the plan keeps the Membership Type's amount.
 	plan = ensure_membership_subscription_plan(
 		membership.membership_type,
 		plan_name=plan_name,
 		item=item,
 		currency=currency or membership.get("currency"),
-		cost=cost if cost is not None else membership.get("amount"),
+		cost=cost,
 	)
 	if not plan:
 		return None

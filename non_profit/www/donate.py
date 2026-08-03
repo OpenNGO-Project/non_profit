@@ -90,6 +90,7 @@ def _handle_submission(form):
 	frequency = form.get("frequency") or "one_off"
 	campaign = form.get("campaign") or None
 	consent = form.get("consent")
+	message = (form.get("message") or "").strip()[:1000]
 
 	if not donor_name or not email or not amount_raw:
 		frappe.throw(_("Please fill in name, email and amount"))
@@ -158,6 +159,7 @@ def _handle_submission(form):
 		donation.flags.ignore_permissions = True
 		donation.insert()
 		donation.submit()
+		_add_donor_message(donation, message)
 		return donation.name
 
 	rec = frappe.get_doc(
@@ -178,7 +180,13 @@ def _handle_submission(form):
 	donation = rec.create_donation(mark_paid=False)
 	rec.advance_next_date()
 	rec.save(ignore_permissions=True)
+	_add_donor_message(donation, message)
 	return donation.name
+
+
+def _add_donor_message(donation, message: str) -> None:
+	if message:
+		donation.add_comment("Comment", _("Donor message: {0}").format(message))
 
 
 def _resolve_donation_company(settings=None) -> str | None:
