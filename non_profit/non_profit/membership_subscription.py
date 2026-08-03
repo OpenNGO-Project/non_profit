@@ -122,13 +122,15 @@ def ensure_membership_subscription(
 		frappe.throw(_("Set a Default Company in Non Profit Settings before creating a Subscription."))
 
 	# The plan is shared by every member of the type, so an individual
-	# membership's (possibly discounted) amount must never reprice it —
-	# without an explicit cost the plan keeps the Membership Type's amount.
+	# membership's values must never mutate it: a discounted amount would
+	# reprice, and a divergent currency would re-denominate, every other
+	# member's renewals. Without explicit args the plan keeps the Membership
+	# Type's amount and the site default currency.
 	plan = ensure_membership_subscription_plan(
 		membership.membership_type,
 		plan_name=plan_name,
 		item=item,
-		currency=currency or membership.get("currency"),
+		currency=currency,
 		cost=cost,
 	)
 	if not plan:

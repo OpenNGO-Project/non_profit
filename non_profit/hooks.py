@@ -15,6 +15,11 @@ jinja = {
 	]
 }
 
+doctype_js = {
+	"Donor Interaction": "public/js/npo_next_actions.js",
+	"Major Gift": "public/js/npo_next_actions.js",
+}
+
 after_install = "non_profit.setup.setup_non_profit"
 after_app_install = "non_profit.setup.after_app_install"
 after_migrate = "non_profit.setup.after_migrate"
