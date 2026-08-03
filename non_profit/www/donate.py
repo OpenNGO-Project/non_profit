@@ -10,7 +10,6 @@ from non_profit.non_profit.doctype.donor.donor import (
 	get_or_create_customer_for_donor,
 )
 from non_profit.non_profit.identity_lock import acquire_public_email_identity_lock
-
 from non_profit.non_profit.integration_hooks import CAPTCHA, first_provider
 
 DEFAULT_CAPTCHA_RESPONSE_FIELD = "gv-captcha-response"
@@ -100,7 +99,7 @@ def _handle_submission(form):
 
 	from non_profit.non_profit.utils import validate_public_donation_amount
 
-	# Same bounds as every other public intake path (CHF 5 – 100'000).
+	# Same bounds as every other public intake path (CHF 5 - 100'000).
 	amount = validate_public_donation_amount(str(amount_raw))
 	if frequency not in {"one_off", "Monthly", "Quarterly", "Yearly"}:
 		frappe.throw(_("Invalid donation frequency"))

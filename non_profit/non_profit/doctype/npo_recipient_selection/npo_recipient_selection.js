@@ -58,9 +58,9 @@ async function previewRecipients(frm) {
 			? `<div class="table-responsive"><table class="table table-bordered">
 				<thead><tr><th>${__("Type")}</th><th>${__("Recipient")}</th><th>${__("Email")}</th><th>${__(
 					"Language"
-			  )}</th><th>${__(
+			)}</th><th>${__(
 					"Postal Ready"
-			  )}</th></tr></thead><tbody>${rows}</tbody></table></div>`
+			)}</th></tr></thead><tbody>${rows}</tbody></table></div>`
 			: `<p>${__("No matching recipients.")}</p>`,
 		wide: true,
 	});

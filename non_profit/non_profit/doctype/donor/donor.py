@@ -9,7 +9,6 @@ from frappe.model.document import Document
 from frappe.utils import cstr
 
 from non_profit.non_profit.integration_hooks import CONTACT_RESOLUTION, first_provider
-
 from non_profit.non_profit.utils import (
 	ensure_canonical_contact_available,
 	ensure_person_contact,
