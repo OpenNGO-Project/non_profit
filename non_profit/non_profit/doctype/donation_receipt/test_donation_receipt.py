@@ -683,7 +683,7 @@ class TestDonationReceiptConcurrency(IntegrationTestCase):
 			}
 		).insert(ignore_permissions=True)
 		donation.submit()
-		frappe.db.commit()
+		frappe.db.commit()  # Publish fixtures to independent test connections. # nosemgrep
 
 		try:
 			barrier = Barrier(2)
@@ -723,7 +723,7 @@ class TestDonationReceiptConcurrency(IntegrationTestCase):
 				frappe.delete_doc("Donor", donor.name, ignore_permissions=True)
 			if frappe.db.exists("Donor Type", donor_type):
 				frappe.delete_doc("Donor Type", donor_type, ignore_permissions=True)
-			frappe.db.commit()
+			frappe.db.commit()  # Persist cross-connection test cleanup. # nosemgrep
 
 	def test_disjoint_cursor_pages_preserve_all_rows_on_same_draft(self) -> None:
 		if frappe.db.db_type != "mariadb":
@@ -795,7 +795,7 @@ class TestDonationReceiptConcurrency(IntegrationTestCase):
 				"donations": [{"donation": donations["BASE"].name}],
 			}
 		).insert(ignore_permissions=True)
-		frappe.db.commit()
+		frappe.db.commit()  # Publish fixtures to independent test connections. # nosemgrep
 
 		cursors = [f"PAGE-A-{token}", f"PAGE-B-{token}"]
 		page_by_cursor = {
@@ -856,7 +856,7 @@ class TestDonationReceiptConcurrency(IntegrationTestCase):
 				frappe.delete_doc("Donor", donor.name, ignore_permissions=True)
 			if frappe.db.exists("Donor Type", donor_type):
 				frappe.delete_doc("Donor Type", donor_type, ignore_permissions=True)
-			frappe.db.commit()
+			frappe.db.commit()  # Persist cross-connection test cleanup. # nosemgrep
 
 
 def _run_concurrent_receipt_reservation(
@@ -906,7 +906,7 @@ def _run_concurrent_receipt_reservation(
 			donations=[donation],
 			context=context,
 		)
-		frappe.db.commit()
+		frappe.db.commit()  # Worker connection publishes its reservation for the race. # nosemgrep
 		return "created"
 	finally:
 		frappe.destroy()
@@ -949,7 +949,7 @@ def _run_concurrent_yearly_cursor_page(
 			language="de",
 			cursor=cursor,
 		)
-		frappe.db.commit()
+		frappe.db.commit()  # Worker connection publishes its cursor page for the race. # nosemgrep
 		return result
 	except BaseException:
 		frappe.db.rollback()
