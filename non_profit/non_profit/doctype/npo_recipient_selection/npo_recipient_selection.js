@@ -52,15 +52,20 @@ async function previewRecipients(frm) {
 			</tr>`
 		)
 		.join("");
+	const headerCells = [
+		__("Type"),
+		__("Recipient"),
+		__("Email"),
+		__("Language"),
+		__("Postal Ready"),
+	]
+		.map((label) => `<th>${label}</th>`)
+		.join("");
 	frappe.msgprint({
 		title: __("{0} Canonical Candidates", [result.total]),
 		message: rows
 			? `<div class="table-responsive"><table class="table table-bordered">
-				<thead><tr><th>${__("Type")}</th><th>${__("Recipient")}</th><th>${__("Email")}</th><th>${__(
-					"Language"
-			)}</th><th>${__(
-					"Postal Ready"
-			)}</th></tr></thead><tbody>${rows}</tbody></table></div>`
+				<thead><tr>${headerCells}</tr></thead><tbody>${rows}</tbody></table></div>`
 			: `<p>${__("No matching recipients.")}</p>`,
 		wide: true,
 	});
