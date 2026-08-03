@@ -166,7 +166,7 @@ class DonationReceipt(Document):
 			frappe.db.set_value("Donation", {"name": ["in", donation_names]}, "receipt", self.name)
 
 	def on_cancel(self) -> None:
-		self.status = "Cancelled"
+		self.db_set("status", "Cancelled", update_modified=False)
 		donation_names = list({row.donation for row in self.donations or [] if row.donation})
 		if donation_names:
 			frappe.db.set_value(
