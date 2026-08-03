@@ -514,7 +514,9 @@ class TestDonationReceipt(FrappeTestCase):
 				return_value="Approved Swiss Receipt",
 			),
 			patch.object(frappe, "attach_print", return_value={"fname": "receipt.pdf"}) as attach_print,
-			patch.object(frappe, "sendmail") as sendmail,
+			patch(
+				"non_profit.non_profit.doctype.donation_receipt.donation_receipt.send_referenced_email"
+			) as sendmail,
 			patch.object(receipt, "db_set"),
 		):
 			self.assertTrue(receipt.send_to_donor())
@@ -523,6 +525,8 @@ class TestDonationReceipt(FrappeTestCase):
 			"Donation Receipt", "RECEIPT-SWISS", print_format="Approved Swiss Receipt"
 		)
 		sendmail.assert_called_once()
+		self.assertEqual(sendmail.call_args.kwargs["reference_doctype"], "Donation Receipt")
+		self.assertEqual(sendmail.call_args.kwargs["reference_name"], "RECEIPT-SWISS")
 
 		draft = DonationReceipt({"doctype": "Donation Receipt", "docstatus": 0, "status": "Draft"})
 		with patch.object(draft, "check_permission"):
@@ -679,7 +683,7 @@ class TestDonationReceiptConcurrency(IntegrationTestCase):
 			}
 		).insert(ignore_permissions=True)
 		donation.submit()
-		frappe.db.commit()
+		frappe.db.commit()  # Publish fixtures to independent test connections. # nosemgrep
 
 		try:
 			barrier = Barrier(2)
@@ -719,7 +723,7 @@ class TestDonationReceiptConcurrency(IntegrationTestCase):
 				frappe.delete_doc("Donor", donor.name, ignore_permissions=True)
 			if frappe.db.exists("Donor Type", donor_type):
 				frappe.delete_doc("Donor Type", donor_type, ignore_permissions=True)
-			frappe.db.commit()
+			frappe.db.commit()  # Persist cross-connection test cleanup. # nosemgrep
 
 	def test_disjoint_cursor_pages_preserve_all_rows_on_same_draft(self) -> None:
 		if frappe.db.db_type != "mariadb":
@@ -791,7 +795,7 @@ class TestDonationReceiptConcurrency(IntegrationTestCase):
 				"donations": [{"donation": donations["BASE"].name}],
 			}
 		).insert(ignore_permissions=True)
-		frappe.db.commit()
+		frappe.db.commit()  # Publish fixtures to independent test connections. # nosemgrep
 
 		cursors = [f"PAGE-A-{token}", f"PAGE-B-{token}"]
 		page_by_cursor = {
@@ -852,7 +856,7 @@ class TestDonationReceiptConcurrency(IntegrationTestCase):
 				frappe.delete_doc("Donor", donor.name, ignore_permissions=True)
 			if frappe.db.exists("Donor Type", donor_type):
 				frappe.delete_doc("Donor Type", donor_type, ignore_permissions=True)
-			frappe.db.commit()
+			frappe.db.commit()  # Persist cross-connection test cleanup. # nosemgrep
 
 
 def _run_concurrent_receipt_reservation(
@@ -902,7 +906,7 @@ def _run_concurrent_receipt_reservation(
 			donations=[donation],
 			context=context,
 		)
-		frappe.db.commit()
+		frappe.db.commit()  # Worker connection publishes its reservation for the race. # nosemgrep
 		return "created"
 	finally:
 		frappe.destroy()
@@ -945,7 +949,7 @@ def _run_concurrent_yearly_cursor_page(
 			language="de",
 			cursor=cursor,
 		)
-		frappe.db.commit()
+		frappe.db.commit()  # Worker connection publishes its cursor page for the race. # nosemgrep
 		return result
 	except BaseException:
 		frappe.db.rollback()

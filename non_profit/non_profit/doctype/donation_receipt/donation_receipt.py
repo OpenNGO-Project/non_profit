@@ -11,6 +11,7 @@ from frappe.model.document import Document
 from frappe.utils import cstr, flt, getdate, nowdate
 
 from non_profit.non_profit.doctype.donor.donor import get_donor_email
+from non_profit.non_profit.mailer import send_referenced_email
 
 DEFAULT_RECEIPT_COUNTRY = "Switzerland"
 DONATION_RECEIPT_NAMING_SERIES = "NPO-DRCPT-DE-.YYYY.-"
@@ -188,10 +189,12 @@ class DonationReceipt(Document):
 
 		print_format = _approved_swiss_print_format()
 		self._bind_delivery_addresses()
-		frappe.sendmail(
+		send_referenced_email(
 			recipients=[self.email],
 			subject=_("Donation Receipt {0}").format(self.fiscal_year),
 			message=self._get_email_body(),
+			reference_doctype=self.doctype,
+			reference_name=self.name,
 			attachments=[frappe.attach_print(self.doctype, self.name, print_format=print_format)],
 		)
 		self.db_set("email_sent_on", nowdate())
