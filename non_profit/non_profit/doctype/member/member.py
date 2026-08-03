@@ -8,12 +8,7 @@ from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.model.document import Document
 from frappe.utils import cstr, getdate, nowdate
 
-try:
-	from good_connector.identity_matching import (
-		resolve_or_create_contact_from_external_signup,
-	)
-except ImportError:
-	resolve_or_create_contact_from_external_signup = None
+from non_profit.non_profit.integration_hooks import CONTACT_RESOLUTION, first_provider
 
 from non_profit.non_profit.utils import (
 	ensure_canonical_contact_available,
@@ -538,12 +533,12 @@ def create_customer(user_details, member=None):
 	customer.flags.ignore_mandatory = True
 	customer.insert(ignore_permissions=True)
 
-	if resolve_or_create_contact_from_external_signup:
+	if resolve_contact := first_provider(CONTACT_RESOLUTION):
 		first_name, last_name = _split_person_name(user_details.fullname)
 		links = [("Customer", customer.name)]
 		if member:
 			links.append(("Member", member))
-		resolve_or_create_contact_from_external_signup(
+		resolve_contact(
 			email=user_details.email,
 			first_name=first_name,
 			last_name=last_name,

@@ -1,6 +1,28 @@
 import frappe
 from frappe import _
-from frappe.utils import cstr
+from frappe.utils import cstr, flt
+
+# Guest-facing donation bounds, shared by every PUBLIC intake path (the
+# donate web form here and private checkout flows that import them).
+# Desk-entered donations are deliberately unbounded — a staff-recorded
+# major gift may exceed the public ceiling.
+MIN_PUBLIC_DONATION_AMOUNT = 5
+MAX_PUBLIC_DONATION_AMOUNT = 100_000
+
+
+def validate_public_donation_amount(amount) -> float:
+	"""Validate a guest-submitted donation amount against the shared bounds."""
+	from math import isfinite
+
+	value = flt(amount)
+	if not isfinite(value) or value <= 0:
+		frappe.throw(_("Enter a valid donation amount."))
+	if value < MIN_PUBLIC_DONATION_AMOUNT:
+		frappe.throw(_("The minimum donation amount is CHF {0}.").format(MIN_PUBLIC_DONATION_AMOUNT))
+	if value > MAX_PUBLIC_DONATION_AMOUNT:
+		frappe.throw(_("Please contact us for donations above CHF {0}.").format(MAX_PUBLIC_DONATION_AMOUNT))
+	return value
+
 
 from non_profit.setup import setup_non_profit
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -87,15 +87,17 @@ class TestDonatePage(FrappeTestCase):
 	def test_guest_donation_requires_valid_captcha_when_configured(self) -> None:
 		previous_user = frappe.session.user
 		frappe.set_user("Guest")
+		verify = MagicMock(return_value=False)
+		backend = {
+			"response_field": donate.DEFAULT_CAPTCHA_RESPONSE_FIELD,
+			"site_key": lambda: "site-key",
+			"verify": verify,
+		}
 		try:
-			with patch("non_profit.www.donate._captcha_site_key", return_value="site-key"):
-				with patch(
-					"non_profit.www.donate.verify_goodvantage_captcha_response",
-					return_value=False,
-				) as verify:
-					with self.assertRaises(frappe.ValidationError):
-						donate._verify_captcha({donate.GOODVANTAGE_CAPTCHA_RESPONSE_FIELD: "bad-token"})
-				verify.assert_called_once_with("bad-token")
+			with patch("non_profit.www.donate._captcha_backend", return_value=backend):
+				with self.assertRaises(frappe.ValidationError):
+					donate._verify_captcha({donate.DEFAULT_CAPTCHA_RESPONSE_FIELD: "bad-token"})
+			verify.assert_called_once_with("bad-token")
 		finally:
 			frappe.set_user(previous_user)
 
@@ -103,21 +105,19 @@ class TestDonatePage(FrappeTestCase):
 		previous_user = frappe.session.user
 		frappe.set_user("Guest")
 		try:
-			with patch("non_profit.www.donate._captcha_site_key", return_value=""):
-				with patch("non_profit.www.donate.verify_goodvantage_captcha_response") as verify:
-					with self.assertRaises(frappe.ValidationError) as error:
-						donate._verify_captcha({})
-				verify.assert_not_called()
+			with patch("non_profit.www.donate._captcha_backend", return_value={}):
+				with self.assertRaises(frappe.ValidationError) as error:
+					donate._verify_captcha({})
 				self.assertIn("CAPTCHA is not configured", str(error.exception))
 		finally:
 			frappe.set_user(previous_user)
 
 	def test_guest_donation_does_not_hide_captcha_configuration_errors(self) -> None:
-		with patch.object(
-			donate,
-			"get_goodvantage_captcha_site_key",
-			side_effect=frappe.ValidationError("invalid CAPTCHA configuration"),
-		):
+		def broken_site_key():
+			raise frappe.ValidationError("invalid CAPTCHA configuration")
+
+		backend = {"site_key": broken_site_key, "verify": MagicMock()}
+		with patch("non_profit.www.donate._captcha_backend", return_value=backend):
 			with self.assertRaisesRegex(frappe.ValidationError, "invalid CAPTCHA configuration"):
 				donate._captcha_site_key()
 

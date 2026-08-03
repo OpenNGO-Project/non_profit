@@ -36,8 +36,15 @@ def create_guided_membership(
 ) -> dict[str, str | None]:
 	"""Create a complete Desk membership identity without using the guest signup flow."""
 
-	if "good_connector" not in frappe.get_installed_apps():
-		frappe.throw(_("Good Connector identity matching is required for guided Member creation."))
+	from non_profit.non_profit.integration_hooks import CONTACT_RESOLUTION, first_provider
+
+	if not first_provider(CONTACT_RESOLUTION):
+		frappe.throw(
+			_(
+				"An identity resolution provider is required for guided Member creation "
+				"(register non_profit_contact_resolution_providers)."
+			)
+		)
 	member_kind = cstr(member_kind).strip()
 	identity_locks = []
 	if cstr(existing_contact).strip():
@@ -277,10 +284,16 @@ def _resolve_person_contact(
 	email: str,
 	phone: str | None,
 ):
-	try:
-		from good_connector.identity_matching import resolve_or_create_contact_from_external_signup
-	except ImportError:
-		frappe.throw(_("Good Connector identity matching is required for guided Member creation."))
+	from non_profit.non_profit.integration_hooks import CONTACT_RESOLUTION, first_provider
+
+	resolve_or_create_contact_from_external_signup = first_provider(CONTACT_RESOLUTION)
+	if not resolve_or_create_contact_from_external_signup:
+		frappe.throw(
+			_(
+				"An identity resolution provider is required for guided Member creation "
+				"(register non_profit_contact_resolution_providers)."
+			)
+		)
 
 	contact_names = _contacts_for_email(email)
 	contacts = {}
@@ -580,10 +593,16 @@ def _resolve_address(
 		if changed:
 			existing_address.save()
 		return existing_address
-	try:
-		from good_connector.identity_matching import resolve_or_create_address_from_external_signup
-	except ImportError:
-		frappe.throw(_("Good Connector identity matching is required for guided Member creation."))
+	from non_profit.non_profit.integration_hooks import ADDRESS_RESOLUTION, first_provider
+
+	resolve_or_create_address_from_external_signup = first_provider(ADDRESS_RESOLUTION)
+	if not resolve_or_create_address_from_external_signup:
+		frappe.throw(
+			_(
+				"An identity resolution provider is required for guided Member creation "
+				"(register non_profit_address_resolution_providers)."
+			)
+		)
 
 	linked_address_names = _linked_address_names(links)
 	for address_name in linked_address_names:

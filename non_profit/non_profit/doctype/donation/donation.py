@@ -103,7 +103,10 @@ class Donation(Document):
 
 			on_donation_change(self)
 		except Exception:
-			frappe.log_error(title=f"Donor roll-up refresh failed for {self.name}")
+			frappe.log_error(
+				title=f"Donor roll-up refresh failed for {self.name}",
+				message=frappe.get_traceback(),
+			)
 
 	def before_print(self, settings=None):
 		from non_profit.non_profit.swiss_qrbill import swiss_qrbill_svg
