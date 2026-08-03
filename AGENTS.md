@@ -7,12 +7,15 @@
 - Keep generic Member, Membership, Donor, Donation, Receipt, Campaign, Sponsor, Volunteer, and Grant behavior here.
 - Do not put client-specific UI, seeding, or branding in this app. Use `ilanga_app`, `good_npo`, or a client app for that.
 - Miki depends on the membership substrate. If you change Member/Membership semantics, update `miki_app` in the same change.
-- This app targets the Goodvantage bench and may depend on the ecosystem where
-  it helps (ERPNext is a required app, so its `Task` doctype is always present;
-  `good_connector` and friends are available). Do NOT bend the design to stay
-  "standalone outside Goodvantage benches" — that constraint no longer applies.
-  Defensive/optional imports (e.g. `good_connector.identity_matching` for legacy
-  Member registration) are still fine as good practice, not as a hard mandate.
+- This repository is PUBLIC (github.com/OpenNGO-Project/non_profit); the rest
+  of the Goodvantage ecosystem (`good_connector`, `good_npo`, `miki_app`,
+  `good_event`, ...) is private. Do not add new imports of or references to
+  private apps here. Where private behavior is needed, expose a neutral
+  provider hook (e.g. `non_profit_qr_bill_svg_providers`) and let a private
+  app — usually `good_npo` — register the implementation. The existing
+  guarded soft-imports (e.g. in `bank_integration.py`) are legacy seams to
+  migrate onto hooks over time, not a pattern to extend. ERPNext remains a
+  required app, so its doctypes may be used freely.
 - Keep `HOW_TO.md` and `DOCUMENTATION.md` current when hooks, doctypes, public helpers, setup, scheduled jobs, or operational behavior change.
 - All custom DocTypes must have Python controllers.
 - All new `@frappe.whitelist()` functions need type hints.
@@ -39,7 +42,10 @@
   aggregate ambiguity handling, and Bank Transaction linking. non_profit owns
   only Donation QRR registration, side-effect-free candidate matching, and the
   trusted unsaved Donation Payment Entry builder. Keep the existing qrbill
-  Donation-slip renderer, but pass the shared QRR only for a real QR-IBAN.
+  Donation-slip renderer only as the standalone fallback; QRR-referenced
+  slips come from `non_profit_qr_bill_svg_providers` (good_npo renders via
+  Good Connector and passes the shared QRR only for a real QR-IBAN — this
+  public repo itself must not import Good Connector in the print path).
   Candidate providers use deterministic ordered reads and return every
   same-QRR Donation before amount checks so amount filtering cannot select among
   ambiguous identities. Unsafe sole identities remain ineligible candidates.
