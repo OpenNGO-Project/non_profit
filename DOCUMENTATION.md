@@ -912,8 +912,6 @@ with stored Donor/Major Gift fields and sends only changed rows through chunked
 for individual Donation changes.
 
 Non Profit Settings → **Major Gifts** adds `major_donor_threshold` (auto-flag).
-`stale_interaction_days` and `lapsed_major_months` are reserved — defined but
-not yet wired to any behavior.
 
 ## Help And Navigation
 

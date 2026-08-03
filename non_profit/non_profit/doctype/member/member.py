@@ -38,11 +38,6 @@ class Member(Document):
 			self.subject_type = "Individual"
 			ensure_person_contact(self.contact)
 		self.set_derived_household()
-		if not self.member_name:
-			frappe.throw(_("Member Name is required."))
-
-		if self.email_id:
-			self.validate_email_type(self.email_id)
 
 	def set_member_name_from_customer(self) -> None:
 		if self.customer and not cstr(self.member_name).strip():
@@ -52,11 +47,6 @@ class Member(Document):
 		from non_profit.non_profit.doctype.household.household import get_current_household
 
 		self.household = get_current_household(self.contact) if self.contact else None
-
-	def validate_email_type(self, email):
-		from frappe.utils import validate_email_address
-
-		validate_email_address(email.strip(), True)
 
 	@frappe.whitelist()
 	def make_customer_and_link(self) -> None:
