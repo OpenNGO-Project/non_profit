@@ -36,11 +36,16 @@ def resolve_donor_customer_identity(
 		raise ValueError(f"Unsupported ambiguous email policy: {ambiguous_email_policy}")
 	donor_names, customer_names = find_donor_customer_candidates(email)
 	if ambiguous_email_policy == "reject" and (len(donor_names) > 1 or len(customer_names) > 1):
+		# The reject policy is used on public (guest) donation paths. Do not
+		# reveal that this email maps to multiple CRM identities -- that leaks
+		# enumeration state to an unauthenticated caller. Log the detail for
+		# staff and return a neutral error.
+		frappe.log_error(
+			title="Ambiguous public donor identity",
+			message=f"Email {email} matches donors={donor_names} customers={customer_names}",
+		)
 		frappe.throw(
-			_(
-				"Multiple donor or customer identities use email address {0}. "
-				"Staff must resolve the identity first."
-			).format(frappe.bold(email)),
+			_("We could not process your donation. Please contact us so we can help."),
 			frappe.ValidationError,
 		)
 
