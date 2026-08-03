@@ -166,7 +166,7 @@ class DonationReceipt(Document):
 			frappe.db.set_value("Donation", {"name": ["in", donation_names]}, "receipt", self.name)
 
 	def on_cancel(self) -> None:
-		self.status = "Cancelled"
+		self.db_set("status", "Cancelled", update_modified=False)
 		donation_names = list({row.donation for row in self.donations or [] if row.donation})
 		if donation_names:
 			frappe.db.set_value(
@@ -635,23 +635,6 @@ def get_donations_for_selected_year(
 		"donations": rows,
 		"company": company,
 		"currency": context["company_currencies"].get(company),
-	}
-
-
-def _active_receipt_for_donation(donation_name: str, current_receipt: str | None = None) -> str | None:
-	return _active_receipts_by_donation([donation_name], current_receipt).get(donation_name)
-
-
-def _donations_linked_to_active_receipts(donation_names: list[str]) -> set[str]:
-	return set(_active_receipts_by_donation(donation_names))
-
-
-def _donation_receipt_row(donation_name: str) -> dict[str, Any]:
-	donation = _load_donation_receipt_context([donation_name])["donations"].get(donation_name) or {}
-	return {
-		"donation": donation_name,
-		"donation_date": donation.get("date"),
-		"amount": donation.get("amount"),
 	}
 
 

@@ -130,7 +130,7 @@ class TestDonatePage(FrappeTestCase):
 			raise AssertionError((doctype, name, fields, kwargs))
 
 		with patch.object(frappe.db, "get_value", side_effect=get_value):
-			self.assertFalse(donate._public_campaign_matches_company("CAMPAIGN", "Donation Company"))
+			self.assertFalse(donate.campaign_matches_company("CAMPAIGN", "Donation Company"))
 
 	def test_public_campaign_options_are_scoped_to_company_cost_centers(self) -> None:
 		with (
@@ -237,6 +237,50 @@ class TestHardenedWhitelistedMethods(FrappeTestCase):
 				get_payment_reference_details("Donation", donation.name, "CHF")
 		finally:
 			frappe.set_user(previous_user)
+
+
+class TestGuestDonationAmountInvariant(FrappeTestCase):
+	"""`float()` happily parses "inf"/"nan"/"1e400", and `nan <= 0` is False, so
+	the positivity check alone let a guest persist a non-finite Donation amount
+	that then flowed into totals, allocations and receipts."""
+
+	def test_guest_submission_rejects_non_finite_amounts(self) -> None:
+		from non_profit.www.donate import _handle_submission
+
+		for raw_amount in ("inf", "-inf", "1e400", "nan", "NaN", "Infinity"):
+			with self.subTest(amount=raw_amount):
+				email = f"nonfinite-{frappe.generate_hash(length=8)}@example.com"
+				form = frappe._dict(
+					donor_name="Non Finite Donor",
+					email=email,
+					amount=raw_amount,
+					frequency="one_off",
+					consent="1",
+				)
+				with patch("non_profit.www.donate._verify_captcha"):
+					with self.assertRaises(frappe.ValidationError):
+						_handle_submission(form)
+
+				self.assertFalse(
+					frappe.db.exists("Donation", {"email": email}),
+					f"{raw_amount!r} must not create a Donation",
+				)
+
+	def test_guest_submission_still_accepts_a_normal_amount(self) -> None:
+		from non_profit.www.donate import _handle_submission
+
+		email = f"finite-{frappe.generate_hash(length=8)}@example.com"
+		form = frappe._dict(
+			donor_name="Finite Donor",
+			email=email,
+			amount="12.50",
+			frequency="one_off",
+			consent="1",
+		)
+		with patch("non_profit.www.donate._verify_captcha"):
+			donation_name = _handle_submission(form)
+
+		self.assertEqual(frappe.db.get_value("Donation", donation_name, "amount"), 12.50)
 
 
 class TestGuestDonorProtection(FrappeTestCase):

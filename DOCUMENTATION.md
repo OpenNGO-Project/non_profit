@@ -17,10 +17,17 @@
 
 Breaking changes are allowed while Miki is not production, but `miki_app` must be updated in the same change whenever shared membership behavior changes.
 
+The historical `PARTY_MODEL_REFACTOR_PLAN.md` (self-declared non-authoritative,
+zero inbound references) was archived out of the repo in 16.7.0 to
+`/workspace/development/archived/`. Its decisions that are still current were
+ported into this document and `REQUIREMENTS.md` §4 before the move; everything
+else described a Customer-regime redesign that was never shipped.
+
 ## Key DocTypes
 
 - **Contact** is the canonical person identity; **Member**, individual **Donor**, and **Volunteer** are role projections that retain a conflict-checked canonical Contact link. One Contact can back at most one role of each type. Ordinary saves of existing roles cannot add, clear, or retarget that link.
-- **NPO Organization** is the canonical organization identity anchor. ERPNext Customer and Supplier remain operating/accounting parties linked through hidden preparatory identity fields.
+- **NPO Organization** is the canonical organization identity anchor. ERPNext Customer and Supplier remain operating/accounting parties linked through hidden preparatory identity fields. NPO Organization is a legal-identity grouping only and is never a ledger party: several operating Customers (for example a parent and its branch) may share one legal identity without being merged, and verified-identifier uniqueness belongs to the NPO Organization rather than to any operating Customer. `legal_form` and identifiers owned by other apps are source evidence, not verified identity; base `non_profit` ships no country-specific identifier normalizer.
+- **`Customer.npo_subject_type` is the authoritative NPO subject classification.** Code branches on it and never infers person/Household-ness from `customer_type`, name, address, or email. `Customer.npo_household` means "this Customer *is* the Household"; the legacy `Customer.household` means "this individual Customer *belongs to* a Household". The two must never be conflated — `household` is retired only once its social meaning has fully moved to Household Person rows. Supplier deliberately carries `npo_subject_type` / `npo_contact` / `npo_organization` but **no** `npo_household`.
 - **Household** (with the **Household Person** child table) groups Contacts who share an address into one solicitation unit; see [Households](#households).
 - **Donor**, **Donation**, **Donation Campaign**, **Recurring Donation**, and **Donation Receipt** for fundraising. `Donor.customer` is the canonical ERPNext Customer relation for donor identity; Donation still links to Donor.
   Donation carries analysis dimensions `cost_center` (fetched from the campaign's cost center when empty) and `project` (both ERPNext doctypes) for downstream fundraising analytics (e.g. the `good_analytics` app).
@@ -239,7 +246,17 @@ good_newsletter_audience_providers = [
 Its provider key is `npo_recipient_selection`. Source discovery uses
 permission-aware `frappe.get_list` and exposes only enabled records marked
 available for newsletters. Member extraction calls the permission-gated service
-again; it never trusts the earlier source list.
+again; it never trusts the earlier source list — a disabled selection, or one
+whose `available_for_newsletter` flag is off, is refused there as well.
+
+Each row carries `email`, optional `contact`, `first_name`, `last_name`, the
+complete `salutation` (`Guten Tag …` / `Bonjour …,`), and `language`, matching
+good_newsletter's contact-aware provider contract. A candidate that resolves to
+no reachable address keeps its row with an empty `email`; good_newsletter counts
+those as `skipped_no_email` in the import summary rather than silently losing
+them. good_newsletter creates the resulting subscribers through
+`initialize_as_confirmed_import` (trusted existing-relationship import); the
+provider only supplies rows and never writes consent state.
 
 Canonical candidates are enriched through
 `correspondence.get_correspondence_profiles` in batches of no more than 500
@@ -283,7 +300,7 @@ channel and create permission on both optional Good Newsletter Campaign and
 Audience DocTypes; it invokes
 `good_newsletter.api.campaign.create_from_source` with provider
 `npo_recipient_selection`. Direct Mail routing is shown only for its enabled
-channel and Good Direct Mail Run create permission; `frappe.new_doc` receives
+channel and Good Direct Mail Campaign create permission; `frappe.new_doc` receives
 only `recipient_selection` and `title`, so no server dependency is introduced.
 
 ## Hooks
@@ -436,11 +453,20 @@ POST-only and inert unless both `developer_mode` and
 confirmation path.
 
 Public donation pages that delegate to `non_profit.www.donate._handle_submission`
-must pass server-side validation for donor name, email syntax, positive amount,
-accepted consent, allowed frequency (`one_off`, `Monthly`, `Quarterly`,
-`Yearly`). Company is resolved server-side; a selected or listed Donation
-Campaign must be active and backed by an enabled leaf Cost Center belonging to
-that Company. Before any Donor/Customer lookup or creation, the normalized email
+must pass server-side validation for donor name, email syntax, a finite positive
+amount, accepted consent, allowed frequency (`one_off`, `Monthly`, `Quarterly`,
+`Yearly`). The amount check rejects non-finite input explicitly: `float()`
+accepts `inf`, `-inf`, `nan`, and overflowing literals such as `1e400`, and
+`nan` compares False against every bound, so a positivity test alone cannot keep
+those values out. `Donation.validate` repeats the same invariant at controller
+level so no write path — Desk, import, portal, or bank reconciliation — can
+persist a non-finite or non-positive amount. Company is resolved server-side; a
+selected or listed Donation Campaign must be active and backed by an enabled
+leaf Cost Center belonging to that Company. That campaign/Company gate lives
+once in `non_profit.non_profit.campaign_gate.campaign_matches_company()` and is
+shared with Good NPO's public checkout, so the two guest surfaces cannot drift
+apart on a security boundary; ownership is derived from the campaign's Cost
+Center, never from the campaign name or historical Donations. Before any Donor/Customer lookup or creation, the normalized email
 acquires the same hashed `Individual` identity lock used by guided and Good NPO
 Member flows through transaction completion. Browser `required` attributes are
 UX only. The handler is rate-limited. Every guest submission must include a

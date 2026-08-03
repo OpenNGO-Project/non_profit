@@ -367,6 +367,42 @@ class TestDonation(unittest.TestCase):
 		self.assertFalse(donation.receipt)
 
 
+class TestDonationAmountInvariant(IntegrationTestCase):
+	"""The controller — not just the public form — owns the amount invariant, so
+	every write path (imports, portals, bank reconciliation, Desk) is covered."""
+
+	def _donation_values(self, amount):
+		company, _receivable, _cash = get_company_and_accounts()
+		create_donor_type()
+		donor = create_unique_donor()
+		return {
+			"doctype": "Donation",
+			"company": company,
+			"donor": donor.name,
+			"donor_name": donor.donor_name,
+			"email": get_donor_email(donor),
+			"date": get_active_fiscal_year_date(),
+			"amount": amount,
+		}
+
+	def test_direct_insert_rejects_non_finite_amounts(self):
+		for amount in (float("nan"), float("inf"), float("-inf"), "nan", "inf", "1e400"):
+			with self.subTest(amount=amount):
+				with self.assertRaises(frappe.ValidationError) as error:
+					frappe.get_doc(self._donation_values(amount)).insert(ignore_permissions=True)
+				self.assertIn("finite", str(error.exception))
+
+	def test_direct_insert_rejects_non_positive_amounts(self):
+		for amount in (0, -1, "-25.50"):
+			with self.subTest(amount=amount):
+				with self.assertRaises(frappe.ValidationError):
+					frappe.get_doc(self._donation_values(amount)).insert(ignore_permissions=True)
+
+	def test_direct_insert_accepts_a_finite_positive_amount(self):
+		donation = frappe.get_doc(self._donation_values(42.5)).insert(ignore_permissions=True)
+		self.assertEqual(frappe.utils.flt(donation.amount), 42.5)
+
+
 class TestDonationPaymentEntryInvariants(IntegrationTestCase):
 	def setUp(self):
 		self._concurrency_global_state = _capture_concurrency_global_state()
@@ -450,7 +486,7 @@ class TestDonationPaymentEntryInvariants(IntegrationTestCase):
 		donation = create_submitted_donation(100)
 		donor = donation.donor
 		payment_entries = [insert_donation_payment_entry(donation).name for _index in range(2)]
-		frappe.db.commit()
+		frappe.db.commit()  # Publish fixtures to independent test connections. # nosemgrep
 		try:
 			barrier = Barrier(2)
 			with ThreadPoolExecutor(max_workers=2) as executor:
@@ -486,7 +522,7 @@ class TestDonationPaymentEntryInvariants(IntegrationTestCase):
 			frappe.db.rollback()
 			_cleanup_concurrent_allocation_fixture(payment_entries, donation.name, donor)
 			_restore_concurrency_global_state(self._concurrency_global_state)
-			frappe.db.commit()
+			frappe.db.commit()  # Persist cross-connection test cleanup. # nosemgrep
 
 	def test_fully_allocated_donation_payment_helper_is_rejected(self):
 		donation = create_submitted_donation(100)

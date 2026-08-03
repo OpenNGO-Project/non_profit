@@ -481,7 +481,7 @@ class TestDonationEbicsProvider(UnitTestCase):
 				return_value=frappe._dict(company="Test Company", donor="DONOR-1"),
 			),
 			patch(
-				"non_profit.non_profit.custom_doctype.payment_entry._expected_donation_party_account",
+				"non_profit.non_profit.custom_doctype.payment_entry.expected_donation_party_account",
 				return_value="Receivable EUR - T",
 			),
 			patch(
@@ -500,7 +500,7 @@ class TestDonationEbicsProvider(UnitTestCase):
 				return_value=True,
 			),
 			patch(
-				"non_profit.non_profit.custom_doctype.payment_entry._build_donation_payment_entry"
+				"non_profit.non_profit.custom_doctype.payment_entry.build_donation_payment_entry"
 			) as build_payment_entry,
 		):
 			build_ebics_payment_entry(
@@ -525,7 +525,7 @@ class TestDonationEbicsProvider(UnitTestCase):
 				return_value=False,
 			),
 			patch(
-				"non_profit.non_profit.custom_doctype.payment_entry._build_donation_payment_entry"
+				"non_profit.non_profit.custom_doctype.payment_entry.build_donation_payment_entry"
 			) as build_payment_entry,
 			self.assertRaises(frappe.ValidationError),
 		):
