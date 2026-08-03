@@ -6,7 +6,7 @@ import frappe
 from frappe import _
 from frappe.utils import cstr, getdate, validate_email_address
 
-from non_profit.non_profit.identity_lock import acquire_identity_lock
+from non_profit.non_profit.identity_lock import _normalized_text, acquire_identity_lock
 from non_profit.non_profit.utils import ensure_person_contact, role_uses_canonical_person
 
 MUTATED_IDENTITY_DOCTYPES = ("Contact", "Address", "Customer", "Member", "Membership")
@@ -806,10 +806,6 @@ def _email(value: str | None, *, required: bool) -> str:
 
 def _same_text(left: Any, right: Any) -> bool:
 	return _normalized_text(left) == _normalized_text(right)
-
-
-def _normalized_text(value: Any) -> str:
-	return " ".join(cstr(value).split()).casefold()
 
 
 def _phone_key(value: Any) -> str:

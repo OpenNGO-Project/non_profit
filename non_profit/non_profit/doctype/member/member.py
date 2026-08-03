@@ -8,6 +8,7 @@ from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.model.document import Document
 from frappe.utils import cstr, getdate, nowdate
 
+from non_profit.non_profit.doctype.donor.donor import _check_identity_doc_permission
 from non_profit.non_profit.integration_hooks import CONTACT_RESOLUTION, first_provider
 from non_profit.non_profit.utils import (
 	ensure_canonical_contact_available,
@@ -444,13 +445,6 @@ def _link_contact_to_customer(
 		contact_doc.check_permission("write")
 	contact_doc.append("links", {"link_doctype": "Customer", "link_name": customer})
 	contact_doc.save(ignore_permissions=ignore_permissions)
-
-
-def _check_identity_doc_permission(doctype: str, name: str, ptype: str = "read") -> None:
-	doc = frappe.get_doc(doctype, name)
-	doc.check_permission("read")
-	if ptype != "read":
-		doc.check_permission(ptype)
 
 
 def _contact_email(contact_doc) -> str | None:
