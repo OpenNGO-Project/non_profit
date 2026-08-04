@@ -135,8 +135,13 @@ DONATION_SLIP_CH_HTML = """
 .donation-slip-body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10pt; margin: 16mm 17mm 18mm; }
 .donation-slip-qr-page { box-sizing: border-box; font-family: 'Helvetica Neue', Arial, sans-serif; min-height: 297mm; page-break-before: always; display: flex; flex-direction: column; justify-content: flex-end; }
 .donation-slip-qr-note { color: #666; font-size: 9pt; margin: 0 17mm 6mm; }
-.donation-slip-qr { border-top: 1px dashed #999; padding-top: 5mm; width: 210mm; }
-.donation-slip-qr svg { display: block; height: 105mm; width: 210mm; }
+/* chqr emits a 3mm cut-line leader above the 210x105mm payment part, so the
+   canvas is 108mm tall. Forcing 105mm scales the whole slip down and drops the
+   payment part below the SIX-mandated size; the dashed rule is drawn on the cut
+   line rather than added as flow padding, which would push the slip up. */
+.donation-slip-qr { height: 108mm; position: relative; width: 210mm; }
+.donation-slip-qr::before { border-top: 1px dashed #999; content: ""; left: 0; position: absolute; top: 3mm; width: 210mm; }
+.donation-slip-qr svg { display: block; height: 108mm; width: 210mm; }
 </style>
 <div class="donation-slip-body">
 	<div style="margin-bottom: 1em;">
@@ -178,6 +183,7 @@ DONATION_SLIP_CH_MANAGED_HASHES = frozenset(
 	{
 		"55df655758ecbdd705476175b4f13e628f106fc4e6268c46b0c374ce057b7d7c",
 		"930d2ea12fc6daae856332792577551e90089fa07a187556509cbfc99343f789",
+		"73822669976cb45ce956000e0e9f705a403f4533097d1bbdc53945cdfef09ef7",
 	}
 )
 
