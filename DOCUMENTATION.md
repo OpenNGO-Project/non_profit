@@ -408,9 +408,11 @@ default `de`) records the correspondence language for the letter and the email;
   Contact → legacy), and a donor without any email produces a clear error rather
   than a silent no-op. The seeded `Spendenbescheinigung` Print Format is rendered
   to PDF with `frappe.attach_print(..., lang=receipt.language)` and handed to
-  `frappe.sendmail` with `reference_doctype`/`reference_name` set to the receipt,
-  so the send appears on the receipt timeline. Finally `email_sent_on` is
-  stamped. **Emailing never changes the status** — `Issued` remains the explicit
+  `non_profit.non_profit.mailer.send_referenced_email` with
+  `reference_doctype`/`reference_name` set to the receipt. A registered
+  downstream provider can therefore create a Communication on the receipt
+  timeline; without one, delivery falls back to `frappe.sendmail`. Finally
+  `email_sent_on` is stamped. **Emailing never changes the status** — `Issued` remains the explicit
   `mark_receipts_issued` action for the annual run, so a courtesy copy of a Draft
   does not pretend the batch went out. The Desk action lives in
   `doctype/donation_tax_receipt/donation_tax_receipt.js`
@@ -430,6 +432,27 @@ Open business questions (recorded in the bench-level
 further qualifying-donation refinements (minimum amounts, in-kind gifts,
 membership fees), cantonal receipt format variations, and the signature image.
 
+## Person-Level Contact Suppression
+
+`NPO Contact Suppression` is a channel-neutral, person-level "never contact
+this person" flag keyed by canonical Contact (the suite's shared person
+identity — Members and Donors canonicalize to Contact first). Each row carries
+a required scope (`Do Not Contact` or `Deceased`), an `active` check
+(default on) so a mistaken row can be retired without deleting its history,
+and an optional date and reason. Generic Endpoint Contacts are rejected —
+they are not people. Permissions mirror `NPO Recipient Selection` (System
+Manager and Non Profit Manager, full non-child access) and changes are
+tracked.
+
+`non_profit.non_profit.contact_suppression.active_suppressed_contacts(contact_names)`
+is the single query seam for consumers: a trusted server-side read returning
+the subset of the passed Contact names that hold any active suppression row,
+chunked to 1,000 names per IN clause. Consuming campaign apps (postal or
+email) call it inside their own eligibility pipelines as one ADDITIONAL
+exclusion reason. It deliberately does not replace channel-owned
+consent/suppression machinery, and non_profit itself imports no consumer app —
+the helper is a neutral seam like the audience provider hooks.
+
 ## Hooks
 
 - `after_install = non_profit.setup.setup_non_profit`
@@ -444,10 +467,20 @@ membership fees), cantonal receipt format variations, and the signature image.
   Account data on an existing shared site.
 - `good_newsletter_audience_providers` registers the optional
   `npo_recipient_selection` provider factory without importing Good Newsletter.
-- `good_direct_mail_audience_providers = {"donation_tax_receipt":
-  "non_profit.non_profit.tax_receipts.direct_mail_candidate_rows"}` registers the
-  Spendenbescheinigung letter audience. Only `good_direct_mail` reads the hook,
-  so it is inert when that app is not installed.
+- `good_direct_mail_audience_providers` registers
+  `non_profit.non_profit.tax_receipts.direct_mail_audience_provider`, whose
+  descriptor maps the `donation_tax_receipt` key to `direct_mail_candidate_rows`.
+  Only `good_direct_mail` reads the factory hook, so it is inert when that app is
+  not installed.
+- `non_profit_referenced_email_providers` (consumed by
+  `non_profit.non_profit.mailer.send_referenced_email`) lets a private
+  downstream app — usually good_npo via Good Connector's
+  `send_referenced_email` — deliver the app's doc-referenced emails
+  (Membership acknowledgement, Donation thank-you, Donation Tax Receipt
+  send, Grant review invitation) with a Communication on the reference
+  document's timeline. The last registered provider wins; with no provider
+  the mailer falls back to plain `frappe.sendmail` with the same arguments.
+  Provider errors propagate — no fallback re-send after a provider failure.
 - `doc_events["Membership"]["validate"] = non_profit.non_profit.membership_sync.validate_no_overlap`
   blocks overlapping active Memberships by default. Callers can set
   `doc.flags.warn_on_membership_overlap = True` before validation when an
@@ -535,8 +568,9 @@ controller requires read permission on the Campaign and returns twelve monthly
 buckets for submitted paid donations on that campaign in the selected year.
 Segments are donation-level so the Desk form chart can open the underlying
 Donation directly.
-Donation Tax Receipt email issuance, chapter staff edits, and grant review
-invitations require write permission on the target document. A logged-in portal
+Donation Tax Receipt email issuance requires receipt read plus DocType email
+permission; chapter staff edits and grant review invitations require write
+permission on the target document. A logged-in portal
 user may join a published Chapter only as themselves, and may leave only their
 own active Chapter row; editing another user's Chapter row still requires
 Chapter write permission. Member-supplied `website_url` values are restricted
@@ -549,9 +583,9 @@ POST-only and inert unless both `developer_mode` and
 confirmation path.
 
 Public donation pages that delegate to `non_profit.www.donate._handle_submission`
-must pass server-side validation for donor name, email syntax, a finite positive
-amount, accepted consent, allowed frequency (`one_off`, `Monthly`, `Quarterly`,
-`Yearly`). The amount check rejects non-finite input explicitly: `float()`
+must pass server-side validation for donor name, email syntax, an amount within
+the shared public bounds (CHF 5–100'000), accepted consent, and allowed frequency
+(`one_off`, `Monthly`, `Quarterly`, `Yearly`). The amount check rejects non-finite input explicitly: `float()`
 accepts `inf`, `-inf`, `nan`, and overflowing literals such as `1e400`, and
 `nan` compares False against every bound, so a positivity test alone cannot keep
 those values out. `Donation.validate` repeats the same invariant at controller
@@ -1034,8 +1068,6 @@ with stored Donor/Major Gift fields and sends only changed rows through chunked
 for individual Donation changes.
 
 Non Profit Settings → **Major Gifts** adds `major_donor_threshold` (auto-flag).
-`stale_interaction_days` and `lapsed_major_months` are reserved — defined but
-not yet wired to any behavior.
 
 ## Help And Navigation
 

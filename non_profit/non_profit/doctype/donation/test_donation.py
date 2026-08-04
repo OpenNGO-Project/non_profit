@@ -154,6 +154,36 @@ class TestDonation(unittest.TestCase):
 		self.assertEqual(donation.paid, 0)
 		log_error.assert_called()
 
+	def test_duplicate_authorization_on_paid_donation_is_a_noop(self):
+		# A duplicate or late gateway callback for an already-paid donation must
+		# not re-run allocation (which throws "fully allocated") nor flip paid
+		# back to 0 in the except handler. It short-circuits before any write.
+		donor = create_donor()
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"company": frappe.get_cached_value("Non Profit Settings", None, "company"),
+				"donor": donor.name,
+				"donor_name": donor.donor_name,
+				"email": get_donor_email(donor),
+				"date": get_active_fiscal_year_date(),
+				"amount": 25,
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+		frappe.db.set_value("Donation", donation.name, "paid", 1, update_modified=False)
+
+		with (
+			patch.object(donation, "create_payment_entry") as create_payment_entry,
+			patch.object(donation, "db_set") as db_set,
+		):
+			donation.on_payment_authorized("Completed")
+
+		create_payment_entry.assert_not_called()
+		db_set.assert_not_called()
+		donation.reload()
+		self.assertEqual(donation.paid, 1)
+
 	def test_payment_authorization_keeps_base_accounting_and_dispatch_order(self):
 		donation = frappe.new_doc("Donation")
 		donation.name = "NPO-DONATION-AUTHORIZATION-ORDER"
@@ -262,7 +292,10 @@ class TestDonation(unittest.TestCase):
 		).insert(ignore_permissions=True)
 		donation.submit()
 
-		with patch("frappe.sendmail", return_value=frappe._dict(name="EMAIL-Q-NPO")) as sendmail:
+		with patch(
+			"non_profit.non_profit.doctype.donation.donation.send_referenced_email",
+			return_value=frappe._dict(name="EMAIL-Q-NPO"),
+		) as sendmail:
 			self.assertTrue(donation.send_thank_you())
 
 		donation.reload()
@@ -453,7 +486,7 @@ class TestDonationPaymentEntryInvariants(IntegrationTestCase):
 		donation = create_submitted_donation(100)
 		donor = donation.donor
 		payment_entries = [insert_donation_payment_entry(donation).name for _index in range(2)]
-		frappe.db.commit()  # nosemgrep: frappe-manual-commit
+		frappe.db.commit()  # Publish fixtures to independent test connections. # nosemgrep
 		try:
 			barrier = Barrier(2)
 			with ThreadPoolExecutor(max_workers=2) as executor:
@@ -489,7 +522,7 @@ class TestDonationPaymentEntryInvariants(IntegrationTestCase):
 			frappe.db.rollback()
 			_cleanup_concurrent_allocation_fixture(payment_entries, donation.name, donor)
 			_restore_concurrency_global_state(self._concurrency_global_state)
-			frappe.db.commit()  # nosemgrep: frappe-manual-commit
+			frappe.db.commit()  # Persist cross-connection test cleanup. # nosemgrep
 
 	def test_fully_allocated_donation_payment_helper_is_rejected(self):
 		donation = create_submitted_donation(100)

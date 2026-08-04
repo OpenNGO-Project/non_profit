@@ -9,50 +9,32 @@ from frappe.utils import flt
 
 
 def register_donation_qr_reference(doc, method: str | None = None) -> str | None:
-	del method
-	if (
-		"good_connector" not in frappe.get_installed_apps()
-		or doc.docstatus == 2
-		or not frappe.get_meta("Donation").has_field("gc_qr_reference")
-	):
-		return None
-	from good_connector.qr_bill import assert_unique_qrr_reference, resolve_qrr_reference
+	"""Persist the Donation's QRR through the registered provider hook.
 
-	reference = resolve_qrr_reference(
-		doc.name,
-		doctype="Donation",
-		stored_reference=doc.get("gc_qr_reference"),
-	)
-	assert_unique_qrr_reference("Donation", doc.name, reference, company=doc.company)
-	if doc.get("gc_qr_reference") != reference:
-		doc.db_set("gc_qr_reference", reference, update_modified=False)
-	return reference
+	The resolve/validate/uniqueness/never-overwrite orchestration lives in
+	the provider (privately registered — this repository is public and does
+	not import it). No provider installed means no QRR reconciliation, the
+	same degradation as before the hook seam.
+	"""
+	del method
+	if doc.docstatus == 2 or not frappe.get_meta("Donation").has_field("gc_qr_reference"):
+		return None
+	from non_profit.non_profit.integration_hooks import QR_REFERENCE_REGISTRATION, first_provider
+
+	if register := first_provider(QR_REFERENCE_REGISTRATION):
+		return register(doc=doc, doctype="Donation")
+	return None
 
 
 def backfill_donation_qr_references() -> None:
-	if (
-		"good_connector" not in frappe.get_installed_apps()
-		or not frappe.db.exists("DocType", "Donation")
-		or not frappe.get_meta("Donation").has_field("gc_qr_reference")
+	if not frappe.db.exists("DocType", "Donation") or not frappe.get_meta("Donation").has_field(
+		"gc_qr_reference"
 	):
 		return
-	from good_connector.qr_bill import assert_unique_qrr_reference, resolve_qrr_reference
+	from non_profit.non_profit.integration_hooks import QR_REFERENCE_BACKFILL, first_provider
 
-	for donation in frappe.get_all(
-		"Donation",
-		filters={"docstatus": 1, "gc_qr_reference": ["is", "not set"]},
-		fields=["name", "company"],
-		limit_page_length=0,
-	):
-		reference = resolve_qrr_reference(donation.name, doctype="Donation")
-		assert_unique_qrr_reference("Donation", donation.name, reference, company=donation.company)
-		frappe.db.set_value(
-			"Donation",
-			{"name": donation.name, "gc_qr_reference": ["is", "not set"]},
-			"gc_qr_reference",
-			reference,
-			update_modified=False,
-		)
+	if backfill := first_provider(QR_REFERENCE_BACKFILL):
+		backfill(doctype="Donation", filters={"docstatus": 1})
 
 
 def _matching_donations(company: str, qr_reference: str) -> list[str]:

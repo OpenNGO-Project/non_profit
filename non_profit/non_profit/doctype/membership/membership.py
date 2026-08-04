@@ -14,6 +14,8 @@ from frappe.utils import (
 	nowdate,
 )
 
+from non_profit.non_profit.mailer import send_referenced_email
+
 
 class Membership(Document):
 	def validate(self):
@@ -42,11 +44,9 @@ class Membership(Document):
 		if not member_name:
 			user = frappe.get_doc("User", frappe.session.user)
 			member = frappe.get_doc(
-				dict(
-					doctype="Member",
-					email_id=frappe.session.user,
-					member_name=user.get_fullname(),
-				)
+				doctype="Member",
+				email_id=frappe.session.user,
+				member_name=user.get_fullname(),
 			).insert(ignore_permissions=True)
 			member_name = member.name
 
@@ -185,10 +185,12 @@ class Membership(Document):
 		email_template = frappe.get_doc("Email Template", settings.email_template)
 		context = {"doc": self, "member": member}
 
+		# Trusted source: an Email Template document chosen in Non Profit
+		# Settings — staff-authored content, the standard Frappe pattern.
 		email_args = {
 			"recipients": [email],
-			"message": frappe.render_template(email_template.get("response"), context),
-			"subject": frappe.render_template(email_template.get("subject"), context),
+			"message": frappe.render_template(email_template.get("response"), context),  # nosemgrep
+			"subject": frappe.render_template(email_template.get("subject"), context),  # nosemgrep
 			"attachments": attachments,
 			"reference_doctype": self.doctype,
 			"reference_name": self.name,
@@ -196,14 +198,14 @@ class Membership(Document):
 
 		if not frappe.flags.in_test:
 			frappe.enqueue(
-				method=frappe.sendmail,
+				method="non_profit.non_profit.mailer.send_referenced_email",
 				queue="short",
 				timeout=300,
 				is_async=True,
 				**email_args,
 			)
 		else:
-			frappe.sendmail(**email_args)
+			send_referenced_email(**email_args)
 
 	def generate_and_send_invoice(self):
 		from non_profit.non_profit.legacy_payments import (

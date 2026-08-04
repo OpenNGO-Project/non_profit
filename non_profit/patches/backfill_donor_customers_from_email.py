@@ -22,4 +22,4 @@ def execute():
 		try:
 			get_or_create_customer_for_donor(donor)
 		except Exception:
-			frappe.log_error(frappe.get_traceback(), "Donor customer email backfill failed")
+			frappe.log_error(title="Donor customer email backfill failed", message=frappe.get_traceback())

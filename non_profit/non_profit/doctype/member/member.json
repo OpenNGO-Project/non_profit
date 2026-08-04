@@ -32,7 +32,8 @@
    "fieldname": "member_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Member Name"
+   "label": "Member Name",
+   "reqd": 1
   },
   {
    "fieldname": "subject_type",

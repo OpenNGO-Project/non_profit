@@ -37,6 +37,7 @@ from non_profit.non_profit.doctype.donation_tax_receipt.donation_tax_receipt imp
 )
 from non_profit.non_profit.doctype.donor.donor import get_donor_email
 from non_profit.non_profit.fundraising_setup import DONATION_TAX_RECEIPT_PRINT_FORMAT
+from non_profit.non_profit.mailer import send_referenced_email
 from non_profit.non_profit.recipient_selection import _donor_canonical_subject
 
 RECEIPT_DOCTYPE = "Donation Tax Receipt"
@@ -57,6 +58,15 @@ DISPATCH_ROLES = ("System Manager", "Direct Mail Manager")
 def receipt_campaign_reference(company: str, tax_year: int) -> str:
 	"""Build the opaque provider reference `<company>|<tax_year>`."""
 	return f"{company}|{cint(tax_year)}"
+
+
+def direct_mail_audience_provider() -> dict[str, str]:
+	"""Describe the tax-receipt audience to good_direct_mail."""
+	return {
+		"key": AUDIENCE_PROVIDER_KEY,
+		"label": _("Donation Tax Receipts"),
+		"get_rows": "non_profit.non_profit.tax_receipts.direct_mail_candidate_rows",
+	}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -328,9 +338,8 @@ def send_receipt_email(receipt: str) -> dict[str, Any]:
 
 	This is the individual-issuance path ported from the retired `Donation
 	Receipt.send_to_donor()`: same permission shape (document-level rights plus
-	the DocType's email right), same delivery mechanism (`frappe.attach_print`
-	rendered PDF handed to `frappe.sendmail`), and the same `email_sent_on`
-	audit stamp.
+	the DocType's email right), with the rendered PDF dispatched through the
+	doc-referenced email provider seam and the same `email_sent_on` audit stamp.
 
 	Emailing deliberately does **not** change the receipt status. `Issued` stays
 	the explicit operator action performed by `mark_receipts_issued` once the
@@ -362,7 +371,7 @@ def send_receipt_email(receipt: str) -> dict[str, Any]:
 		print_format=print_format,
 		lang=doc.language or "de",
 	)
-	frappe.sendmail(
+	send_referenced_email(
 		recipients=[email],
 		subject=_("Spendenbescheinigung {0}").format(doc.tax_year),
 		message=_receipt_email_body(doc),

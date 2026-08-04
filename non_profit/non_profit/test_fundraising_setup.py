@@ -46,6 +46,43 @@ class TestFundraisingSetup(IntegrationTestCase):
 
 				self.assertEqual(frappe.db.get_value("Print Format", name, "html"), operator_html)
 
+	def test_donor_controlled_fields_are_escaped_in_shipped_templates(self) -> None:
+		# donor_name/email are guest-supplied (www/donate.py) and stored verbatim.
+		# Frappe print-format and website Jinja render with autoescape OFF, so the
+		# shipped bodies must escape them explicitly or a hostile name executes
+		# script in the staff print session.
+		payload = "<img src=x onerror=alert(1)>"
+		doc = frappe._dict(
+			name="DON-XSS-0001",
+			donor_name=payload,
+			email="donor@example.com",
+			amount=42,
+			total_amount=42,
+			tax_year=2026,
+			currency="CHF",
+			campaign=None,
+			date="2026-01-01",
+			period_from="2026-01-01",
+			period_to="2026-12-31",
+			issued_on=None,
+			creation="2026-01-01",
+			donation_details="[]",
+			remarks="",
+			donations=[],
+			qr_bill_svg="",
+		)
+		for constant_name in (
+			"DONATION_SLIP_CH_HTML",
+			"DONATION_TAX_RECEIPT_DE_HTML",
+			"THANK_YOU_EMAIL_HTML",
+		):
+			with self.subTest(template=constant_name):
+				rendered = frappe.render_template(  # nosemgrep
+					getattr(fundraising_setup, constant_name), {"doc": doc}
+				)
+				self.assertNotIn(payload, rendered)
+				self.assertIn("&lt;img", rendered)
+
 	def test_email_template_remains_create_only(self) -> None:
 		operator_html = "<p>Operator-owned thank-you email</p>"
 		frappe.db.set_value(

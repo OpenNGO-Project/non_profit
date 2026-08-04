@@ -18,8 +18,20 @@
 - What it prevents: Manual transaction commits in ordinary request or document lifecycle code.
 - Why this override is safe: This is an operator-invoked bench smoke script, not a request handler or DocType hook. It deliberately commits the isolated fixture it creates so a separate PDF render command can read it.
 
-## `frappe-manual-commit` in `non_profit/non_profit/doctype/donation/test_donation.py`
+## `frappe-ssti` in `non_profit/non_profit/doctype/donation/donation.py`
+
+- Rule: `frappe-ssti`
+- What it prevents: Rendering attacker-controlled Jinja that could expose server-side data or execute unsafe template operations.
+- Why this override is safe: Donation thank-you content comes from the configured `Email Template` document, whose write access is restricted to trusted Desk administrators. The donor controls neither the template subject nor body; only the Donation values supplied as rendering context.
+
+## `frappe-manual-commit` in Donation concurrency tests
 
 - Rule: `frappe-manual-commit`
-- What it prevents: Manual commits in application paths that could expose partial writes outside Frappe's request transaction.
-- Why this override is safe: The annotated calls are test-only boundaries for a two-connection allocation race. The first makes fixtures visible to independent database connections; the second durably removes those fixtures and restores global settings in `finally`. Production code does not execute either call.
+- What it prevents: Manual commits in application request and document lifecycle code.
+- Why this override is safe: The two commits occur only in a MariaDB integration test that opens independent database connections. The first publishes fixtures so both workers can exercise the allocation race; the second persists cross-connection cleanup. Production code does not use these commits.
+
+## `frappe-ssti` in `non_profit/non_profit/doctype/membership/membership.py`
+
+- Rule: `frappe-ssti`
+- What it prevents: Rendering attacker-controlled Jinja that could expose server-side data or execute unsafe template operations.
+- Why this override is safe: The membership acknowledgement subject and body come from the `Email Template` document configured in Non Profit Settings, whose write access is restricted to trusted Desk administrators. The member controls neither template; only the Membership and Member values supplied as rendering context.

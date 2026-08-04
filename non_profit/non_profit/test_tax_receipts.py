@@ -17,6 +17,7 @@ from non_profit.non_profit.fundraising_setup import (
 from non_profit.non_profit.tax_receipts import (
 	cancel_receipt,
 	create_receipt_campaign,
+	direct_mail_audience_provider,
 	direct_mail_candidate_rows,
 	donation_table_html,
 	generate_receipts,
@@ -446,7 +447,7 @@ class TestDonationTaxReceiptEmailIssuance(TaxReceiptFixtures):
 		attachment = {"fname": "receipt.pdf", "fcontent": b"%PDF"}
 		with (
 			patch.object(frappe, "attach_print", return_value=attachment) as attach_print,
-			patch.object(frappe, "sendmail") as sendmail,
+			patch("non_profit.non_profit.tax_receipts.send_referenced_email") as sendmail,
 		):
 			result = send_receipt_email(receipt.name)
 
@@ -479,7 +480,7 @@ class TestDonationTaxReceiptEmailIssuance(TaxReceiptFixtures):
 		receipt = self._receipt(donor.name)
 
 		with (
-			patch.object(frappe, "sendmail") as sendmail,
+			patch("non_profit.non_profit.tax_receipts.send_referenced_email") as sendmail,
 			self.assertRaisesRegex(frappe.ValidationError, "no email address"),
 		):
 			send_receipt_email(receipt.name)
@@ -496,7 +497,7 @@ class TestDonationTaxReceiptEmailIssuance(TaxReceiptFixtures):
 		cancel_receipt(receipt.name, "Test cancellation")
 
 		with (
-			patch.object(frappe, "sendmail") as sendmail,
+			patch("non_profit.non_profit.tax_receipts.send_referenced_email") as sendmail,
 			self.assertRaisesRegex(frappe.ValidationError, "Draft or Issued"),
 		):
 			send_receipt_email(receipt.name)
@@ -510,6 +511,16 @@ class TestDonationTaxReceiptEmailIssuance(TaxReceiptFixtures):
 
 
 class TestDonationTaxReceiptCandidateRows(TaxReceiptFixtures):
+	def test_provider_factory_contract(self) -> None:
+		self.assertEqual(
+			direct_mail_audience_provider(),
+			{
+				"key": "donation_tax_receipt",
+				"label": "Donation Tax Receipts",
+				"get_rows": "non_profit.non_profit.tax_receipts.direct_mail_candidate_rows",
+			},
+		)
+
 	def test_rows_carry_producer_context_and_skip_subjectless_donors(self) -> None:
 		donor, contact = self._contact_donor("Elsa")
 		self._donation(donor.name, 120.5, f"{self.tax_year}-03-04")

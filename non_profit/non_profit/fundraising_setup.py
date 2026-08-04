@@ -29,8 +29,8 @@ DONATION_TAX_RECEIPT_DE_HTML = """
 
     <table style="width: 100%; margin-bottom: 1.5em;">
         <tr>
-            <td style="width: 35%; vertical-align: top;"><strong>Name des Zuwendenden:</strong></td>
-            <td>{{ doc.donor_name }}</td>
+			<td style="width: 35%; vertical-align: top;"><strong>Name des Zuwendenden:</strong></td>
+			<td>{{ doc.donor_name | e }}</td>
         </tr>
     </table>
 
@@ -92,11 +92,12 @@ DONATION_TAX_RECEIPT_DE_HTML = """
 DONATION_TAX_RECEIPT_DE_MANAGED_HASHES = frozenset(
 	{
 		"36fdea4641a95c1ba07c644dbb5c16a2eab35b0fd3340dfcd8a9f736ee78740f",
+		"9396bff3637c5df634b3933967691a391dcc2748efd2159c8b0c63c76695cc02",
 	}
 )
 
 
-THANK_YOU_EMAIL_HTML = """<p>Liebe/r {{ doc.donor_name }},</p>
+THANK_YOU_EMAIL_HTML = """<p>Liebe/r {{ doc.donor_name | e }},</p>
 
 <p>herzlichen Dank für Ihre großzügige Spende in Höhe von <strong>{{ frappe.utils.fmt_money(doc.amount, currency="EUR") }}</strong>!</p>
 
@@ -129,11 +130,10 @@ def ensure_fundraising_fixtures():
 
 
 def ensure_good_connector_bank_integration() -> None:
-	if "good_connector" not in frappe.get_installed_apps():
-		return
-	from good_connector.setup import ensure_bank_integration_setup
+	from non_profit.non_profit.integration_hooks import BANK_INTEGRATION_SETUP
 
-	ensure_bank_integration_setup()
+	for dotted_path in frappe.get_hooks(BANK_INTEGRATION_SETUP) or []:
+		frappe.get_attr(dotted_path)()
 	from non_profit.non_profit.bank_integration import backfill_donation_qr_references
 
 	backfill_donation_qr_references()
@@ -160,7 +160,7 @@ DONATION_SLIP_CH_HTML = """
 	<table style="width: 100%; margin-bottom: 1em; border-collapse: collapse;">
 		<tr>
 			<td style="width: 35%; padding: 4px 0;"><strong>Spender:in</strong></td>
-			<td>{{ doc.donor_name }}{% if doc.email %}<br>{{ doc.email }}{% endif %}</td>
+			<td>{{ doc.donor_name | e }}{% if doc.email %}<br>{{ doc.email | e }}{% endif %}</td>
 		</tr>
 		<tr>
 			<td style="padding: 4px 0;"><strong>Betrag</strong></td>
@@ -187,6 +187,7 @@ DONATION_SLIP_CH_HTML = """
 DONATION_SLIP_CH_MANAGED_HASHES = frozenset(
 	{
 		"55df655758ecbdd705476175b4f13e628f106fc4e6268c46b0c374ce057b7d7c",
+		"930d2ea12fc6daae856332792577551e90089fa07a187556509cbfc99343f789",
 	}
 )
 

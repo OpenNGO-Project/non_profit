@@ -310,3 +310,11 @@ leave blank automatically set after saving chapter.","chapters/chapter_name
 Leer lassen; wird nach dem Speichern der Sektion automatisch gesetzt."
 en,en
 keine Zuordnung,keine Zuordnung
+"NPO Contact Suppression","NPO-Kontaktsperre"
+"Contact Suppression","Kontaktsperre"
+"Do Not Contact","Nicht kontaktieren"
+"Deceased","Verstorben"
+"Scope","Geltungsbereich"
+"Active","Aktiv"
+"Reason","Grund"
+"A Generic Endpoint Contact is not a person and cannot carry a contact suppression.","Ein Kontakt vom Typ Generischer Endpunkt ist keine Person und kann keine Kontaktsperre tragen."

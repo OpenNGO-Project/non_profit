@@ -19,7 +19,7 @@
 						<div class="row">
 							<div class="col-lg-6 col-md-6 col-sm-6">
              <div class="pull-left">
-								<b>{{ index|length }}. {{ frappe.db.get_value('User', user.user, 'full_name') }}</b></div>
+								<b>{{ index|length }}. {{ (frappe.db.get_value('User', user.user, 'full_name') or '') | e }}</b></div>
 							</div>
 								<div class="pull-right">
 								{% if user.website_url %}
@@ -54,15 +54,15 @@
 	{% set doc = frappe.get_doc('Member',chapter_head) %}
 	<tr>
 		<td style='width: 15%'>Name</td>
-		<td><b>{{ doc.member_name }}<b></td>
+		<td><b>{{ (doc.member_name or '') | e }}<b></td>
 	</tr>
 	<tr>
 		<td>Email</td>
-		<td>{{ frappe.db.get_value('User', doc.email, 'email') or '' }}</td>
+		<td>{{ (frappe.db.get_value('User', doc.email, 'email') or '') | e }}</td>
 	</tr>
 	<tr>
 		<td>Phone</td>
-		<td>{{ frappe.db.get_value('User', doc.email, 'phone') or '' }}</td>
+		<td>{{ (frappe.db.get_value('User', doc.email, 'phone') or '') | e }}</td>
 	</tr>
 </table>
 </div>

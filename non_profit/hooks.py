@@ -15,6 +15,11 @@ jinja = {
 	]
 }
 
+doctype_js = {
+	"Donor Interaction": "public/js/npo_next_actions.js",
+	"Major Gift": "public/js/npo_next_actions.js",
+}
+
 after_install = "non_profit.setup.setup_non_profit"
 after_app_install = "non_profit.setup.after_app_install"
 after_migrate = "non_profit.setup.after_migrate"
@@ -66,9 +71,9 @@ good_newsletter_audience_providers = [
 
 # Postal letter production for Spendenbescheinigungen. Only good_direct_mail
 # reads this hook, so it is inert when that app is not installed.
-good_direct_mail_audience_providers = {
-	"donation_tax_receipt": "non_profit.non_profit.tax_receipts.direct_mail_candidate_rows",
-}
+good_direct_mail_audience_providers = [
+	"non_profit.non_profit.tax_receipts.direct_mail_audience_provider",
+]
 
 scheduler_events = {
 	"daily": [
