@@ -262,7 +262,7 @@ class TestDonation(unittest.TestCase):
 		finally:
 			frappe.flags.ignore_account_permission = original_flag
 
-	def test_send_thank_you_sets_audit_fields_without_receipt(self):
+	def test_send_thank_you_sets_audit_fields(self):
 		template_name = f"_Test Donation Thank You {frappe.generate_hash(length=8)}"
 		frappe.get_doc(
 			{
@@ -301,7 +301,6 @@ class TestDonation(unittest.TestCase):
 		donation.reload()
 		self.assertEqual(donation.thank_you_sent, 1)
 		self.assertEqual(donation.thank_you_email_queue, "EMAIL-Q-NPO")
-		self.assertFalse(donation.receipt)
 		sendmail.assert_called_once()
 		self.assertEqual(sendmail.call_args.kwargs["reference_doctype"], "Donation")
 		self.assertEqual(sendmail.call_args.kwargs["reference_name"], donation.name)
@@ -333,29 +332,19 @@ class TestDonation(unittest.TestCase):
 		self.assertIn("donation-slip-qr-final-page-slip", DONATION_SLIP_CH_HTML)
 		self.assertNotIn("swiss_qrbill_svg(doc)", DONATION_SLIP_CH_HTML)
 
-	def test_yearly_receipts_include_thanked_donations_without_receipt(self):
-		from non_profit.non_profit.doctype.donation_receipt.donation_receipt import (
-			DONATION_RECEIPT_NAMING_SERIES,
-			_create_yearly_receipt_batch,
-		)
+	def test_tax_receipts_include_thanked_donations(self):
+		"""A Verdankung is not a Bescheinigung: thanked donations still qualify."""
+		from non_profit.non_profit.tax_receipts import generate_receipts
 
+		company = frappe.get_cached_value("Non Profit Settings", None, "company")
 		donation_date = get_active_fiscal_year_date()
-		fiscal_year = frappe.db.get_value(
-			"Fiscal Year",
-			{
-				"year_start_date": ["<=", donation_date],
-				"year_end_date": [">=", donation_date],
-			},
-			"name",
-		)
-		if not fiscal_year:
-			self.skipTest("No active Fiscal Year configured")
+		tax_year = frappe.utils.getdate(donation_date).year
 
 		donor = create_unique_donor()
 		donation = frappe.get_doc(
 			{
 				"doctype": "Donation",
-				"company": frappe.get_cached_value("Non Profit Settings", None, "company"),
+				"company": company,
 				"donor": donor.name,
 				"donor_name": donor.donor_name,
 				"email": get_donor_email(donor),
@@ -367,37 +356,15 @@ class TestDonation(unittest.TestCase):
 		).insert(ignore_permissions=True)
 		donation.submit()
 
-		fiscal_year_doc = frappe.get_doc("Fiscal Year", fiscal_year)
-		with patch(
-			"non_profit.non_profit.doctype.donation_receipt.donation_receipt._yearly_receipt_candidates",
-			return_value=[frappe._dict(name=donation.name)],
-		):
-			result = _create_yearly_receipt_batch(
-				fiscal_year=fiscal_year,
-				period_from=str(fiscal_year_doc.year_start_date),
-				period_to=str(fiscal_year_doc.year_end_date),
-				country="Switzerland",
-				language="de",
-			)
+		generate_receipts(company, tax_year)
 
-		receipt_names = result.get("receipts", [])
-		self.assertTrue(receipt_names)
-		self.assertEqual(
-			frappe.db.get_value("Donation Receipt", receipt_names[0], "naming_series"),
-			DONATION_RECEIPT_NAMING_SERIES,
+		receipt = frappe.get_doc(
+			"Donation Tax Receipt", {"donor": donor.name, "tax_year": tax_year, "company": company}
 		)
-		self.assertEqual(
-			frappe.db.get_value("Donation Receipt", receipt_names[0], "country"),
-			"Switzerland",
-		)
-		linked_donations = frappe.get_all(
-			"Donation Receipt Item",
-			filters={"parent": ["in", receipt_names]},
-			pluck="donation",
-		)
-		donation.reload()
-		self.assertIn(donation.name, linked_donations)
-		self.assertFalse(donation.receipt)
+		self.assertEqual(receipt.status, "Draft")
+		self.assertEqual(receipt.language, "de")
+		details = frappe.parse_json(receipt.donation_details) or []
+		self.assertIn(donation.name, [row["donation"] for row in details])
 
 
 class TestDonationAmountInvariant(IntegrationTestCase):

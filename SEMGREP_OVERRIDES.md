@@ -30,12 +30,6 @@
 - What it prevents: Manual commits in application request and document lifecycle code.
 - Why this override is safe: The two commits occur only in a MariaDB integration test that opens independent database connections. The first publishes fixtures so both workers can exercise the allocation race; the second persists cross-connection cleanup. Production code does not use these commits.
 
-## `frappe-manual-commit` in Donation Receipt concurrency tests
-
-- Rule: `frappe-manual-commit`
-- What it prevents: Manual commits in application request and document lifecycle code.
-- Why this override is safe: The six commits occur only in MariaDB integration tests (`test_donation_receipt.py`) that open independent database connections to reproduce receipt reservation and cursor-page races. Two publish fixtures so both worker connections can see them, two persist cross-connection cleanup, and two run inside the worker helpers so each worker's own connection makes its race outcome visible to the other. Production code does not use these commits.
-
 ## `frappe-ssti` in `non_profit/non_profit/doctype/membership/membership.py`
 
 - Rule: `frappe-ssti`

@@ -69,6 +69,12 @@ good_newsletter_audience_providers = [
 	"non_profit.non_profit.recipient_selection.newsletter_audience_provider",
 ]
 
+# Postal letter production for Spendenbescheinigungen. Only good_direct_mail
+# reads this hook, so it is inert when that app is not installed.
+good_direct_mail_audience_providers = [
+	"non_profit.non_profit.tax_receipts.direct_mail_audience_provider",
+]
+
 scheduler_events = {
 	"daily": [
 		"non_profit.non_profit.doctype.membership.membership.set_expired_status",

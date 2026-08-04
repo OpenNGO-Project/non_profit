@@ -53,16 +53,15 @@ the seeded `Donation Thank You DE` email also formats EUR. The separate
 so these labels do not derive from the Donation Company. Production sites must
 provide a locally approved, currency-aware presentation flow.
 
-The seeded **Donation Receipt DE** contains German tax-law wording (`§ 10b EStG`
-and related German provisions). Setting the receipt country to Switzerland does
-not localize or legally approve that wording. Do not issue it as a Swiss tax
-certificate. Install a jurisdiction-specific format approved by the responsible
-organisation, then select it under **Non Profit Settings → Approved Swiss
-Donation Receipt Print Format**; this app intentionally does not invent Swiss
-legal text. The automated Swiss send action explicitly rejects **Donation
-Receipt DE**.
+The Bescheinigung is the seeded **Spendenbescheinigung** Print Format for
+**Donation Tax Receipt**: German wording, CHF, calendar tax year, itemized
+donation table, and the Swiss confirmation sentence. It is address-free by
+design — donor address and issuer identity come from the **Letter Head** you
+select on the letter campaign or the print view. If your organisation needs a
+legally reviewed local variant, edit the format in Desk; migrate will then leave
+it alone forever.
 
-You may edit **Donation Receipt DE**, **Donation Slip CH**, and **Donation Thank
+You may edit **Spendenbescheinigung**, **Donation Slip CH**, and **Donation Thank
 You DE** in Desk. Migrate updates a Print Format only while its HTML still
 matches known app-shipped content; any operator-edited HTML is preserved. The
 thank-you Email Template is create-only and is never refreshed after insertion.
@@ -138,7 +137,7 @@ person-level block on top of them.
 
 ## Donations
 
-Use **Donor** (Spender), **Donation Campaign** (Spendenkampagne), **Donation** (Spende), and **Donation Receipt** (Spendenbescheinigung) for fundraising workflows.
+Use **Donor** (Spender), **Donation Campaign** (Spendenkampagne), **Donation** (Spende), and **Donation Tax Receipt** (Spendenbescheinigung) for fundraising workflows.
 Donation Campaign forms show a year-selectable donation chart above linked
 donations. The chart is hidden on unsaved campaigns, clears stale chart sections
 when switching between campaigns, and each stacked segment opens the underlying
@@ -186,8 +185,9 @@ endpoint/shared mailbox.
 Donor email is not stored on Donor. Individual Donors use their canonical
 Contact email first; organization or legacy Donors fall back to the linked
 **Customer** (`Customer.email_id`) and then a linked Contact. Donation,
-Recurring Donation, and Donation Receipt rows keep an email
-snapshot for operations and correspondence. For existing records, run
+and Recurring Donation rows keep an email
+snapshot for operations and correspondence; Donation Tax Receipt email issuance
+resolves the address live from the Donor chain instead of storing a snapshot. For existing records, run
 `non_profit.non_profit.doctype.donor.donor.backfill_donor_customers` with
 `bench execute` when you intentionally want to create/link Customers for older
 Donors.
@@ -197,42 +197,20 @@ through
 than copying email lookup and Customer creation. Use
 `ambiguous_email_policy="reject"` for guest-facing flows so duplicate Donor or
 Customer identities are sent to staff review instead of being merged arbitrarily.
-Use the Frappe **Language** selector for Donor preferred language and Donation
-Receipt language. The saved value is still the language code, for example `de`
-or `en`, but operators get the standard enabled-language lookup.
+Use the Frappe **Language** selector for Donor preferred language. The saved
+value is still the language code, for example `de` or `en`, but operators get the
+standard enabled-language lookup. `Donation Tax Receipt.language` is a plain
+Select of the languages the app supports for correspondence (`de`, `fr`, `it`,
+`en`), defaulting to `de`.
 
-`Donation.thank_you_sent` is a standard field for **Verdankungen**. It is set automatically when `Donation.send_thank_you()` queues an email and can also be used by presentation apps for manual acknowledgement queues. `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` keep the audit trail. This is intentionally separate from `Donation.receipt`, which links to **Donation Receipt** / **Spendenbescheinigung** tax certificates generated yearly or ad hoc.
+`Donation.thank_you_sent` is a standard field for **Verdankungen**. It is set automatically when `Donation.send_thank_you()` queues an email and can also be used by presentation apps for manual acknowledgement queues. `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` keep the audit trail.
 
-Yearly Donation Receipt generation is an operator action for users with
-`Non Profit Manager` or `System Manager` who also have normal Donation read and
-Donation Receipt create access. The list action queues a deduplicated background
-chain; each transaction processes at most 200 visible candidates and creates
-drafts grouped by Company, Company currency, Donor, country, and period. If one
-group crosses the 200-row cursor boundary, later pages append to the same locked
-draft rather than creating another receipt. Transient MariaDB snapshot or
-deadlock conflicts automatically roll back and retry the complete cursor page,
-up to three attempts. Check Background Jobs/Error Log only after those attempts
-are exhausted, then run the list action again after correction; existing draft
-rows reserve their Donations, so a retry does not duplicate completed groups.
-The default receipt country is
-`Switzerland` on the form, yearly-generation dialog, and server fallback.
-Donation Receipts may also be saved before donation rows are added. On a draft
-receipt, use **Actions → Spenden aus Geschäftsjahr hinzufügen** after choosing a
-Donor and Fiscal Year to populate all unreceipted paid Donations from that year.
-Submitting a receipt validates that every row is paid, submitted, in the selected
-period, belongs to the receipt Donor and Company/currency group, and is not
-already attached to another active receipt. Company and currency are required
-receipt identity; old rows are backfilled only when migration can determine them
-without crossing Companies.
-
-The yearly action creates drafts only. Review donor, Company, currency, period,
-country, language, and Donations before submitting. The built-in
-**Spendenbescheinigung senden** action works only for a submitted Swiss receipt.
-It resolves one complete Company-linked Swiss issuer Address and one unambiguous
-complete recipient Address, stores both on the receipt, and attaches only the
-approved Swiss Print Format configured in Non Profit Settings. It never attaches
-**Donation Receipt DE**. Correct missing/ambiguous Address links or configure the
-approved format before retrying.
+A **Verdankung** (thank-you for one donation) and a **Spendenbescheinigung**
+(annual tax receipt) are different documents. Verdankungen live on the Donation;
+Bescheinigungen live on **Donation Tax Receipt** — see
+[Annual Donation Tax Receipts](#annual-donation-tax-receipts-spendenbescheinigungen).
+The older `Donation Receipt` DocType was a second Bescheinigung model and was
+removed in 16.10.0.
 
 When a payment gateway authorizes a Donation, `Donation.on_payment_authorized()`
 marks the Donation paid and, when enabled, creates the configured automatic
@@ -319,6 +297,122 @@ The mock endpoint is POST-only.
 For multi-company benches, make sure the Donation's Mode of Payment has a
 default account row for the Donation company. Global accounts in **Non Profit
 Settings** are ignored when they belong to a different company.
+
+## Annual Donation Tax Receipts (Spendenbescheinigungen)
+
+**Donation Tax Receipt** holds one annual receipt per Donor, calendar tax year,
+and Company. Since 16.10.0 it is the app's only Bescheinigung; the older
+submittable `Donation Receipt` was removed. It feeds two dispatch paths: the
+annual postal batch through `good_direct_mail`, and individual email issuance
+straight from the receipt form.
+
+Qualifying donations are submitted **and paid**, belong to the selected CHF
+Company, are dated inside the calendar year, have an amount above zero, and name
+a Donor. The operator must have read/User Permission access to that Company;
+generation fails rather than aggregating a Company hidden from the current user.
+
+1. **Generate.** Run `non_profit.non_profit.tax_receipts.generate_receipts`
+   with the Company and tax year. It creates a Draft receipt per Donor and
+   returns `{created, updated, deleted, unchanged, stale_issued}`. Generation
+   locks the existing Company row before re-reading current Donations and
+   receipts, so concurrent and empty first runs use the same safe serialization.
+
+   ```bash
+   bench --site <site> execute non_profit.non_profit.tax_receipts.generate_receipts \
+     --kwargs '{"company": "Example AG", "tax_year": 2026}'
+   ```
+
+2. **Review the Drafts.** Check totals and donation counts in the Donation Tax
+   Receipt list. Re-running the generation is safe and idempotent: unchanged
+   receipts are left alone and Drafts are refreshed. A stale Draft whose donor
+   has no remaining qualifying Donation is deleted and counted under `deleted`.
+   Any name listed under
+   `stale_issued` is an already-issued receipt whose donations changed
+   afterwards — handle those manually; the service never rewrites an issued
+   receipt silently. Statuses cannot be edited by hand; only the service moves a
+   receipt between Draft, Issued, and Cancelled.
+
+3. **Create the letter campaign.** Run
+   `non_profit.non_profit.tax_receipts.create_receipt_campaign` with the
+   Company, tax year, and a Letter Head (optionally a Print Format, letter
+   title, letter body, and an explicit Company Address). It regenerates the
+   receipts first and then opens a `Good Direct Mail Campaign` with letter
+   category **Official**, no payment part, and a German letter carrying
+   `{{ salutation }}`, `{{ receipt_total }}`, `{{ donation_count }}`,
+   `{{ tax_year }}`, and the pre-built `{{ donation_table_html }}` table.
+   Requires System Manager or Direct Mail Manager, and `good_direct_mail` to be
+   installed. The service rejects a second non-cancelled receipt Campaign for
+   the same Company/year; continue the existing Campaign or cancel it before
+   deliberately creating a replacement.
+
+4. **Run the campaign in Good Direct Mail.** Prepare, review address failures,
+   freeze, generate, and post the batch exactly as for any other campaign (see
+   good_direct_mail's `HOW_TO.md`). Donors without a resolvable canonical postal
+   subject never reach the campaign and are logged during preparation.
+
+5. **Mark the receipts issued.** After the batch is posted, run
+   `non_profit.non_profit.tax_receipts.mark_receipts_issued` with the same
+   Company and tax year. With no `receipt_names`, it marks only Draft receipts
+   with a canonical postal subject; subjectless receipts that could not enter
+   direct mail stay Draft. Prefer passing the exact posted receipt names as a
+   JSON list when taking them from Campaign review. It sets those Drafts to
+   Issued with today's date and returns how many changed. Issued receipts are no
+   longer returned by the direct-mail provider, preventing an accidental second
+   postal batch.
+
+   ```bash
+   bench --site <site> execute non_profit.non_profit.tax_receipts.mark_receipts_issued \
+     --kwargs '{"company": "Example AG", "tax_year": 2026, "receipt_names": ["NPO-STR-2026-00001"]}'
+   ```
+
+### Cancelling an incorrect receipt
+
+Open a Draft or Issued Donation Tax Receipt and use **Actions →
+Spendenbescheinigung stornieren**, then enter the required reason. The POST-only
+service records **Cancelled On**, **Cancelled By**, and **Cancellation Reason**;
+these fields and the status cannot be edited directly. Repeating cancellation
+does not overwrite the original audit. A Cancelled annual donor/year/company
+receipt is never regenerated because that key is intentionally retained as the
+correction record; a replacement/amendment model remains a separate future
+decision.
+
+The equivalent command is:
+
+```bash
+bench --site <site> execute non_profit.non_profit.tax_receipts.cancel_receipt \
+  --kwargs '{"receipt": "NPO-STR-2026-00001", "reason": "Donation refunded"}'
+```
+
+### Sending one receipt by email
+
+Open the Donation Tax Receipt and use **Actions → Spendenbescheinigung per
+E-Mail senden**. The seeded **Spendenbescheinigung** Print Format is rendered to
+PDF and emailed to the donor; the send is recorded on the receipt timeline and
+`Email Sent On` is stamped.
+
+- Only **Draft** and **Issued** receipts can be emailed.
+- **Emailing does not issue the receipt.** The status stays what it was;
+  `mark_receipts_issued` remains the explicit action that closes an annual run.
+  This lets you send a courtesy copy of a Draft without pretending the batch
+  went out.
+- You need read access to the receipt **and** the *Email* permission on
+  Donation Tax Receipt. Demo users are deliberately denied that permission.
+- The address comes from the Donor's canonical Contact, then the linked
+  Customer, then a linked Contact. If none of those has an email, the action
+  fails with a clear message — fix the Donor identity rather than typing an
+  address into the receipt.
+
+You can also call it from a script:
+
+```bash
+bench --site <site> execute non_profit.non_profit.tax_receipts.send_receipt_email \
+  --kwargs '{"receipt": "NPO-STR-2026-00001"}'
+```
+
+Still open and deliberately not implemented: minimum-amount and in-kind /
+membership-fee refinements to the qualifying rules, cantonal receipt format
+variations, the signature image on the receipt letter, and fr/it/en print
+formats (`language` already records the intent).
 
 ## Memberships
 

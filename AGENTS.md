@@ -4,7 +4,7 @@
 
 ## Rules
 
-- Keep generic Member, Membership, Donor, Donation, Receipt, Campaign, Sponsor, Volunteer, and Grant behavior here.
+- Keep generic Member, Membership, Donor, Donation, Bescheinigung, Campaign, Sponsor, Volunteer, and Grant behavior here.
 - Do not put client-specific UI, seeding, or branding in this app. Use `ilanga_app`, `good_npo`, or a client app for that.
 - Miki depends on the membership substrate. If you change Member/Membership semantics, update `miki_app` in the same change.
 - This repository is PUBLIC (github.com/OpenNGO-Project/non_profit); the rest
@@ -59,23 +59,48 @@
   emails use identity type `Individual`; leases renew while the transaction is
   open, are revalidated before commit, and release on commit or rollback. Keep
   renewal bounded and fail the transaction if ownership is lost.
-- Donation Receipt submission and yearly generation lock complete current
-  Donation/receipt ownership state. Yearly generation is permission-aware and
-  chained in bounded batches grouped by Company, Company currency, Donor,
-  country, and period. Later cursor pages must extend the locked exact-match
-  draft instead of splitting one logical group; never restore the former
-  synchronous unbounded flow.
-- Swiss receipt email delivery requires a submitted issued receipt, deterministic
-  issuer/recipient Addresses, and the operator-selected approved Swiss Print
-  Format. `Donation Receipt DE` is never valid for that send path.
+- **There is exactly one Bescheinigung: `Donation Tax Receipt`.** The legacy
+  submittable `Donation Receipt` (+ `Donation Receipt Item`) was removed in
+  16.10.0 (operator decision 2026-07-31, convergence plan Phase 2b). Do not
+  reintroduce a second receipt model, and never reuse the retired `NPO-DRCPT-`
+  naming-series prefix. A **Verdankung** (`Donation.thank_you_sent`, and the
+  planned `Donation Acknowledgement`) is a different document — do not conflate
+  the two.
+- `Donation Tax Receipt` (Spendenbescheinigung) is the annual per-donor/year/company
+  receipt.
+  Its business rules live in `non_profit/non_profit/tax_receipts.py`; letter
+  production and postal dispatch belong to `good_direct_mail`. Never import
+  `good_direct_mail` at module level — the single call into it goes through
+  `frappe.get_attr` and is guarded by a `frappe.db.exists("DocType", ...)` check —
+  and never move receipt business rules (which donations qualify, tax-year
+  aggregation, dedup) into the direct-mail app. The audience crosses the boundary
+  only as `good_direct_mail_audience_providers` rows; `producer_context` values
+  must stay scalar and the `*_html` table must be built and escaped here.
+  Receipt insert/delete and generated-field changes go through the
+  module-private receipt-write capability sentinel in the controller; never
+  replace it with a bare boolean flag. Generation includes only submitted paid
+  Donations, validates Company access and CHF, serializes on Company before
+  current-row locking reads, deletes stale Drafts, and reports stale Issued rows.
+  The postal provider returns Drafts only. Default mark-issued selection includes
+  only canonical postal subjects; pass explicit posted receipt names when known.
+  Cancellation goes through the audited POST-only service/action.
+- Individual receipt email delivery (`tax_receipts.send_receipt_email`) gates on
+  document `read` **plus** the DocType `email` right, accepts only Draft/Issued
+  receipts, resolves the donor address through `get_donor_email`, attaches the
+  seeded `Spendenbescheinigung` Print Format, and stamps `email_sent_on`.
+  Emailing must never change the receipt status — `Issued` stays the explicit
+  `mark_receipts_issued` action.
 - `before_tests` may bootstrap an entirely empty test site and refresh app-owned
   fixtures, but must never delete shared rows, rename ERPNext records, or mutate
   global Customer, Fiscal Year, Address, Item Price, or Email Account state.
-- Fundraising setup owns `Donation Receipt DE` and `Donation Slip CH` only while
-  their HTML matches a known shipped hash. Keep the managed-hash allowlists
-  append-only when changing shipped HTML so untouched rows upgrade; never add an
-  operator-edited body to those allowlists. `Donation Thank You DE` remains
-  create-only after first insertion.
+- Fundraising setup owns the `Spendenbescheinigung` and `Donation Slip CH` Print
+  Formats only while their HTML matches a known shipped hash. Keep the
+  managed-hash allowlists append-only when changing shipped HTML so untouched
+  rows upgrade; never add an operator-edited body to those allowlists.
+  `Donation Thank You DE` remains create-only after first insertion. The
+  Spendenbescheinigung format is Swiss/CHF: it carries the German layout and
+  wording of the retired `Donation Receipt DE` but never its German income-tax
+  paragraphs.
 
 ## Documentation Contract
 
@@ -171,6 +196,8 @@ procedures), and the code. Record new or changed requirements in
 ```bash
 cd frappe-bench
 bench --site development16.localhost run-tests --app non_profit
+bench --site development16.localhost run-tests --module non_profit.non_profit.test_tax_receipts
+bench --site development16.localhost run-tests --module non_profit.non_profit.test_fundraising_setup
 bench --site development16.localhost run-tests --module miki_app.tests.test_end_to_end
 ```
 
@@ -180,12 +207,13 @@ Applied per the bench-root convention (list views searchable by human title/name
 these doctypes have a `title_field` (auto standard filter) but no or partial
 `search_fields`, so Link typeahead only matches the serial ID:
 
+- `Donation Tax Receipt`: `title_field: donor_name`, `search_fields: donor_name,tax_year`.
 - `Donor`: `search_fields: donor_name`.
 - `Member`: `search_fields: member_name,email_id`.
 - `Donor Interaction`: `search_fields: subject,donor_name`.
 - `Major Gift`: `search_fields: donor_name`.
 - `Grant Application`: `search_fields: applicant_name,email`.
 - `Volunteer`: `search_fields: volunteer_name`.
-- Already complete: Donation, Donation Campaign, Donation Receipt,
-  Recurring Donation, Sponsor, Membership, NPO Recipient Selection.
+- Already complete: Donation, Donation Campaign, Recurring Donation, Sponsor,
+  Membership, NPO Recipient Selection.
   Prompt-/field-named masters need nothing (Chapter, Volunteer Type, …).

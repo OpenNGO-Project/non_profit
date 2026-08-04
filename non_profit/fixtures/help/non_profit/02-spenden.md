@@ -44,24 +44,31 @@ Bei einer bezahlten Donation verwenden Sie **Actions → Verdankung senden** ode
 **Als extern verdankt markieren**. Beide Wege pflegen `thank_you_sent` und die
 Auditfelder. Eine Verdankung ist keine Steuerbescheinigung.
 
-Für eine **Donation Receipt** wählen Sie Donor und Geschäftsjahr und dann
-**Actions → Spenden aus Geschäftsjahr hinzufügen**. Alternativ erzeugt die
-Listenaktion **Jährliche Spendenbescheinigungen erstellen** einen
-Hintergrundauftrag. Er verarbeitet höchstens 200 sichtbare Spenden pro Lauf und
-gruppiert Entwürfe nach Firma, Firmenwährung, Donor, Land und Zeitraum. Reicht
-eine Gruppe über die 200er-Grenze hinaus, ergänzen Folgeläufe denselben gesperrten
-Entwurf, statt eine zweite Bescheinigung anzulegen.
-Nur übermittelte, bezahlte und noch nicht anderweitig belegte Spenden im
-gewählten Zeitraum sind zulässig. Prüfen, übermitteln und senden Sie den Entwurf
-erst danach.
+Die jährliche Spendenbescheinigung ist **Donation Tax Receipt**: genau ein
+Dokument pro Donor, Kalender-Steuerjahr und CHF-Firma. Sie wird nicht von Hand
+aus einzelnen Spenden zusammengestellt, sondern nur aus eingereichten und
+bezahlten qualifizierenden Spenden erzeugt (`generate_receipts`). Danach prüfen
+Sie die Entwürfe, versenden sie als Serienbrief über **good_direct_mail** und
+markieren die konkret versendeten Belege mit `mark_receipts_issued` als
+ausgestellt. Ohne explizite Belegliste werden nur Entwürfe mit kanonischem
+Postempfänger markiert; ausgestellte Belege werden nicht erneut an Direct Mail
+geliefert.
 
-> **Rechtlicher Hinweis:** Das mitgelieferte Format **Donation Receipt DE**
-> enthält deutsches Steuerrecht. Das Standardland Schweiz ändert diesen Text
-> nicht. Verwenden Sie es nicht als Schweizer Steuerbescheinigung. Lassen Sie
-> vor Produktivbetrieb eine rechtlich freigegebene lokale Vorlage erstellen und
-> wählen Sie diese in **Non Profit Settings → Approved Swiss Donation Receipt
-> Print Format**. Der Schweizer Versand lehnt **Donation Receipt DE** ab und
-> benötigt eindeutige vollständige Absender- und Empfängeradressen.
+Fehlerhafte Entwürfe oder ausgestellte Belege werden über **Actions →
+Spendenbescheinigung stornieren** mit einem Pflichtgrund storniert. Status und
+Stornierungsprotokoll können nicht direkt bearbeitet werden.
+
+Eine einzelne Bescheinigung können Sie direkt aus dem Formular versenden:
+**Actions → Spendenbescheinigung per E-Mail senden** rendert das mitgelieferte
+Print Format **Spendenbescheinigung** als PDF und schickt es an die E-Mail-Adresse
+des Donors. Der Versand ändert den Status **nicht**; **Issued** bleibt die
+ausdrückliche Aktion des Jahreslaufs.
+
+> **Rechtlicher Hinweis:** Das mitgelieferte Print Format
+> **Spendenbescheinigung** ist eine deutschsprachige Schweizer Vorlage in CHF.
+> Lassen Sie den Text vor Produktivbetrieb von der verantwortlichen Organisation
+> freigeben; eine eigene Vorlage bleibt unangetastet, sobald Sie den Inhalt
+> bearbeiten.
 
 > **Währungshinweis:** Die generische öffentliche `/donate`-Seite und das
 > Standard-Dankesmail zeigen EUR; der Schweizer QR-Spendenbeleg zeigt CHF. Diese

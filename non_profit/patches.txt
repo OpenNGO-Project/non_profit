@@ -4,6 +4,7 @@ non_profit.patches.migrate_household_members_to_people
 non_profit.patches.remove_tax_exemption_80g
 non_profit.patches.remove_certification_module
 non_profit.patches.remove_certification_module_tables
+non_profit.patches.drop_legacy_donation_receipt
 
 [post_model_sync]
 non_profit.patches.finalize_household_person_migration
@@ -14,4 +15,3 @@ non_profit.patches.remove_membership_company
 non_profit.patches.backfill_major_gift_donor_rollups
 non_profit.patches.convert_next_actions_to_tasks
 non_profit.patches.backfill_donation_payment_totals
-non_profit.patches.backfill_donation_receipt_company_currency

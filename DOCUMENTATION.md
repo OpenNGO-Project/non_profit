@@ -29,8 +29,9 @@ else described a Customer-regime redesign that was never shipped.
 - **NPO Organization** is the canonical organization identity anchor. ERPNext Customer and Supplier remain operating/accounting parties linked through hidden preparatory identity fields. NPO Organization is a legal-identity grouping only and is never a ledger party: several operating Customers (for example a parent and its branch) may share one legal identity without being merged, and verified-identifier uniqueness belongs to the NPO Organization rather than to any operating Customer. `legal_form` and identifiers owned by other apps are source evidence, not verified identity; base `non_profit` ships no country-specific identifier normalizer.
 - **`Customer.npo_subject_type` is the authoritative NPO subject classification.** Code branches on it and never infers person/Household-ness from `customer_type`, name, address, or email. `Customer.npo_household` means "this Customer *is* the Household"; the legacy `Customer.household` means "this individual Customer *belongs to* a Household". The two must never be conflated — `household` is retired only once its social meaning has fully moved to Household Person rows. Supplier deliberately carries `npo_subject_type` / `npo_contact` / `npo_organization` but **no** `npo_household`.
 - **Household** (with the **Household Person** child table) groups Contacts who share an address into one solicitation unit; see [Households](#households).
-- **Donor**, **Donation**, **Donation Campaign**, **Recurring Donation**, and **Donation Receipt** for fundraising. `Donor.customer` is the canonical ERPNext Customer relation for donor identity; Donation still links to Donor.
+- **Donor**, **Donation**, **Donation Campaign**, **Recurring Donation**, and **Donation Tax Receipt** for fundraising. `Donor.customer` is the canonical ERPNext Customer relation for donor identity; Donation still links to Donor.
   Donation carries analysis dimensions `cost_center` (fetched from the campaign's cost center when empty) and `project` (both ERPNext doctypes) for downstream fundraising analytics (e.g. the `good_analytics` app).
+- **Donation Tax Receipt** is the Swiss annual *Spendenbescheinigung*: one row per Donor, calendar tax year, and Company (unique index), holding the aggregated total, donation count, and the `{donation, date, amount}` detail list behind it. It is a plain (non-submittable) document whose `status` (Draft / Issued / Cancelled) can only be changed through `non_profit.non_profit.tax_receipts`; see [Donation Tax Receipts](#donation-tax-receipts). Since 16.10.0 it is the **single** Bescheinigung of the app — the older submittable `Donation Receipt` (+ `Donation Receipt Item`) was removed outright. It serves both dispatch paths: annual postal batches through `good_direct_mail`, and individual email issuance with the seeded `Spendenbescheinigung` PDF.
 - **Sponsor**, **Sponsor Tier**, **Volunteer**, and **Grant Application** for broader NPO operations.
 - **Non Profit Settings** for company, donor type, billing, invoicing, payment account, and email defaults.
 - **NPO Recipient Selection** stores reusable channel-neutral Contact, Member,
@@ -303,6 +304,134 @@ Audience DocTypes; it invokes
 channel and Good Direct Mail Campaign create permission; `frappe.new_doc` receives
 only `recipient_selection` and `title`, so no server dependency is introduced.
 
+## Donation Tax Receipts
+
+`Donation Tax Receipt` is the app's **single** Bescheinigung. The legacy
+submittable `Donation Receipt` (+ child `Donation Receipt Item`) was a second
+Bescheinigung model and was removed outright in 16.10.0 (operator decision,
+2026-07-31; `LETTER_DISPATCH_CONVERGENCE_PLAN_2026-07-31.md` Phase 2b). The
+migrate patch `non_profit.patches.drop_legacy_donation_receipt` runs before
+model sync and drops the leftover DocType rows, Print Formats, and tables while
+the retired metadata is still available. The retired `NPO-DRCPT-`
+naming-series prefix must not be reused.
+
+Do not confuse it with a **Verdankung** (per-donation thank-you). That is a
+different document: `Donation.thank_you_sent` covers today's immediate
+thank-you, and a dedicated `Donation Acknowledgement` is planned as Phase 5 of
+the convergence plan. A Verdankung never issues a Bescheinigung.
+
+`non_profit/non_profit/tax_receipts.py` owns the Spendenbescheinigung business
+rules; `good_direct_mail` produces and dispatches the postal letters. non_profit
+never imports `good_direct_mail` at module level — the one call into it is
+resolved with `frappe.get_attr`, and `create_receipt_campaign` fails with a clear
+message when the app is not installed.
+
+Names come from controller `autoname()` using
+`make_autoname(f"NPO-STR-{tax_year}-.#####")`; the creation-year `{YYYY}` token
+is deliberately not used, so historical runs carry their actual tax year.
+
+Fields beyond the aggregation payload: `language` (Select `de`/`fr`/`it`/`en`,
+default `de`) records the correspondence language for the letter and the email;
+`email_sent_on` (Datetime, read-only) is the individual-issuance audit stamp;
+`remarks` is free text rendered into the print format. `cancelled_on`,
+`cancelled_by`, and `cancellation_reason` are immutable service audit fields.
+
+### Two dispatch paths
+
+1. **Annual postal batch** — `generate_receipts` → review Drafts →
+   `create_receipt_campaign` → prepare/freeze/generate/post in `good_direct_mail`
+   → `mark_receipts_issued` with the exact posted names where available.
+2. **Individual email issuance** — `send_receipt_email(receipt)` sends the
+   seeded `Spendenbescheinigung` PDF to one donor. This is the path ported from
+   the retired `Donation Receipt.send_to_donor()`.
+
+- `generate_receipts(company, tax_year) -> {created, updated, deleted, unchanged,
+  stale_issued}` (whitelisted POST). Qualifying Donations are submitted
+  (`docstatus 1`), paid (`paid = 1`), belong to the Company, fall inside the
+  calendar year, have `amount > 0`, and name a Donor. The current user needs
+  read/User Permission access to the Company, whose default currency must be
+  CHF, plus Donation read and Donation Tax Receipt create/write/delete. The
+  service first locks the existing Company row `FOR UPDATE`; this stable anchor
+  exists even when no series/Donation/receipt row exists. It then performs
+  permission-complete reads and deterministic locking re-reads of current
+  Donations and receipts. Donations are grouped per Donor into one Draft
+  receipt. Re-running is idempotent: unchanged receipts are left alone, changed
+  Drafts are refreshed, Drafts with no remaining qualifying Donation are
+  service-deleted and counted under `deleted`, Cancelled receipts are never
+  revived, and every stale **Issued** receipt (including a donor absent from the
+  current groups) is reported by name under `stale_issued` instead of being
+  silently rewritten.
+- `direct_mail_candidate_rows(reference) -> list[dict]` is the
+  `good_direct_mail_audience_providers` implementation registered under the key
+  `donation_tax_receipt`. `reference` is `"<company>|<tax_year>"`. It returns one
+  row per **Draft** receipt, resolving the Donor's canonical postal subject
+  with the same rules as `NPO Recipient Selection` (explicit/compatible Household
+  first, then Contact, with the Organization/blank-legacy Customer fallback).
+  Donors without a canonical subject are skipped and logged — direct mail can
+  only address a canonical subject. Each row carries a `producer_context` of
+  `tax_year`, `receipt_name`, `receipt_total` (`fmt_money`, CHF),
+  `donation_count`, and `donation_table_html` — a server-built de-locale
+  date/amount table. The `_html` suffix marks it as trusted markup in direct
+  mail's freeze contract, so it is built here with escaped cell values and never
+  from operator input.
+- `create_receipt_campaign(company, tax_year, letter_head, print_format=None,
+  title=None, body_html=None, company_address=None) -> str` (whitelisted POST,
+  System Manager or Direct Mail Manager). It calls `generate_receipts` first,
+  then `good_direct_mail.services.producers.create_producer_campaign` with
+  letter category `Official`, no payment part, `manual_batch` dispatch, German
+  main language, and one de language row (`title` / `body_html` override the
+  German letter defaults; the Campaign itself is titled from Company and year).
+  A second non-cancelled Campaign with the same provider/reference is rejected,
+  preventing duplicate annual batches.
+  `company_address` is required by the Campaign and is resolved from the
+  Company's sole or uniquely primary active Address when not supplied.
+- `mark_receipts_issued(company, tax_year, receipt_names=None) -> int`
+  (whitelisted POST, same role gate) flips selected Draft receipts of that
+  Company/year to Issued with `issued_on = today`. Explicit names represent the
+  exact posted Campaign or individually delivered set. If omitted, names come
+  from the Draft-only direct-mail provider, so subjectless drafts are not marked
+  as mailed. Repeated calls skip already non-Draft names. Operators run it after
+  delivery; driving it from a posting callback is a deliberate follow-up.
+- `cancel_receipt(receipt, reason) -> {receipt, status, changed}` (whitelisted
+  POST, same role gate) is the minimal correction flow. It enforces receipt
+  write and Company read/User Permission, locks Company then receipt, moves a
+  Draft or Issued receipt to Cancelled, and records immutable cancellation time,
+  user, and required reason. Repeated calls preserve the original audit. A
+  Cancelled unique donor/year/company record is not replaced automatically.
+- `send_receipt_email(receipt) -> {receipt, email, print_format}` (whitelisted
+  POST) is the individual-issuance path. It loads the receipt and requires both
+  document `read` and the DocType `email` right — `run_doc_method`-style entry
+  points only enforce read, and sending mail on behalf of the organisation plus
+  stamping an audit field is more than a read. Only `Draft` or `Issued` receipts
+  may be emailed. The donor address is resolved live through the canonical Donor
+  chain (`get_donor_email`: canonical Contact → `Customer.email_id` → linked
+  Contact → legacy), and a donor without any email produces a clear error rather
+  than a silent no-op. The seeded `Spendenbescheinigung` Print Format is rendered
+  to PDF with `frappe.attach_print(..., lang=receipt.language)` and handed to
+  `non_profit.non_profit.mailer.send_referenced_email` with
+  `reference_doctype`/`reference_name` set to the receipt. A registered
+  downstream provider can therefore create a Communication on the receipt
+  timeline; without one, delivery falls back to `frappe.sendmail`. Finally
+  `email_sent_on` is stamped. **Emailing never changes the status** — `Issued` remains the explicit
+  `mark_receipts_issued` action for the annual run, so a courtesy copy of a Draft
+  does not pretend the batch went out. The Desk action lives in
+  `doctype/donation_tax_receipt/donation_tax_receipt.js`
+  ("Spendenbescheinigung per E-Mail senden").
+
+All official generated receipt fields are protected by one module-private
+service-write capability sentinel in the controller, the same pattern as
+`good_direct_mail/services/guards.py`. Direct insertion is rejected, and updates
+to donor/name, tax year, Company, currency, status, issue/cancellation/email
+audit, totals, count, or details require the identity sentinel. A
+request-supplied truthy flag cannot authorize a write. `language` and `remarks`
+remain operator-editable. Direct deletion is also rejected; generation can
+delete only a stale Draft through the same capability.
+
+Open business questions (recorded in the bench-level
+`LETTER_DISPATCH_CONVERGENCE_PLAN_2026-07-31.md` and **not** decided here):
+further qualifying-donation refinements (minimum amounts, in-kind gifts,
+membership fees), cantonal receipt format variations, and the signature image.
+
 ## Person-Level Contact Suppression
 
 `NPO Contact Suppression` is a channel-neutral, person-level "never contact
@@ -338,11 +467,16 @@ the helper is a neutral seam like the audience provider hooks.
   Account data on an existing shared site.
 - `good_newsletter_audience_providers` registers the optional
   `npo_recipient_selection` provider factory without importing Good Newsletter.
+- `good_direct_mail_audience_providers` registers
+  `non_profit.non_profit.tax_receipts.direct_mail_audience_provider`, whose
+  descriptor maps the `donation_tax_receipt` key to `direct_mail_candidate_rows`.
+  Only `good_direct_mail` reads the factory hook, so it is inert when that app is
+  not installed.
 - `non_profit_referenced_email_providers` (consumed by
   `non_profit.non_profit.mailer.send_referenced_email`) lets a private
   downstream app — usually good_npo via Good Connector's
   `send_referenced_email` — deliver the app's doc-referenced emails
-  (Membership acknowledgement, Donation thank-you, Swiss Donation Receipt
+  (Membership acknowledgement, Donation thank-you, Donation Tax Receipt
   send, Grant review invitation) with a Communication on the reference
   document's timeline. The last registered provider wins; with no provider
   the mailer falls back to plain `frappe.sendmail` with the same arguments.
@@ -389,48 +523,12 @@ found" messages. Real Loyalty Program records are left untouched.
 ## Whitelisted API Contracts
 
 Mutation endpoints must check permissions and let Frappe manage the request
-transaction. The POST-only `DonationReceipt.generate_yearly_receipts` is restricted to
-`Non Profit Manager` or `System Manager`, verifies normal Donation read and
-Donation Receipt create/write permission, and queues a deduplicated background chain
-under the requesting user. Each transaction considers at most 200
-permission-visible candidate Donations, locks and reloads complete current
-Donation/active-receipt/Company-currency state, and groups draft receipts by
-Company, Company currency, Donor, country, and period. The current Company row
-serializes exact-group draft creation; later cursor pages lock and extend the
-earliest draft matching Company, currency, Donor, fiscal year, period, country,
-and language. After selecting that draft under lock, Frappe's
-`get_doc(..., for_update=True)` loader hydrates both its parent and child rows as
-locking current reads, so a waiter cannot save an older child snapshot and
-remove a row added by another cursor page. MariaDB error 1020 and ordinary
-deadlocks surface as `QueryDeadlockError`; the worker rolls back the failed
-transaction before retrying the complete same cursor page, with at most three
-attempts. One 201-Donation group therefore remains one draft instead of
-splitting at the page boundary. A draft receipt item reserves its Donation from
-later batches. The worker never uses `ignore_permissions` and does not commit
-inside the request or document hook.
-Validation, submit, selected-year lookup, and yearly generation use bounded bulk
-context loaders rather than per-row reads or database-specific `GroupConcat`;
-submit/cancel receipt-link writes are set-based and cancellation clears only
-Donations still owned by that receipt.
-`get_donations_for_selected_year` is an authenticated, permission-aware helper
-used by the Donation Receipt form action to populate a draft receipt with all
-submitted paid Donations for the selected Donor, Fiscal Year, and Company; it
-also returns the Company's currency for the draft. Donation Receipt now stores
-required Company and currency plus the issuer and recipient Address identities
-used for delivery. Receipts can be saved before donation rows are added when the
-Company/currency identity is available, but submit requires at least one
-Donation and validates that every row is submitted, paid, in the receipt period,
-belongs to the receipt Donor and Company/currency group, and is not already
-linked to another active receipt. Donation Receipt country defaults to
-`Switzerland` in DocType metadata, the yearly-generation dialog, and the backend
-fallback when no country argument is supplied. The post-model patch
-`backfill_donation_receipt_company_currency` fills deterministic historical
-identity and logs cross-Company or conflicting receipts for manual review.
-
-Submit locks selected Donation rows in name order and reloads Donation,
-active-receipt ownership, and Company currencies under those locks before
-validating. Concurrent drafts therefore cannot both claim the same Donation from
-stale validation snapshots.
+transaction. The Spendenbescheinigung endpoints live in
+`non_profit/non_profit/tax_receipts.py` and are documented under
+[Donation Tax Receipts](#donation-tax-receipts): `generate_receipts`,
+`create_receipt_campaign`, `mark_receipts_issued`, `cancel_receipt`, and
+`send_receipt_email` are all POST-only and permission-gated, and none of them
+uses `ignore_permissions` or commits inside a request or document hook.
 
 Published Grant Application pages never render applicant email and apply
 explicit HTML escaping to applicant-provided display values. Authenticated users
@@ -439,23 +537,24 @@ contract.
 
 ### Receipt jurisdiction contract
 
-`Donation Receipt DE` remains a seeded Print Format whose body contains German
-tax-law language (`§ 10b EStG`, `§ 5 KStG`, and related German provisions).
-`default_receipt_country = Switzerland` is only a data default; it does not
-translate or approve that format. Deployments must install a legally approved
-Swiss format and select it in **Non Profit Settings → Approved Swiss Donation
-Receipt Print Format**. The app does not provide invented Swiss legal wording.
+There is one Bescheinigung and it is Swiss. Fundraising setup seeds the German
+Print Format **Spendenbescheinigung** for `Donation Tax Receipt`: CHF amounts,
+calendar tax year, itemized `donation_details` table, total, and the Swiss
+confirmation wording ("Wir bestätigen, dass die aufgeführten Zuwendungen
+eingegangen sind und ausschliesslich zur Förderung der steuerbefreiten
+gemeinnützigen Zwecke unserer Organisation verwendet werden."). The header is
+deliberately address-free: donor address and issuer identity come from the
+Letter Head, exactly as in the retired `Donation Receipt DE` format whose German
+layout and wording this format is based on.
 
-`DonationReceipt.send_to_donor()` is an explicit Swiss-only gate. It requires a
-submitted receipt in `Issued` state, rejects `Donation Receipt DE` by name,
-checks that the configured Print Format is enabled and targets Donation Receipt,
-resolves one Company-linked Swiss issuer Address and one unambiguous recipient
-Address, and requires street, postal code, city, and country on both. The chosen
-Address names are persisted on the receipt before the approved format is
-attached. Other jurisdictions require a separately implemented, approved send
-contract rather than silently reusing this path.
+The German income-tax paragraphs of `Donation Receipt DE` (`§ 10b EStG`,
+`§ 5 KStG`, `§ 9 GewStG`) were **not** carried over — the app has always
+rejected German legal wording on the Swiss send path, and the tax receipt is
+CHF-only by construction. Deployments that need a legally reviewed local variant
+edit the seeded format in place; once its HTML no longer matches a shipped hash
+it is operator-owned and migrate never touches it again.
 
-Fundraising setup inserts `Donation Receipt DE` and `Donation Slip CH` when they
+Fundraising setup inserts `Spendenbescheinigung` and `Donation Slip CH` when they
 are missing. Existing Print Format HTML is treated as app-managed only when its
 SHA-256 hash matches an append-only allowlist of shipped bodies. This content
 ownership contract lets migrate apply a later shipped body to an untouched seed
@@ -469,8 +568,9 @@ controller requires read permission on the Campaign and returns twelve monthly
 buckets for submitted paid donations on that campaign in the selected year.
 Segments are donation-level so the Desk form chart can open the underlying
 Donation directly.
-`DonationReceipt` email sending, chapter staff edits, and grant review
-invitations require write permission on the target document. A logged-in portal
+Donation Tax Receipt email issuance requires receipt read plus DocType email
+permission; chapter staff edits and grant review invitations require write
+permission on the target document. A logged-in portal
 user may join a published Chapter only as themselves, and may leave only their
 own active Chapter row; editing another user's Chapter row still requires
 Chapter write permission. Member-supplied `website_url` values are restricted
@@ -483,9 +583,9 @@ POST-only and inert unless both `developer_mode` and
 confirmation path.
 
 Public donation pages that delegate to `non_profit.www.donate._handle_submission`
-must pass server-side validation for donor name, email syntax, a finite positive
-amount, accepted consent, allowed frequency (`one_off`, `Monthly`, `Quarterly`,
-`Yearly`). The amount check rejects non-finite input explicitly: `float()`
+must pass server-side validation for donor name, email syntax, an amount within
+the shared public bounds (CHF 5–100'000), accepted consent, and allowed frequency
+(`one_off`, `Monthly`, `Quarterly`, `Yearly`). The amount check rejects non-finite input explicitly: `float()`
 accepts `inf`, `-inf`, `nan`, and overflowing literals such as `1e400`, and
 `nan` compares False against every bound, so a positivity test alone cannot keep
 those values out. `Donation.validate` repeats the same invariant at controller
@@ -531,8 +631,8 @@ Donor.customer`. Donor no longer stores its own email address; an individual
 Donor reads email from its canonical Contact first, while organization and
 legacy roles fall back to `Donor.customer -> Customer.email_id` and then a
 linked Contact. The result is copied onto Donation /
-Recurring Donation / Donation Receipt rows as an operational snapshot.
-`Donor.preferred_language` and `Donation Receipt.language` are Link fields to
+Recurring Donation rows as an operational snapshot.
+`Donor.preferred_language` is a Link field to
 Frappe's `Language` DocType, matching core language selectors such as
 `User.language`; stored values remain language codes like `de` or `en`.
 `Donor.make_customer_and_link()` and
@@ -631,7 +731,7 @@ legacy Contacts as `Person` and reject an explicit `Generic Endpoint` rather
 than silently reclassifying a shared mailbox. Volunteer creation intentionally
 accepts Contact only, stores `Volunteer.contact`, and does not create a Customer.
 
-`Donation.thank_you_sent` is a standard field on Donation for **Verdankungen**. `Donation.send_thank_you()` queues the configured Email Template, stores `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` when available, and marks this field once the email is queued. Presentation apps such as `ilanga_app` and `good_npo` read this field for pending thank-you queues. `Donation.receipt` remains reserved for **Donation Receipt** / **Spendenbescheinigung** tax certificates, so an immediate thank-you must not populate it.
+`Donation.thank_you_sent` is a standard field on Donation for **Verdankungen**. `Donation.send_thank_you()` queues the configured Email Template, stores `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` when available, and marks this field once the email is queued. Presentation apps such as `ilanga_app` and `good_npo` read this field for pending thank-you queues. A Verdankung is not a Bescheinigung: an immediate thank-you never creates or touches a **Donation Tax Receipt**. A dedicated `Donation Acknowledgement` (Verdankung) document is planned as Phase 5 of `LETTER_DISPATCH_CONVERGENCE_PLAN_2026-07-31.md`; do not re-model it as a second Bescheinigung.
 
 `Donation.on_payment_authorized()` is the authoritative payment state machine.
 It ignores statuses other than `Authorized` / `Completed`, temporarily sets
@@ -991,9 +1091,9 @@ bench --site development16.localhost run-tests --module non_profit.non_profit.do
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.major_gift.test_major_gift
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.donor_interaction.test_donor_interaction
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.donation.test_donation --test TestDonationPaymentEntryInvariants.test_two_connections_allow_exactly_one_full_allocation
-bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.donation_receipt.test_donation_receipt
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.recurring_donation.test_recurring_donation
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.npo_recipient_selection.test_npo_recipient_selection
+bench --site development16.localhost run-tests --module non_profit.non_profit.test_tax_receipts
 bench --site development16.localhost run-tests --module miki_app.tests.test_end_to_end
 ```
 

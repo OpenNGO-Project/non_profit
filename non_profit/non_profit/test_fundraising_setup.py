@@ -11,9 +11,9 @@ from non_profit.non_profit import fundraising_setup, major_gifts
 class TestFundraisingSetup(IntegrationTestCase):
 	PRINT_FORMATS = (
 		(
-			"Donation Receipt DE",
-			"DONATION_RECEIPT_DE_HTML",
-			fundraising_setup.ensure_print_format,
+			fundraising_setup.DONATION_TAX_RECEIPT_PRINT_FORMAT,
+			"DONATION_TAX_RECEIPT_DE_HTML",
+			fundraising_setup.ensure_tax_receipt_print_format,
 		),
 		(
 			"Donation Slip CH",
@@ -58,6 +58,7 @@ class TestFundraisingSetup(IntegrationTestCase):
 			email="donor@example.com",
 			amount=42,
 			total_amount=42,
+			tax_year=2026,
 			currency="CHF",
 			campaign=None,
 			date="2026-01-01",
@@ -65,12 +66,14 @@ class TestFundraisingSetup(IntegrationTestCase):
 			period_to="2026-12-31",
 			issued_on=None,
 			creation="2026-01-01",
+			donation_details="[]",
+			remarks="",
 			donations=[],
 			qr_bill_svg="",
 		)
 		for constant_name in (
 			"DONATION_SLIP_CH_HTML",
-			"DONATION_RECEIPT_DE_HTML",
+			"DONATION_TAX_RECEIPT_DE_HTML",
 			"THANK_YOU_EMAIL_HTML",
 		):
 			with self.subTest(template=constant_name):

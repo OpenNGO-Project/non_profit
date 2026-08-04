@@ -16,7 +16,7 @@
   {"hidden": 0, "is_query_report": 0, "label": "Fundraising", "link_count": 0, "onboard": 0, "type": "Card Break"},
   {"hidden": 0, "is_query_report": 0, "label": "Donation Campaign", "link_count": 0, "link_to": "Donation Campaign", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Donation", "link_count": 0, "link_to": "Donation", "link_type": "DocType", "onboard": 0, "type": "Link"},
-  {"hidden": 0, "is_query_report": 0, "label": "Donation Receipt", "link_count": 0, "link_to": "Donation Receipt", "link_type": "DocType", "onboard": 0, "type": "Link"},
+  {"hidden": 0, "is_query_report": 0, "label": "Donation Tax Receipt", "link_count": 0, "link_to": "Donation Tax Receipt", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Recurring Donation", "link_count": 0, "link_to": "Recurring Donation", "link_type": "DocType", "onboard": 0, "type": "Link"},
   {"hidden": 0, "is_query_report": 0, "label": "Donors & Major Gifts", "link_count": 0, "onboard": 0, "type": "Card Break"},
   {"hidden": 0, "is_query_report": 0, "label": "Donor", "link_count": 0, "link_to": "Donor", "link_type": "DocType", "onboard": 0, "type": "Link"},

@@ -61,12 +61,11 @@ async function previewRecipients(frm) {
 	]
 		.map((label) => `<th>${label}</th>`)
 		.join("");
+	const table = `<div class="table-responsive"><table class="table table-bordered">
+			<thead><tr>${headerCells}</tr></thead><tbody>${rows}</tbody></table></div>`;
 	frappe.msgprint({
 		title: __("{0} Canonical Candidates", [result.total]),
-		message: rows
-			? `<div class="table-responsive"><table class="table table-bordered">
-				<thead><tr>${headerCells}</tr></thead><tbody>${rows}</tbody></table></div>`
-			: `<p>${__("No matching recipients.")}</p>`,
+		message: rows ? table : `<p>${__("No matching recipients.")}</p>`,
 		wide: true,
 	});
 }

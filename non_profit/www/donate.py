@@ -99,10 +99,10 @@ def _handle_submission(form):
 	if str(consent or "").lower() not in {"1", "true", "yes", "on"}:
 		frappe.throw(_("Please agree to the storage of your data."))
 
-	from non_profit.non_profit.utils import validate_public_donation_amount
-
 	# Same bounds as every other public intake path (CHF 5 - 100'000);
 	# the shared validator also rejects non-finite values (nan/inf) first.
+	from non_profit.non_profit.utils import validate_public_donation_amount
+
 	amount = validate_public_donation_amount(str(amount_raw))
 	if frequency not in {"one_off", "Monthly", "Quarterly", "Yearly"}:
 		frappe.throw(_("Invalid donation frequency"))
