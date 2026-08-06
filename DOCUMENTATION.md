@@ -964,39 +964,32 @@ the fork remains installable without Good Connector in upstream-style benches.
 Major-donor cultivation lives here as generic substrate (logic in
 `non_profit/non_profit/major_gifts.py`).
 
-DocTypes:
+**Major Gift** is one concrete cultivation ask per record. `stage` drives the
+reduced pipeline (Qualification → Cultivation → Solicitation, plus terminal
+**Won** / **Lost**) and is the Kanban field. It stores one `ask_amount`; the
+former expected/probability/weighted forecast fields and duplicate outcome field
+were removed. Entering a terminal stage stamps `closed_on`, and `closed_amount`
+is the sum of submitted, paid Donations linked through `Donation.major_gift`.
+Major Gift is not submittable.
 
-- **Major Gift** — one cultivation opportunity ("ask") per record. `stage`
-  drives the pipeline (Identification → Qualification → Cultivation →
-  Solicitation → Stewardship, plus terminal **Won** / **Lost**) and is the
-  Kanban field. `ask_amount` / `expected_amount` / `probability` produce a
-  read-only `weighted_amount`; entering a terminal stage stamps `outcome` and
-  `closed_on` and forces probability (Won = 100, Lost = 0). `closed_amount` is
-  the sum of submitted, paid Donations linked back through `Donation.major_gift`.
-  Not submittable.
-- **Donor Interaction** — a touchpoint ("move": Call / Meeting / Email /
-  Letter / Event / Proposal / Note / Other) linked to a Donor and an optional
-  Major Gift. On save/trash it refreshes `Donor.last_interaction_date` and
-  `Major Gift.last_interaction_date` to the latest interaction. A linked Major
-  Gift (on either Donation or Donor Interaction) must belong to the same Donor.
+Relationship history uses native Frappe comments: general notes belong on the
+Donor timeline and ask-specific notes on the Major Gift timeline. There is no
+separate Donor Interaction model or interaction-date roll-up.
 
 ### Pipeline Workflow
 
 A **Major Gift Pipeline** Workflow (built by `major_gifts.ensure_major_gift_workflow`
 on `after_migrate`) drives the `stage` field. It is code-owned:
 
-- **States** are the seven `stage` values (Identification, Qualification,
-  Cultivation, Solicitation, Stewardship, Won, Lost), all at `doc_status = 0`
+- **States** are Qualification, Cultivation, Solicitation, Won, and Lost, all at `doc_status = 0`
   (Major Gift is not submittable).
-- **Transitions** advance one step down the pipeline (Qualify → Cultivate →
-  Solicit → Move to Stewardship), plus **Mark Won** (from Cultivation /
-  Solicitation / Stewardship), **Mark Lost** (from *any* open stage, so an early
-  prospect can be disqualified without routing through Cultivation), and
-  **Reopen** (Won → Stewardship, Lost → Qualification).
-- **Single role.** Every transition is gated to one role — the first of
-  `Non Profit Manager`, `System Manager` that exists on the site — with
-  `allow_self_approval`. Administrator bypasses role checks, so seeding/tests
-  still walk the pipeline.
+- **Transitions** are Cultivate, Solicit, and Mark Won in sequence; **Mark Lost**
+  is available from every open stage, and **Reopen** moves Lost back to
+  Qualification. Won is terminal; a later ask gets a new Major Gift.
+- **Permission-preserving role.** Workflow role `All` exposes transitions to
+  every user who already has Major Gift write permission without importing
+  downstream role names into this public app. `allow_self_approval` remains
+  enabled.
 
 The definition is **hash-stamped** (`WORKFLOW_VERSION_KEY` global default): the
 Workflow is rebuilt only when the shipped states/transitions/role change, so a
@@ -1019,14 +1012,13 @@ through the pipeline.
 
 ### Next Actions (linked Tasks)
 
-A "next action" on a Major Gift or Donor Interaction is a real ERPNext **Task**,
-not free text. Logic lives in `non_profit/non_profit/next_actions.py`. Each Task
-back-links to its parent through the `Task.major_gift` / `Task.donor_interaction`
-custom fields (added in `non_profit.setup.get_custom_fields`, created on
-install/migrate). A Task created from a Donor Interaction that belongs to a Major
-Gift sets both links, so it also surfaces on the gift.
+A "next action" on a Donor or Major Gift is a real ERPNext **Task**, not free
+text. Logic lives in `non_profit/non_profit/next_actions.py`. Each Task links to
+its Donor through `Task.donor`; gift-specific Tasks also carry
+`Task.major_gift`. Creating a Task from a Major Gift fills both links, so the
+same work is visible from the ask and the long-term donor relationship.
 
-The parents' `next_action` (Small Text), `next_action_date` (Date), and
+The Donor and Major Gift `next_action` (Small Text), `next_action_date` (Date), and
 `next_action_task` (Link → Task) fields are **read-only and derived** from the
 earliest *open* linked Task (`status not in Completed/Cancelled/Template`,
 ordered by `exp_end_date`). They are recomputed by `refresh_next_action`, which
@@ -1035,19 +1027,33 @@ runs from `set_next_action` and from the `Task` `on_update`/`on_trash` doc_event
 Keeping the `next_action*` fieldnames means the pipeline list and reports keep
 working off them.
 
-Operators use **Actions → Set Next Action** on either form (whitelisted
+Operators use **Actions → Set Next Action** on either form (POST-only whitelisted
 `non_profit.non_profit.next_actions.set_next_action`, gated by parent write
 permission): it prompts for the action, due date, and assignee (defaulting to the
-gift's `relationship_manager` / interaction's `staff`), then creates, assigns
-(standard Frappe assignment), and links the Task. The form **Connections** tab
-lists all linked Tasks. The `convert_next_actions_to_tasks` patch migrates any
-pre-existing free-text `next_action` values into Tasks.
+relationship manager), then creates, shares, assigns (standard Frappe
+assignment), and links the Task. Scoped shares let the creator and assignee work
+with that Task without granting downstream roles access to every ERPNext Task.
+The internal share write bypasses the creator's Task share right only after the
+endpoint has verified write permission on the Donor or Major Gift. Task
+validation derives `Task.donor` from `Task.major_gift`, and the
+`sync_major_gift_task_donors` patch backfills existing gift Tasks and refreshes
+both old and new Donor roll-ups. Direct Task saves and deletions require write
+permission on every current or previous linked fundraising parent. A Major
+Gift's Donor becomes immutable once a Donation or Task is linked.
+The form **Connections** tab lists linked Tasks. The
+`convert_next_actions_to_tasks` patch migrates pre-existing free-text values.
+
+The 16.11.0 pre-model patch `simplify_major_gifts` maps Identification to
+Qualification and Stewardship to Solicitation, deletes every Task linked through
+the retired `Task.donor_interaction` field, removes that Custom Field, deletes
+all Donor Interaction records/metadata/table, and removes stale workspace links.
 
 Donor gains `relationship_manager`, `donor_level`
 (Prospect/Grassroots/Annual/Mid-Level/Major), `capacity_rating`, a read-only
 `is_major_donor` flag, and hook-maintained giving roll-ups
 (`total_lifetime_amount`, `gift_count`, `first_gift_date`, `last_gift_date`,
-`last_gift_amount`, `largest_gift_amount`, `last_interaction_date`).
+`last_gift_amount`, `largest_gift_amount`). Donor also carries the derived
+next-action fields shared with Major Gift.
 
 Roll-ups recompute from a Donation's `on_submit` / `on_cancel` / `on_trash`
 (and after `on_payment_authorized`) via `major_gifts.on_donation_change`,
@@ -1089,7 +1095,7 @@ cd frappe-bench
 bench --site development16.localhost run-tests --app non_profit
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.household.test_household
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.major_gift.test_major_gift
-bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.donor_interaction.test_donor_interaction
+bench --site development16.localhost run-tests --module non_profit.non_profit.test_major_gift_migration
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.donation.test_donation --test TestDonationPaymentEntryInvariants.test_two_connections_allow_exactly_one_full_allocation
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.recurring_donation.test_recurring_donation
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.npo_recipient_selection.test_npo_recipient_selection

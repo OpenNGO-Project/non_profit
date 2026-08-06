@@ -8,6 +8,8 @@ import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, getdate, nowdate
 
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Currency", "Donation Campaign", "Donor", "Task", "User"]
+
 
 class TestMajorGift(IntegrationTestCase):
 	@classmethod
@@ -15,21 +17,13 @@ class TestMajorGift(IntegrationTestCase):
 		super().setUpClass()
 		frappe.set_user("Administrator")
 
-	def test_expected_amount_defaults_and_weighted_value(self) -> None:
-		gift = self._major_gift(stage="Solicitation", ask_amount=10000)
-		self.assertEqual(gift.expected_amount, 10000)
-		self.assertEqual(gift.probability, 60)
-		self.assertEqual(gift.weighted_amount, 6000)
+	def test_won_stage_stamps_closed_date(self) -> None:
+		from non_profit.non_profit.major_gifts import advance_major_gift_to_stage
 
-	def test_won_stage_stamps_outcome_and_forces_probability(self) -> None:
 		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
-		self.assertEqual(gift.probability, 40)
-		gift.stage = "Won"
-		gift.save()
-		self.assertEqual(gift.outcome, "Won")
-		self.assertEqual(gift.probability, 100)
+		advance_major_gift_to_stage(gift, "Won")
+		gift.reload()
 		self.assertTrue(gift.closed_on)
-		self.assertEqual(gift.weighted_amount, 5000)
 
 	def test_advance_from_mid_pipeline_stage_moves_forward_only(self) -> None:
 		from non_profit.non_profit.major_gifts import advance_major_gift_to_stage
@@ -43,7 +37,6 @@ class TestMajorGift(IntegrationTestCase):
 
 		gift.reload()
 		self.assertEqual(gift.stage, "Won")
-		self.assertEqual(gift.outcome, "Won")
 
 	def test_advance_marks_lost_from_early_stage(self) -> None:
 		from non_profit.non_profit.major_gifts import advance_major_gift_to_stage
@@ -54,7 +47,7 @@ class TestMajorGift(IntegrationTestCase):
 		advance_major_gift_to_stage(gift, "Lost")
 		gift.reload()
 		self.assertEqual(gift.stage, "Lost")
-		self.assertEqual(gift.outcome, "Lost")
+		self.assertTrue(gift.closed_on)
 
 	def test_closed_amount_sums_linked_paid_donations(self) -> None:
 		gift = self._major_gift(stage="Solicitation", ask_amount=8000)
@@ -108,6 +101,7 @@ class TestMajorGift(IntegrationTestCase):
 
 		task = frappe.get_doc("Task", result["task"])
 		self.assertEqual(task.subject, "Call the donor")
+		self.assertEqual(task.donor, gift.donor)
 		self.assertEqual(task.major_gift, gift.name)
 		self.assertTrue(
 			frappe.db.exists(
@@ -120,6 +114,91 @@ class TestMajorGift(IntegrationTestCase):
 		self.assertEqual(gift.next_action, "Call the donor")
 		self.assertEqual(getdate(gift.next_action_date), getdate(nowdate()))
 		self.assertEqual(gift.next_action_task, task.name)
+		donor = frappe.get_doc("Donor", gift.donor)
+		self.assertEqual(donor.next_action, "Call the donor")
+		self.assertEqual(donor.next_action_task, task.name)
+
+	def test_donor_next_action_creates_donor_only_task(self) -> None:
+		from non_profit.non_profit.next_actions import set_next_action
+
+		donor = self._donor()
+		frappe.db.set_value("Donor", donor.name, "relationship_manager", "Administrator")
+
+		result = set_next_action("Donor", donor.name, "Arrange introductory call", nowdate())
+
+		task = frappe.get_doc("Task", result["task"])
+		self.assertEqual(task.donor, donor.name)
+		self.assertFalse(task.major_gift)
+		donor.reload()
+		self.assertEqual(donor.next_action, "Arrange introductory call")
+		self.assertEqual(donor.next_action_task, task.name)
+
+	def test_major_gift_task_forces_matching_donor(self) -> None:
+		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
+		other_donor = self._donor()
+
+		task = frappe.get_doc(
+			{
+				"doctype": "Task",
+				"subject": "Review the ask",
+				"status": "Open",
+				"major_gift": gift.name,
+				"donor": other_donor.name,
+			}
+		).insert(ignore_permissions=True)
+
+		self.assertEqual(task.donor, gift.donor)
+
+	def test_donor_cannot_change_after_task_is_linked(self) -> None:
+		from non_profit.non_profit.next_actions import create_next_action_task
+
+		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
+		create_next_action_task("Major Gift", gift.name, "Review the ask")
+		gift.donor = self._donor().name
+
+		with self.assertRaisesRegex(frappe.ValidationError, "Donor cannot be changed"):
+			gift.save()
+
+	def test_task_writer_needs_major_gift_write_permission(self) -> None:
+		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
+		task = frappe.get_doc(
+			{
+				"doctype": "Task",
+				"subject": "Restricted gift task",
+				"status": "Open",
+				"major_gift": gift.name,
+			}
+		).insert(ignore_permissions=True)
+		user = self._projects_user()
+
+		frappe.set_user(user.name)
+		try:
+			task = frappe.get_doc("Task", task.name)
+			task.subject = "Unauthorized update"
+			with self.assertRaises(frappe.PermissionError):
+				task.save()
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_task_deleter_needs_major_gift_write_permission(self) -> None:
+		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
+		task = frappe.get_doc(
+			{
+				"doctype": "Task",
+				"subject": "Restricted gift task",
+				"status": "Open",
+				"major_gift": gift.name,
+			}
+		).insert(ignore_permissions=True)
+		user = self._projects_user()
+
+		frappe.set_user(user.name)
+		try:
+			with self.assertRaises(frappe.PermissionError):
+				frappe.delete_doc("Task", task.name)
+			self.assertTrue(frappe.db.exists("Task", task.name))
+		finally:
+			frappe.set_user("Administrator")
 
 	def test_next_action_tracks_earliest_open_task_and_completion(self) -> None:
 		from non_profit.non_profit.next_actions import create_next_action_task
@@ -207,6 +286,19 @@ class TestMajorGift(IntegrationTestCase):
 				"doctype": "Donor",
 				"donor_name": f"Major Gift Donor {frappe.generate_hash(length=8)}",
 				"donor_type": self._donor_type(),
+			}
+		).insert(ignore_permissions=True)
+
+	def _projects_user(self):
+		return frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": f"gift-task-{frappe.generate_hash(length=8)}@example.com",
+				"first_name": "Gift Task User",
+				"enabled": 1,
+				"send_welcome_email": 0,
+				"user_type": "System User",
+				"roles": [{"role": "Projects User"}],
 			}
 		).insert(ignore_permissions=True)
 

@@ -210,7 +210,6 @@ these doctypes have a `title_field` (auto standard filter) but no or partial
 - `Donation Tax Receipt`: `title_field: donor_name`, `search_fields: donor_name,tax_year`.
 - `Donor`: `search_fields: donor_name`.
 - `Member`: `search_fields: member_name,email_id`.
-- `Donor Interaction`: `search_fields: subject,donor_name`.
 - `Major Gift`: `search_fields: donor_name`.
 - `Grant Application`: `search_fields: applicant_name,email`.
 - `Volunteer`: `search_fields: volunteer_name`.

@@ -19,6 +19,9 @@
   "relationship_section",
   "relationship_manager",
   "donor_level",
+  "next_action",
+  "next_action_date",
+  "next_action_task",
   "column_break_rel",
   "capacity_rating",
   "is_major_donor",
@@ -30,7 +33,6 @@
   "column_break_giving",
   "last_gift_date",
   "last_gift_amount",
-  "last_interaction_date",
   "image",
   "customer_section",
   "customer",
@@ -130,6 +132,27 @@
    "options": "\nProspect\nGrassroots\nAnnual\nMid-Level\nMajor"
   },
   {
+   "description": "Derived from the earliest open linked Task. Use Actions → Set Next Action.",
+   "fieldname": "next_action",
+   "fieldtype": "Small Text",
+   "label": "Next Action",
+   "read_only": 1
+  },
+  {
+   "fieldname": "next_action_date",
+   "fieldtype": "Date",
+   "in_standard_filter": 1,
+   "label": "Next Action Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "next_action_task",
+   "fieldtype": "Link",
+   "label": "Next Action Task",
+   "options": "Task",
+   "read_only": 1
+  },
+  {
    "fieldname": "column_break_rel",
    "fieldtype": "Column Break"
   },
@@ -191,12 +214,6 @@
    "fieldname": "last_gift_amount",
    "fieldtype": "Currency",
    "label": "Last Gift Amount",
-   "read_only": 1
-  },
-  {
-   "fieldname": "last_interaction_date",
-   "fieldtype": "Date",
-   "label": "Last Interaction",
    "read_only": 1
   },
   {
@@ -267,7 +284,7 @@
    "link_fieldname": "donor"
   },
   {
-   "link_doctype": "Donor Interaction",
+   "link_doctype": "Task",
    "link_fieldname": "donor"
   }
  ],

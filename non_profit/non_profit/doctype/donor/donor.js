@@ -9,6 +9,9 @@ frappe.ui.form.on("Donor", {
 
 		if (!frm.doc.__islocal) {
 			frappe.contacts.render_address_and_contact(frm);
+			npo_add_action_item(frm, __("Set Next Action"), () =>
+				npo_set_next_action(frm, frm.doc.relationship_manager)
+			);
 
 			frm.page.add_action_item(__("Accounting Ledger"), function () {
 				if (frm.doc.customer) {

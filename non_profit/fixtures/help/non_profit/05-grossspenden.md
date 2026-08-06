@@ -7,26 +7,24 @@ level: Intermediate
 
 # Grossspenden und nächste Aktionen
 
-**Major Gift** bildet eine konkrete Grossspenden-Chance ab. **Donor
-Interaction** protokolliert Kontaktpunkte wie Anruf, Meeting, E-Mail, Brief,
-Event oder Angebot.
+**Major Gift** bildet eine konkrete Grossspenden-Chance ab. Allgemeine Notizen
+gehören als Kommentar in die Timeline des Donors; ask-spezifische Notizen in die
+Timeline der Major Gift.
 
 ## Pipeline führen
 
 1. Legen Sie eine Major Gift für den passenden Donor an.
-2. Erfassen Sie Relationship Manager, Ask/Expected Amount und Zieldatum.
-3. Verwenden Sie **Qualify**, **Cultivate**, **Solicit** und **Move to Stewardship**.
-4. Schliessen Sie mit **Mark Won** oder **Mark Lost** ab. **Reopen** öffnet die Chance wieder.
+2. Erfassen Sie Relationship Manager, Ask Amount und Zieldatum.
+3. Führen Sie die Chance von **Qualification** mit **Cultivate** und **Solicit** weiter.
+4. Schliessen Sie aus Solicitation mit **Mark Won** oder aus jeder offenen Stufe mit **Mark Lost** ab. **Reopen** bringt eine verlorene Chance zurück zu Qualification.
 
-Wahrscheinlichkeit und gewichteter Betrag werden aus der Stufe abgeleitet. Der
 Closed Amount summiert übermittelte, bezahlte Donations dieser Major Gift.
 
-## Interaktion und nächste Aktion
+## Timeline und nächste Aktion
 
-Erstellen Sie eine **Donor Interaction** mit Donor und optional Major Gift. Die
-Major Gift muss zum selben Donor gehören. Wählen Sie danach auf Major Gift oder
-Interaction **Actions → Set Next Action**, erfassen Sie Aufgabe, Datum und
-Assignee und wählen Sie **Create Task**.
+Wählen Sie auf Donor oder Major Gift **Actions → Set Next Action**, erfassen Sie
+Aufgabe, Datum und Assignee und wählen Sie **Create Task**. Eine Task der Major
+Gift wird automatisch auch mit ihrem Donor verknüpft.
 
 Die schreibgeschützten Next-Action-Felder zeigen die früheste offene ERPNext
 Task. Abschluss oder Terminänderung aktualisieren die Anzeige automatisch. Alle

@@ -12,6 +12,7 @@ IGNORE_TEST_RECORD_DEPENDENCIES = [
 	"Donor Type",
 	"Household",
 	"Language",
+	"Task",
 	"User",
 ]
 

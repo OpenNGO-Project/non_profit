@@ -606,27 +606,32 @@ the action sends the invitation and moves it to **In Progress**.
 
 ## Major Gifts — Next Actions
 
-A **Major Gift** is one cultivation "ask"; a **Donor Interaction** logs a
-touchpoint. When Workflow Visualizer is installed, saved Major Gift forms show
+A **Major Gift** is one concrete cultivation ask. Relationship and ask notes go
+into the native timeline comments on the Donor or Major Gift. When Workflow Visualizer is installed, saved Major Gift forms show
 the pipeline stages and permitted Back/Proceed actions above the form. New,
 unsaved records show the pipeline after their first save. Non Profit owns this
 opt-in and re-enables **Visible on Doctype** during setup/migrate if it is
 cleared. The "next action" on either record is tracked as a real **Task**, not a
 text note:
 
-1. Open a Major Gift (or Donor Interaction) and choose **Actions → Set Next
-   Action**.
+1. Open a Donor or Major Gift and choose **Actions → Set Next Action**.
 2. Enter the action, a due date, and who to assign it to (defaults to the gift's
-   Relationship Manager / the interaction's Staff), then **Create Task**.
+   or donor's Relationship Manager), then **Create Task**.
 
 The Task is created, assigned (the assignee gets it in their To-Do list), and
 linked back. The record's read-only **Next Action**, **Next Action Date**, and
 **Next Action Task** fields always reflect the earliest *open* linked Task, and
 update automatically when you complete or reschedule that Task (mark the Task
 **Completed** and the next action advances to the next open Task, or clears).
-All linked Tasks are listed under the form's **Connections** tab. A next action
-added on a Donor Interaction that belongs to a Major Gift also shows on that
-gift. Requires write access to the gift/interaction (Non Profit Manager).
+All linked Tasks are listed under the form's **Connections** tab. A Major Gift
+Task links to both the gift and its Donor, so the Donor shows the earliest open
+relationship or gift Task. Requires write access to the Donor or Major Gift.
+
+The reduced workflow is **Qualification → Cultivation → Solicitation → Won**.
+Use **Mark Lost** from any open stage and **Reopen** to return a lost ask to
+Qualification. Won asks stay closed; create a new Major Gift for a later ask.
+After linking a Donation or Task, the Major Gift's Donor cannot be changed;
+create a corrected Major Gift instead.
 
 The daily fundraising reconciliation repairs Donor giving summaries and Major
 Gift closed amounts from submitted, paid Donations. It processes all records in

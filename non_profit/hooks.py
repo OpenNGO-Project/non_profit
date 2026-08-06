@@ -16,7 +16,7 @@ jinja = {
 }
 
 doctype_js = {
-	"Donor Interaction": "public/js/npo_next_actions.js",
+	"Donor": "public/js/npo_next_actions.js",
 	"Major Gift": "public/js/npo_next_actions.js",
 }
 
@@ -56,8 +56,12 @@ doc_events = {
 		"on_change": "non_profit.non_profit.custom_doctype.payment_entry.sync_donation_reconciliation_state_on_payment_entry_change",
 	},
 	"Task": {
+		"validate": "non_profit.non_profit.next_actions.validate_task_links",
 		"on_update": "non_profit.non_profit.next_actions.on_task_change",
-		"on_trash": "non_profit.non_profit.next_actions.on_task_change",
+		"on_trash": [
+			"non_profit.non_profit.next_actions.validate_task_parent_permissions",
+			"non_profit.non_profit.next_actions.on_task_change",
+		],
 	},
 }
 

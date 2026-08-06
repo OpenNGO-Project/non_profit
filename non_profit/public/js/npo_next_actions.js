@@ -1,5 +1,5 @@
-// Shared next-action helpers for CRM-style doctypes (Donor Interaction,
-// Major Gift). Loaded via the doctype_js hook; the per-doctype form scripts
+// Shared next-action helpers for Donor and Major Gift. Loaded via the
+// doctype_js hook; the per-doctype form scripts
 // only wire the action item with their own default assignee.
 
 function npo_set_next_action(frm, defaultAssignee) {

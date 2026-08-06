@@ -1,10 +1,10 @@
 # Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-"""Next-action Tasks for Major Gift and Donor Interaction.
+"""Next-action Tasks for Donors and Major Gifts.
 
 A moves-management "next action" is an ERPNext ``Task`` linked back to its
-parent through the ``Task.major_gift`` / ``Task.donor_interaction`` custom
+parent through the ``Task.donor`` / ``Task.major_gift`` custom
 fields (created in ``non_profit.setup``). Each parent's read-only
 ``next_action`` / ``next_action_date`` / ``next_action_task`` fields are
 *derived* from the earliest open linked Task, so the pipeline list and reports
@@ -16,14 +16,14 @@ from frappe.utils import getdate
 
 # Parent doctype -> the Task custom Link field that points back at it.
 _PARENT_LINK_FIELD = {
+	"Donor": "donor",
 	"Major Gift": "major_gift",
-	"Donor Interaction": "donor_interaction",
 }
 
 # Parent doctype -> the User field used as the default assignee.
 _ASSIGNEE_FIELD = {
+	"Donor": "relationship_manager",
 	"Major Gift": "relationship_manager",
-	"Donor Interaction": "staff",
 }
 
 # A Task no longer counts as an open "next action" once it reaches one of these.
@@ -55,35 +55,77 @@ def create_next_action_task(
 	if due_date:
 		task.exp_end_date = getdate(due_date)
 	task.set(link_field, parent_name)
-	# A task created from a Donor Interaction also rolls up to its Major Gift.
-	if parent_doctype == "Donor Interaction" and parent.get("major_gift"):
-		task.major_gift = parent.major_gift
+	if parent_doctype == "Major Gift":
+		task.donor = parent.donor
 	task.insert(ignore_permissions=True)
+	_share_task_with_user(task.name, frappe.session.user)
 
 	assignee = (assignee or parent.get(_ASSIGNEE_FIELD.get(parent_doctype, "")) or "").strip()
 	if assignee:
 		_assign_task(task.name, assignee)
 
-	refresh_next_action(parent_doctype, parent_name)
-	if parent_doctype != "Major Gift" and task.get("major_gift"):
-		refresh_next_action("Major Gift", task.major_gift)
+	for linked_doctype, linked_field in _PARENT_LINK_FIELD.items():
+		if linked_name := task.get(linked_field):
+			refresh_next_action(linked_doctype, linked_name)
 	return task.name
 
 
 def _assign_task(task_name: str, user: str) -> None:
 	"""Assign the Task to a single User via Frappe's standard assignment (creates
-	a ToDo + notifies). Best-effort: a failed assignment must not lose the Task."""
+	a ToDo, shares the Task when needed, and notifies)."""
 	if not frappe.db.exists("User", user):
 		return
+	from frappe.desk.form.assign_to import DuplicateToDoError
 	from frappe.desk.form.assign_to import add as assign_add
 
+	_share_task_with_user(task_name, user)
 	try:
-		assign_add({"assign_to": [user], "doctype": "Task", "name": task_name})
-	except frappe.ValidationError:
+		assign_add({"assign_to": [user], "doctype": "Task", "name": task_name}, ignore_permissions=True)
+	except DuplicateToDoError:
 		# Already assigned to this user — nothing to do.
 		pass
-	except Exception:
-		frappe.log_error(title="Major Gift next-action task assignment failed")
+
+
+def _share_task_with_user(task_name: str, user: str) -> None:
+	if not user or user in {"Administrator", "Guest"} or not frappe.db.exists("User", user):
+		return
+	if frappe.has_permission("Task", "write", doc=task_name, user=user):
+		return
+	frappe.share.add(
+		"Task",
+		task_name,
+		user,
+		read=1,
+		write=1,
+		share=0,
+		notify=0,
+		flags={"ignore_share_permission": True},
+	)
+
+
+def validate_task_links(doc, method: str | None = None) -> None:
+	"""Keep the Donor link aligned when a Task belongs to a Major Gift."""
+	if doc.get("major_gift"):
+		major_gift = frappe.get_doc("Major Gift", doc.major_gift)
+		if not doc.flags.ignore_permissions:
+			major_gift.check_permission("write")
+		doc.donor = major_gift.donor
+	validate_task_parent_permissions(doc)
+
+
+def validate_task_parent_permissions(doc, method: str | None = None) -> None:
+	"""Require write access to every current or previous fundraising parent."""
+	if doc.flags.ignore_permissions or frappe.session.user == "Administrator":
+		return
+	before = None if method == "on_trash" else doc.get_doc_before_save()
+	parents: set[tuple[str, str]] = set()
+	for parent_doctype, link_field in _PARENT_LINK_FIELD.items():
+		if current := doc.get(link_field):
+			parents.add((parent_doctype, current))
+		if before and (previous := before.get(link_field)):
+			parents.add((parent_doctype, previous))
+	for parent_doctype, parent_name in parents:
+		frappe.get_doc(parent_doctype, parent_name).check_permission("write")
 
 
 def refresh_next_action(parent_doctype: str, parent_name: str, exclude_task: str | None = None) -> None:
@@ -134,7 +176,7 @@ def on_task_change(doc, method: str | None = None) -> None:
 		refresh_next_action(parent_doctype, parent_name, exclude_task=exclude)
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def set_next_action(
 	doctype: str,
 	name: str,
@@ -142,8 +184,7 @@ def set_next_action(
 	due_date: str | None = None,
 	assignee: str | None = None,
 ) -> dict:
-	"""Create + link + assign a next-action Task for a Major Gift / Donor
-	Interaction. Gated by write permission on the parent."""
+	"""Create, link, and assign a next-action Task for a Donor or Major Gift."""
 	if doctype not in _PARENT_LINK_FIELD:
 		frappe.throw(frappe._("Next actions are not supported for {0}.").format(doctype))
 	if not frappe.has_permission(doctype, "write", doc=name):

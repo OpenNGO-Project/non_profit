@@ -2,8 +2,8 @@ import frappe
 
 
 def execute():
-	"""Convert existing free-text next_action / next_action_date on Major Gift and
-	Donor Interaction into linked Tasks (the new source of truth). Idempotent:
+	"""Convert existing free-text next_action / next_action_date values into
+	linked Tasks (the new source of truth). Idempotent:
 	rows that already have an open linked Task are skipped."""
 	# post_model_sync runs before the after_migrate hook that creates the Task
 	# custom fields, so ensure they exist before we link Tasks to parents.

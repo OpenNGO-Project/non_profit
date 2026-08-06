@@ -18,7 +18,6 @@
   {"child": 1, "collapsible": 0, "indent": 0, "keep_closed": 0, "label": "Donor Type", "link_to": "Donor Type", "link_type": "DocType", "show_arrow": 0, "type": "Link"},
   {"child": 0, "collapsible": 1, "icon": "gem", "indent": 1, "keep_closed": 0, "label": "Major Gifts", "show_arrow": 0, "type": "Section Break"},
   {"child": 1, "collapsible": 0, "indent": 0, "keep_closed": 0, "label": "Major Gift", "link_to": "Major Gift", "link_type": "DocType", "show_arrow": 0, "type": "Link"},
-  {"child": 1, "collapsible": 0, "indent": 0, "keep_closed": 0, "label": "Donor Interaction", "link_to": "Donor Interaction", "link_type": "DocType", "show_arrow": 0, "type": "Link"},
   {"child": 0, "collapsible": 1, "icon": "users", "indent": 1, "keep_closed": 0, "label": "Members", "show_arrow": 0, "type": "Section Break"},
   {"child": 1, "collapsible": 0, "indent": 0, "keep_closed": 0, "label": "Member", "link_to": "Member", "link_type": "DocType", "show_arrow": 0, "type": "Link"},
   {"child": 1, "collapsible": 0, "indent": 0, "keep_closed": 0, "label": "Membership", "link_to": "Membership", "link_type": "DocType", "show_arrow": 0, "type": "Link"},

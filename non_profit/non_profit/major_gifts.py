@@ -15,25 +15,10 @@ from frappe.utils import flt, getdate
 
 ROLLUP_UPDATE_CHUNK_SIZE = 100
 
-# Win probability per pipeline stage (percent). ``probability`` is read-only and
-# always re-derived from the stage on validate (terminal stages force 100 / 0),
-# so it stays in lock-step with the pipeline.
-STAGE_PROBABILITY = {
-	"Identification": 10,
-	"Qualification": 25,
-	"Cultivation": 40,
-	"Solicitation": 60,
-	"Stewardship": 75,
-	"Won": 100,
-	"Lost": 0,
-}
-
 PIPELINE_STAGES = (
-	"Identification",
 	"Qualification",
 	"Cultivation",
 	"Solicitation",
-	"Stewardship",
 )
 TERMINAL_STAGES = ("Won", "Lost")
 
@@ -119,48 +104,6 @@ def recompute_major_gift_closed(major_gift: str) -> None:
 		.where(donation.paid == 1)
 	).run()[0][0]
 	frappe.db.set_value("Major Gift", major_gift, "closed_amount", flt(total), update_modified=False)
-
-
-def update_donor_last_interaction(donor: str, exclude: str | None = None) -> None:
-	if not donor or not frappe.db.exists("Donor", donor):
-		return
-	interaction = frappe.qb.DocType("Donor Interaction")
-	query = (
-		frappe.qb.from_(interaction)
-		.select(Max(interaction.interaction_date))
-		.where(interaction.donor == donor)
-	)
-	if exclude:
-		query = query.where(interaction.name != exclude)
-	value = query.run()[0][0]
-	frappe.db.set_value(
-		"Donor",
-		donor,
-		"last_interaction_date",
-		getdate(value) if value else None,
-		update_modified=False,
-	)
-
-
-def update_major_gift_last_interaction(major_gift: str, exclude: str | None = None) -> None:
-	if not major_gift or not frappe.db.exists("Major Gift", major_gift):
-		return
-	interaction = frappe.qb.DocType("Donor Interaction")
-	query = (
-		frappe.qb.from_(interaction)
-		.select(Max(interaction.interaction_date))
-		.where(interaction.major_gift == major_gift)
-	)
-	if exclude:
-		query = query.where(interaction.name != exclude)
-	value = query.run()[0][0]
-	frappe.db.set_value(
-		"Major Gift",
-		major_gift,
-		"last_interaction_date",
-		getdate(value) if value else None,
-		update_modified=False,
-	)
 
 
 def recompute_all_donor_giving() -> int:
@@ -313,37 +256,26 @@ def reconcile_fundraising_rollups() -> None:
 
 WORKFLOW_NAME = "Major Gift Pipeline"
 WORKFLOW_STATE_STYLES = {
-	"Identification": "Primary",
-	"Qualification": "Info",
+	"Qualification": "Primary",
 	"Cultivation": "Info",
 	"Solicitation": "Warning",
-	"Stewardship": "Warning",
 	"Won": "Success",
 	"Lost": "Danger",
 }
 # (from_state, action, to_state)
 WORKFLOW_TRANSITIONS = (
-	("Identification", "Qualify", "Qualification"),
 	("Qualification", "Cultivate", "Cultivation"),
 	("Cultivation", "Solicit", "Solicitation"),
-	("Solicitation", "Move to Stewardship", "Stewardship"),
-	("Cultivation", "Mark Won", "Won"),
 	("Solicitation", "Mark Won", "Won"),
-	("Stewardship", "Mark Won", "Won"),
-	# Early disqualification: a gift can be marked Lost from any open stage,
-	# including Identification / Qualification (no need to route through
-	# Cultivation first).
-	("Identification", "Mark Lost", "Lost"),
 	("Qualification", "Mark Lost", "Lost"),
 	("Cultivation", "Mark Lost", "Lost"),
 	("Solicitation", "Mark Lost", "Lost"),
-	("Stewardship", "Mark Lost", "Lost"),
-	("Won", "Reopen", "Stewardship"),
 	("Lost", "Reopen", "Qualification"),
 )
-# Preference order for the single role that may act on the workflow; the first
-# one that exists on the site is used (Administrator can always transition).
-WORKFLOW_ROLES = ("Non Profit Manager", "System Manager")
+# DocPerm remains authoritative; this role lets every user who can write a
+# Major Gift use the same workflow without coupling this public app to a
+# presentation-layer role.
+WORKFLOW_ROLES = ("All", "Non Profit Manager", "System Manager")
 
 # Global-default key holding the hash of the shipped Workflow definition this
 # site last built. The Workflow is rebuilt only when that hash changes, so

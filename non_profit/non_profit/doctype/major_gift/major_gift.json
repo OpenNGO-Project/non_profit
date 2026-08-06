@@ -16,20 +16,14 @@
   "currency",
   "amounts_section",
   "ask_amount",
-  "expected_amount",
-  "probability",
-  "weighted_amount",
   "column_break_amounts",
   "target_close_date",
   "next_action",
   "next_action_date",
   "next_action_task",
-  "last_interaction_date",
   "notes_section",
   "description",
-  "outcome_tab",
   "closure_section",
-  "outcome",
   "closed_on",
   "closed_amount",
   "column_break_closure",
@@ -69,13 +63,13 @@
    "options": "User"
   },
   {
-   "default": "Identification",
+   "default": "Qualification",
    "fieldname": "stage",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Stage",
-   "options": "Identification\nQualification\nCultivation\nSolicitation\nStewardship\nWon\nLost",
+   "options": "Qualification\nCultivation\nSolicitation\nWon\nLost",
    "reqd": 1
   },
   {
@@ -98,35 +92,13 @@
   {
    "fieldname": "amounts_section",
    "fieldtype": "Section Break",
-   "label": "Ask & Pipeline"
+   "label": "Ask & Follow-up"
   },
   {
    "fieldname": "ask_amount",
    "fieldtype": "Currency",
    "label": "Ask Amount",
    "options": "currency"
-  },
-  {
-   "description": "Defaults to the ask amount; used for the weighted pipeline value.",
-   "fieldname": "expected_amount",
-   "fieldtype": "Currency",
-   "label": "Expected Amount",
-   "options": "currency"
-  },
-  {
-   "description": "Read-only: derived from the pipeline stage.",
-   "fieldname": "probability",
-   "fieldtype": "Percent",
-   "label": "Probability (%)",
-   "read_only": 1
-  },
-  {
-   "description": "Expected amount weighted by probability.",
-   "fieldname": "weighted_amount",
-   "fieldtype": "Currency",
-   "label": "Weighted Amount",
-   "options": "currency",
-   "read_only": 1
   },
   {
    "fieldname": "column_break_amounts",
@@ -160,27 +132,9 @@
    "read_only": 1
   },
   {
-   "fieldname": "last_interaction_date",
-   "fieldtype": "Date",
-   "label": "Last Interaction",
-   "read_only": 1
-  },
-  {
-   "fieldname": "outcome_tab",
-   "fieldtype": "Tab Break",
-   "label": "Outcome"
-  },
-  {
    "fieldname": "closure_section",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "outcome",
-   "fieldtype": "Select",
-   "in_standard_filter": 1,
-   "label": "Outcome",
-   "options": "\nWon\nLost",
-   "read_only": 1
+   "fieldtype": "Section Break",
+   "label": "Closure"
   },
   {
    "fieldname": "closed_on",
@@ -201,7 +155,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval:doc.outcome=='Lost'",
+   "depends_on": "eval:doc.stage=='Lost'",
    "fieldname": "lost_reason",
    "fieldtype": "Small Text",
    "label": "Lost Reason"

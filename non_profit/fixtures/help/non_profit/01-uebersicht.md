@@ -21,7 +21,7 @@ Non Profit ist die gemeinsame fachliche Basis für Spenden, Mitglieder, Verdanku
 | Mitglieder und Haushalte führen | **Member**, **Household**, **Membership**, **Membership Type** |
 | Empfänger für Kommunikation auswählen | **NPO Recipient Selection** |
 | Wiederkehrende Spenden | **Recurring Donation** |
-| Grossspenden entwickeln | **Major Gift**, **Donor Interaction**, **Task** |
+| Grossspenden entwickeln | **Donor**, **Major Gift**, **Task**, Timeline-Kommentare |
 | Sponsoren verwalten | **Sponsor**, **Sponsor Tier** |
 | Freiwillige verwalten | **Volunteer**, **Volunteer Type**, **Volunteer Skill** |
 | Förderanträge verfolgen | **Grant Application** |
@@ -42,6 +42,6 @@ Nutzen Sie die kundenspezifische App, wenn eine eigene Sidebar, ein eigenes Dash
 - **Spenden und Kampagnen**: Donor-Identität, Zahlung, Verdankung und Bescheinigung.
 - **Mitglieder und Mitgliedschaften**: kombinierte Erstellung, Haushalte, Laufzeiten und Bestätigung.
 - **Einstellungen**: Firmen, Konten, E-Mail- und Belegvorlagen.
-- **Grossspenden und nächste Aktionen**: Pipeline, Interaktionen und Aufgaben.
+- **Grossspenden und nächste Aktionen**: Pipeline, Timeline-Kommentare und Aufgaben.
 - **Wiederkehrende Spenden und Community**: Serien, Sponsoren, Freiwillige, Chapters und Grants.
 - **Empfängerauswahlen**: Wiederverwendbare Zielgruppen für Newsletter und Postversand.
