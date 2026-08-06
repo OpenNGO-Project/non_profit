@@ -80,7 +80,7 @@ def _assign_task(task_name: str, user: str) -> None:
 
 	_share_task_with_user(task_name, user)
 	try:
-		assign_add({"assign_to": [user], "doctype": "Task", "name": task_name}, ignore_permissions=True)
+		assign_add({"assign_to": [user], "doctype": "Task", "name": task_name})
 	except DuplicateToDoError:
 		# Already assigned to this user — nothing to do.
 		pass

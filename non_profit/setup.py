@@ -40,8 +40,10 @@ def setup_non_profit():
 	frappe.clear_cache()
 	ensure_non_profit_desk_roles()
 	from non_profit.non_profit.fundraising_setup import ensure_good_connector_bank_integration
+	from non_profit.non_profit.major_gifts import ensure_major_gift_workflow
 
 	ensure_good_connector_bank_integration()
+	ensure_major_gift_workflow()
 
 
 def ensure_non_profit_desk_roles():
