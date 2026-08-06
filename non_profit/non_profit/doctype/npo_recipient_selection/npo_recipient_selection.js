@@ -4,30 +4,19 @@ frappe.ui.form.on("NPO Recipient Selection", {
 
 		frm.page.add_action_item(__("Preview Recipients"), () => previewRecipients(frm));
 
-		if (
-			frm.doc.enabled &&
-			frm.doc.available_for_newsletter &&
-			frappe.model.can_create("Good Newsletter Campaign") &&
-			frappe.model.can_create("Good Newsletter Audience")
-		) {
-			frm.page.add_action_item(__("Create Newsletter Campaign"), () =>
-				createNewsletterCampaign(frm)
-			);
-		}
+		if (!frm.doc.enabled || frm.is_dirty()) return;
+		if (!frm.doc.available_for_newsletter && !frm.doc.available_for_direct_mail) return;
 
-		if (
-			frm.doc.enabled &&
-			frm.doc.available_for_direct_mail &&
-			frappe.model.can_create("Good Direct Mail Campaign")
-		) {
-			frm.page.add_action_item(__("Create Direct Mail Run"), () => {
-				assertSaved(frm);
-				frappe.new_doc("Good Direct Mail Campaign", {
-					recipient_selection: frm.doc.name,
-					title: frm.doc.selection_name,
-				});
+		frm.page.add_action_item(__("Create Channel Campaigns"), () => {
+			if (!window.npoChannelLaunch) {
+				frappe.msgprint(__("The channel launcher is unavailable on this site."));
+				return;
+			}
+			window.npoChannelLaunch.open(frm, {
+				source_provider: "npo_recipient_selection",
+				source_reference: frm.doc.name,
 			});
-		}
+		});
 	},
 });
 
@@ -68,61 +57,6 @@ async function previewRecipients(frm) {
 		message: rows ? table : `<p>${__("No matching recipients.")}</p>`,
 		wide: true,
 	});
-}
-
-function createNewsletterCampaign(frm) {
-	assertSaved(frm);
-	const dialog = new frappe.ui.Dialog({
-		title: __("Create Newsletter Campaign"),
-		fields: [
-			{
-				fieldname: "campaign_title",
-				fieldtype: "Data",
-				label: __("Campaign Title"),
-				default: frm.doc.selection_name,
-				reqd: 1,
-			},
-			{
-				fieldname: "subject",
-				fieldtype: "Data",
-				label: __("Subject"),
-				default: frm.doc.selection_name,
-				reqd: 1,
-			},
-			{
-				fieldname: "as_pending",
-				fieldtype: "Check",
-				label: __("Import as Pending (require opt-in confirmation)"),
-				description: __(
-					"Leave unchecked only when an existing consent or relationship permits mailing."
-				),
-			},
-		],
-		primary_action_label: __("Create Campaign"),
-		async primary_action(values) {
-			dialog.disable_primary_action();
-			try {
-				const response = await frappe.call({
-					method: "good_newsletter.api.campaign.create_from_source",
-					args: {
-						provider: "npo_recipient_selection",
-						source: frm.doc.name,
-						campaign_title: values.campaign_title,
-						subject: values.subject,
-						as_pending: values.as_pending ? 1 : 0,
-					},
-					freeze: true,
-					freeze_message: __("Creating newsletter campaign..."),
-				});
-				dialog.hide();
-				const result = response.message || {};
-				frappe.set_route("Form", "Good Newsletter Campaign", result.campaign);
-			} finally {
-				dialog.enable_primary_action();
-			}
-		},
-	});
-	dialog.show();
 }
 
 function assertSaved(frm) {

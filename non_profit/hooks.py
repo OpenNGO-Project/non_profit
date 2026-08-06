@@ -20,6 +20,10 @@ doctype_js = {
 	"Major Gift": "public/js/npo_next_actions.js",
 }
 
+# Neutral multi-channel campaign launcher dialog (window.npoChannelLaunch),
+# used by NPO Recipient Selection and optional source forms.
+app_include_js = ["/assets/non_profit/js/channel_launch.js"]
+
 after_install = "non_profit.setup.setup_non_profit"
 after_app_install = "non_profit.setup.after_app_install"
 after_migrate = "non_profit.setup.after_migrate"
@@ -78,6 +82,12 @@ good_newsletter_audience_providers = [
 good_direct_mail_audience_providers = [
 	"non_profit.non_profit.tax_receipts.direct_mail_audience_provider",
 ]
+
+# Neutral multi-channel launch seam. Channel apps register factories returning
+# {"key", "label", "launch_fields", "create_campaign"}; non_profit never imports
+# the private channel apps itself.
+non_profit_audience_channel_creators = []
+non_profit_audience_source_providers = []
 
 scheduler_events = {
 	"daily": [

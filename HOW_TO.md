@@ -97,18 +97,22 @@ links remain, and Generic Endpoint Contacts never become recipients. Evaluation
 and correspondence enrichment use normal row-level permissions and ask you to
 narrow the filters if more than 10,000 raw source rows match.
 
-When Good Newsletter is installed and the user can create both a Campaign and
-Audience, **Actions → Create Newsletter Campaign** creates an additive audience
-snapshot. Choose **Import as Pending** unless an existing consent or relationship
-permits mailing. Contact opt-outs are excluded and duplicate email addresses are
-collapsed case-insensitively. The same selection can also be picked from the
-Audience form in Good Newsletter (**Import Subscribers → NPO Recipient
-Selection**); only enabled selections with **Available for Newsletter** appear
-there. Candidates with no reachable email address are reported in the import
-summary as skipped without an email — fix the missing Contact email and import
-again. When Good Direct Mail is installed and permitted,
-**Actions → Create Direct Mail Run** opens a new Run with this selection and its
-title prefilled. Neither optional action appears without its app/permissions.
+Use **Actions → Create Channel Campaigns** to create a Newsletter draft, Direct
+Mail draft, or both from one saved source. The dialog shows only installed and
+enabled channels that you are permitted to create. Enter one shared title and
+optional Donation Campaign, then complete each selected channel's section;
+unselected channel fields are neither shown nor required. Newsletter creates a
+fresh private Audience and defaults to Pending opt-in; clear that option only
+when an existing consent or relationship permits mailing. Direct Mail requires
+a reusable Letter Template and output configuration, then opens as Draft for
+preparation/review.
+Both drafts record the same launch-time source fingerprint; Direct Mail refuses
+preparation if the selection or its evaluated source rows changed afterward.
+
+The same selection remains available from the Good Newsletter Audience import
+dialog. Candidates with no reachable email are reported as skipped instead of
+silently disappearing. Contact opt-outs are excluded and duplicate email
+addresses are collapsed case-insensitively.
 
 The count and **Last Evaluated On** are refreshed when the selection is saved.
 Source data may change later; save the selection again before comparing its

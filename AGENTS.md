@@ -122,6 +122,16 @@ procedures), and the code. Record new or changed requirements in
 - `get_recipient_selection_configuration(selection)` is the versioned hashing
   input for consumers. Add every result-affecting saved criterion before using a
   new field in selection queries; do not include transient counts or timestamps.
+- `channel_launch` is the neutral source-form coordinator. Channel apps register
+  through `non_profit_audience_channel_creators`; never import or name private
+  channel apps in Python. Optional source apps register through
+  `non_profit_audience_source_providers`. Keep the launcher transactional,
+  fieldtype-allowlisted, permission-filtered through channel-owned availability
+  callbacks, and source transforms ordered before ordinary channels. Dialog
+  fields are mandatory only while their channel is selected.
+- Optional source apps must reuse `donor_source_rows` /
+  `newsletter_members_from_donors` rather than copying Donor canonicalization or
+  correspondence rules.
 - Contacts include only blank/Person identity kinds. Members canonicalize
   Contact first through active Membership rows; only Organization or blank legacy
   subjects may fall back to Customer. Donors canonicalize explicit/compatible

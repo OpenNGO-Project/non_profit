@@ -221,6 +221,26 @@ The public internal contracts in
   validation and read-only preview. It applies the same selection and source
   permission checks but deliberately has no enabled/channel gate, allowing a
   disabled definition to be saved and previewed safely.
+- `donor_source_rows(donor_names)` and `newsletter_members_from_donors(...)`
+  expose the same permission-aware canonical identity and newsletter delivery
+  rules to optional source apps.
+
+`non_profit.non_profit.channel_launch` owns the neutral source-form launcher.
+Channel apps register factories through `non_profit_audience_channel_creators`;
+each descriptor supplies a key/label plus dotted `launch_fields` and
+`create_campaign` callables and may supply a channel-owned `is_available`
+permission callback. The GET-only form endpoint filters channels by source and
+user availability and allows only constrained Frappe field types. Required
+channel fields become mandatory only while that channel is selected. The POST
+endpoint invokes required source transforms first, then selected creators sequentially
+in the request transaction with one title, optional Donation Campaign, and a
+single SHA-256 fingerprint over the transformed saved source configuration plus
+evaluated canonical rows. At least one ordinary campaign channel is required;
+an infrastructure transform alone is not a valid launch. Optional source apps
+register their validation and fingerprint
+callbacks through `non_profit_audience_source_providers`; this public app does
+not name or import them. Channel permissions and channel-specific policy remain
+in the registering app.
 
 Contact source rows include only blank legacy or explicit `Person`
 `Contact.npo_identity_kind`; optional `contact_tag` matches an exact Contact

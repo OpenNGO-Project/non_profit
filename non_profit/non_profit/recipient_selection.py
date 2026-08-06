@@ -173,6 +173,11 @@ def newsletter_selection_members(source: str) -> list[dict[str, str]]:
 	return _newsletter_members(_merge_candidates(rows))
 
 
+def newsletter_members_from_donors(donor_names: list[str] | Any) -> list[dict[str, str]]:
+	"""Resolve explicit Donors through the canonical newsletter delivery path."""
+	return _newsletter_members(_merge_candidates(donor_source_rows(donor_names)))
+
+
 @frappe.whitelist(methods=["GET"])
 def preview_recipient_selection(selection: str) -> dict[str, Any]:
 	"""Return a read-only, bounded preview without exposing postal addresses."""
@@ -360,9 +365,30 @@ def _donor_source_rows(selection: Document) -> list[dict[str, Any]]:
 		limit=MAX_SELECTION_SOURCE_ROWS + 1,
 	)
 	_assert_source_row_limit(rows)
+	return donor_source_rows(row.name for row in rows)
 
+
+def donor_source_rows(donor_names: list[str] | Any) -> list[dict[str, Any]]:
+	"""Return canonical source rows for explicit Donor names.
+
+	This is the shared helper used by NPO selections and optional audience apps:
+	permission-aware callers fetch/filter Donor rows themselves, then use this
+	single canonicalization rule instead of copying the Contact/Customer/
+	Household mapping.
+	"""
+	names = [cstr(name).strip() for name in dict.fromkeys(donor_names or []) if cstr(name).strip()]
+	if not names:
+		return []
+	rows = _permission_visible_row_map(
+		"Donor",
+		set(names),
+		["name", "donor_name", "subject_type", "contact", "customer", "subject_household"],
+	)
 	result = []
-	for row in rows:
+	for name in names:
+		row = rows.get(name)
+		if not row:
+			continue
 		subject_type, subject_name = _donor_canonical_subject(row)
 		if not subject_name:
 			continue
@@ -379,7 +405,7 @@ def _donor_source_rows(selection: Document) -> list[dict[str, Any]]:
 				"identity_name": row.donor_name,
 			}
 		)
-	return result
+	return _filter_visible_canonical_rows(result)
 
 
 def _member_canonical_subject(member: Any) -> tuple[str, str]:
