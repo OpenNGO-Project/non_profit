@@ -1,15 +1,76 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from non_profit.www import donate
 
+DONATE_PAGES_FLAG = "enable_non_profit_public_donate_pages"
 
-class TestDonateConfirmPage(FrappeTestCase):
+
+@contextmanager
+def public_donate_pages_enabled():
+	"""Serve the generic /donate pages for the duration of the test."""
+	previous = frappe.conf.get(DONATE_PAGES_FLAG)
+	frappe.conf[DONATE_PAGES_FLAG] = 1
+	try:
+		yield
+	finally:
+		if previous is None:
+			frappe.conf.pop(DONATE_PAGES_FLAG, None)
+		else:
+			frappe.conf[DONATE_PAGES_FLAG] = previous
+
+
+class TestGenericDonatePagesGate(IntegrationTestCase):
+	"""The generic, unbranded /donate flow is opt-in per site."""
+
+	def test_pages_are_hidden_by_default(self) -> None:
+		from non_profit.www import donate_confirm
+
+		self.assertFalse(donate.public_donate_pages_enabled())
+		with self.assertRaises(frappe.DoesNotExistError):
+			donate.get_context(frappe._dict())
+		with self.assertRaises(frappe.DoesNotExistError):
+			donate_confirm.get_context(frappe._dict())
+
+	def test_disabled_page_refuses_submissions(self) -> None:
+		# The POST handler runs inside get_context; the gate must come first so
+		# a hidden page cannot still create Donors and Donations.
+		handle = MagicMock()
+		with (
+			patch("non_profit.www.donate.frappe.request", frappe._dict(method="POST")),
+			patch("non_profit.www.donate._handle_submission", handle),
+		):
+			with self.assertRaises(frappe.DoesNotExistError):
+				donate.get_context(frappe._dict())
+		handle.assert_not_called()
+
+	def test_hidden_pages_answer_a_real_404_status(self) -> None:
+		# The exception class is not the contract — the HTTP status is. Both
+		# DoesNotExistError and PageDoesNotExistError render the 404 body, but
+		# the latter leaves the status at 200, which reads as "page exists" to
+		# crawlers, monitors and caches. Asserting the status keeps a swap of
+		# the exception class from silently un-hiding the page.
+		from frappe.website.serve import get_response
+
+		for path in ("/donate", "/donate_confirm"):
+			response = get_response(path)
+			self.assertEqual(response.status_code, 404, f"{path} did not answer 404")
+
+	def test_site_config_flag_serves_the_pages(self) -> None:
+		with public_donate_pages_enabled():
+			self.assertTrue(donate.public_donate_pages_enabled())
+			with patch("non_profit.www.donate._get_active_campaigns", return_value=[]):
+				context = donate.get_context(frappe._dict())
+			self.assertEqual(context.campaigns, [])
+
+
+class TestDonateConfirmPage(IntegrationTestCase):
 	def test_confirm_page_requires_donation_key(self) -> None:
 		from non_profit.non_profit.doctype.donation.test_donation import (
 			create_donor,
@@ -19,6 +80,7 @@ class TestDonateConfirmPage(FrappeTestCase):
 		from non_profit.www import donate_confirm
 		from non_profit.www.donate import donation_confirm_query
 
+		self.enterContext(public_donate_pages_enabled())
 		company, _receivable, _cash = get_company_and_accounts()
 		create_donor_type()
 		donor = create_donor()
@@ -69,7 +131,7 @@ class TestDonateConfirmPage(FrappeTestCase):
 			frappe.local.form_dict = original_form_dict
 
 
-class TestDonatePage(FrappeTestCase):
+class TestDonatePage(IntegrationTestCase):
 	def test_unconfigured_captcha_disables_public_donation_submit(self) -> None:
 		template = (Path(__file__).parent / "www" / "donate.html").read_text(encoding="utf-8")
 		self.assertIn("CAPTCHA is not configured. Please contact support.", template)
@@ -151,7 +213,7 @@ class TestDonatePage(FrappeTestCase):
 		self.assertEqual(campaign_filters["cost_center"], ["in", ["CC-DONATION"]])
 
 
-class TestHardenedWhitelistedMethods(FrappeTestCase):
+class TestHardenedWhitelistedMethods(IntegrationTestCase):
 	"""run_doc_method only enforces read permission; the four write-action doc
 	methods must reject users without write access."""
 
@@ -247,7 +309,19 @@ class TestHardenedWhitelistedMethods(FrappeTestCase):
 			frappe.set_user(previous_user)
 
 
-class TestGuestDonationAmountInvariant(FrappeTestCase):
+def _without_checkout_provider():
+	"""Exercise non_profit's own recording path.
+
+	With a payment integration installed, `/donate` delegates the whole
+	collection path to it and redirects the donor to a hosted checkout. These
+	tests are about what this app does on its own, so the seam is closed.
+	"""
+	from unittest.mock import patch
+
+	return patch("non_profit.www.donate._delegate_public_checkout", return_value=None)
+
+
+class TestGuestDonationAmountInvariant(IntegrationTestCase):
 	"""`float()` happily parses "inf"/"nan"/"1e400", and `nan <= 0` is False, so
 	the positivity check alone let a guest persist a non-finite Donation amount
 	that then flowed into totals, allocations and receipts."""
@@ -267,7 +341,8 @@ class TestGuestDonationAmountInvariant(FrappeTestCase):
 				)
 				with patch("non_profit.www.donate._verify_captcha"):
 					with self.assertRaises(frappe.ValidationError):
-						_handle_submission(form)
+						with _without_checkout_provider():
+							_handle_submission(form)
 
 				self.assertFalse(
 					frappe.db.exists("Donation", {"email": email}),
@@ -286,12 +361,13 @@ class TestGuestDonationAmountInvariant(FrappeTestCase):
 			consent="1",
 		)
 		with patch("non_profit.www.donate._verify_captcha"):
-			donation_name = _handle_submission(form)
+			with _without_checkout_provider():
+				donation_name = _handle_submission(form)
 
 		self.assertEqual(frappe.db.get_value("Donation", donation_name, "amount"), 12.50)
 
 
-class TestGuestDonorProtection(FrappeTestCase):
+class TestGuestDonorProtection(IntegrationTestCase):
 	def test_guest_resubmission_adds_comment_instead_of_rename(self) -> None:
 		from non_profit.non_profit.doctype.donor.donor import find_donor_by_email
 		from non_profit.www.donate import _handle_submission
@@ -305,7 +381,8 @@ class TestGuestDonorProtection(FrappeTestCase):
 			consent="1",
 		)
 		with patch("non_profit.www.donate._verify_captcha"):
-			_handle_submission(first_form)
+			with _without_checkout_provider():
+				_handle_submission(first_form)
 
 		donor_name = find_donor_by_email(email)
 		self.assertTrue(donor_name)
@@ -318,7 +395,8 @@ class TestGuestDonorProtection(FrappeTestCase):
 			consent="1",
 		)
 		with patch("non_profit.www.donate._verify_captcha"):
-			_handle_submission(second_form)
+			with _without_checkout_provider():
+				_handle_submission(second_form)
 
 		self.assertEqual(
 			frappe.db.get_value("Donor", donor_name, "donor_name"),

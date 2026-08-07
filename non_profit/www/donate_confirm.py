@@ -7,11 +7,15 @@ from non_profit.non_profit.doctype.donation.donation import (
 	authorize_mock_donation_payment,
 	mock_donation_payments_enabled,
 )
+from non_profit.www.donate import require_public_donate_pages
 
 no_cache = 1
 
 
 def get_context(context):
+	# Reachable only from the generic /donate page, so it follows the same
+	# opt-in flag — including its mock-payment POST.
+	require_public_donate_pages()
 	context.no_cache = 1
 	context.show_sidebar = False
 

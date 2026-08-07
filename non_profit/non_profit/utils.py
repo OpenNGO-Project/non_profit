@@ -221,6 +221,7 @@ def before_tests():
 	from non_profit.non_profit.fundraising_setup import ensure_fundraising_fixtures
 
 	use_short_test_host_name()
+	skip_hrms_test_record_bootstrap()
 
 	if not frappe.get_list("Company"):
 		setup_complete(
@@ -245,6 +246,33 @@ def before_tests():
 		setup_non_profit()
 
 	ensure_fundraising_fixtures()
+
+
+def skip_hrms_test_record_bootstrap():
+	"""Keep Frappe's test-record dependency walk out of hrms's test modules.
+
+	Every doctype-folder test class makes Frappe walk its link graph and import
+	each dependency's ``test_*`` module. Our doctypes reach hrms ones through
+	links such as ``Department.leave_block_list`` and ``Employee``, and every hrms
+	test module imports ``hrms.tests.utils``, which runs ``BootStrapTestData()``
+	at import time. That bootstrap needs an ``Email Account`` named "Jobs" which
+	neither ERPNext nor HRMS creates any more, so it always raises — and on the
+	way it would also set ``System Settings`` country to India and commit.
+
+	``get_missing_records_doctypes`` returns before importing anything for a
+	doctype it has already visited, and it seeds ``visited`` from
+	``frappe.local.test_objects``. Registering hrms's doctypes here therefore
+	prunes that whole branch. No non_profit test uses hrms records.
+	"""
+	if "hrms" not in frappe.get_installed_apps():
+		return
+
+	modules = frappe.db.get_values("Module Def", {"app_name": "hrms"}, "name", pluck=True)
+	if not modules:
+		return
+
+	for doctype in frappe.db.get_values("DocType", {"module": ("in", modules)}, "name", pluck=True):
+		frappe.local.test_objects.setdefault(doctype, [])
 
 
 def use_short_test_host_name():

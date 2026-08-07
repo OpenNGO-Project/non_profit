@@ -7,7 +7,7 @@ level: Beginner
 
 # Non Profit — Übersicht
 
-Non Profit ist die gemeinsame fachliche Basis für Spenden, Mitglieder, Verdankungen, Spendenbescheinigungen, Freiwillige, Chapters und Förderanträge. Andere Apps wie GoodNPO oder ilanga können diese Datensätze mit eigener Oberfläche und eigenem Branding nutzen.
+Non Profit ist die gemeinsame fachliche Basis für Spenden, Mitglieder, Verdankungen, Spendenbescheinigungen, Freiwillige, Chapters und Förderanträge. Nachgelagerte Apps können diese Datensätze mit eigener Oberfläche und eigenem Branding nutzen.
 
 ![Non Profit Workspace mit den wichtigsten Abkürzungen und Bereichen](/assets/non_profit/images/help/01-non-profit-workspace.png)
 
@@ -33,7 +33,7 @@ Non Profit ist die gemeinsame fachliche Basis für Spenden, Mitglieder, Verdanku
 3. Status und verknüpfte Dokumente prüfen.
 4. Verdankung, Spendenbescheinigung, Rechnung oder Follow-up auslösen.
 
-## Wann nutze ich GoodNPO oder ilanga statt Non Profit?
+## Wann nutze ich eine kundenspezifische App statt Non Profit?
 
 Nutzen Sie die kundenspezifische App, wenn eine eigene Sidebar, ein eigenes Dashboard oder eigene Vorlagen vorhanden sind. Nutzen Sie Non Profit direkt, wenn Sie generische Stammdaten oder Basis-Einstellungen pflegen.
 

@@ -192,7 +192,11 @@ class TestDonation(unittest.TestCase):
 		with (
 			patch.object(donation, "db_set") as db_set,
 			patch.object(donation, "load_from_db"),
-			patch.object(donation, "create_payment_entry", side_effect=lambda: calls.append("accounting")),
+			patch.object(
+				donation,
+				"create_payment_entry",
+				side_effect=lambda date=None: calls.append(("accounting", date)),
+			),
 			patch.object(
 				donation,
 				"_dispatch_payment_thank_you",
@@ -205,8 +209,40 @@ class TestDonation(unittest.TestCase):
 		):
 			donation.on_payment_authorized("Completed")
 
-		self.assertEqual(calls, ["accounting", "thank_you", "rollup"])
+		self.assertEqual(calls, [("accounting", None), "thank_you", "rollup"])
 		db_set.assert_called_once_with("paid", 1)
+
+	def test_provider_payment_date_updates_donation_and_payment_entry_dates(self):
+		donation = frappe.new_doc("Donation")
+		donation.name = "NPO-DONATION-PROVIDER-DATE"
+		donation.date = "2026-08-07"
+		with (
+			patch.object(frappe.db, "get_value", return_value=0),
+			patch.object(donation, "db_set") as db_set,
+			patch.object(donation, "load_from_db"),
+			patch.object(donation, "create_payment_entry") as create_payment_entry,
+			patch.object(donation, "_dispatch_payment_thank_you"),
+			patch("non_profit.non_profit.major_gifts.on_donation_change"),
+		):
+			donation.on_payment_authorized("Completed", payment_date="2026-08-05")
+
+		db_set.assert_any_call("date", frappe.utils.getdate("2026-08-05"), update_modified=False)
+		create_payment_entry.assert_called_once_with(date=frappe.utils.getdate("2026-08-05"))
+
+	def test_thank_you_database_retry_signals_propagate(self):
+		donation = frappe.new_doc("Donation")
+		donation.name = "NPO-DONATION-THANK-YOU-RETRY"
+		for error in (frappe.QueryDeadlockError("deadlock"), frappe.QueryTimeoutError("timeout")):
+			with (
+				self.subTest(error=type(error).__name__),
+				patch.object(frappe.db, "get_value", return_value=0),
+				patch.object(donation, "db_set"),
+				patch.object(donation, "load_from_db"),
+				patch.object(donation, "create_payment_entry"),
+				patch.object(donation, "_dispatch_payment_thank_you", side_effect=error),
+				self.assertRaises(type(error)),
+			):
+				donation.on_payment_authorized("Completed")
 
 	def test_unsuccessful_payment_status_does_not_change_donation(self):
 		donation = frappe.new_doc("Donation")

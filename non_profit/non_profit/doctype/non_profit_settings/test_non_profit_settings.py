@@ -2,10 +2,10 @@
 # See license.txt
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 
-class TestNonProfitSettings(FrappeTestCase):
+class TestNonProfitSettings(IntegrationTestCase):
 	def test_load_non_profit_settings(self) -> None:
 		doc = frappe.get_doc("Non Profit Settings")
 		self.assertEqual(doc.doctype, "Non Profit Settings")

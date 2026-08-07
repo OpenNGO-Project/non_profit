@@ -1,11 +1,10 @@
 """Doc-referenced outbound email dispatch for non_profit.
 
 Dispatches to ``non_profit_referenced_email_providers`` hooks first, so a
-private downstream app (usually ``good_npo``) can deliver traceable emails
-with a Communication on the reference document's timeline — e.g. via Good
-Connector's ``send_referenced_email`` — without this public repository
-importing private apps. When no provider is registered, delivery falls back
-to plain ``frappe.sendmail`` with the same arguments.
+downstream delivery app can create a traceable Communication on the reference
+document's timeline without this public repository importing it. When no
+provider is registered, delivery falls back to plain ``frappe.sendmail`` with
+the same arguments.
 """
 
 from __future__ import annotations

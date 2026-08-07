@@ -91,7 +91,13 @@ class Donation(Document):
 		if self.get("__islocal"):
 			self.donor = donor_name
 
-	def on_payment_authorized(self, status_changed_to: str | None = None, *args, **kwargs):
+	def on_payment_authorized(
+		self,
+		status_changed_to: str | None = None,
+		*args,
+		payment_date=None,
+		**kwargs,
+	):
 		if status_changed_to not in (None, "Authorized", "Completed"):
 			return
 		# Idempotency: a duplicate or late gateway callback for an already-paid
@@ -101,10 +107,15 @@ class Donation(Document):
 		# stored flag so a stale in-memory instance cannot skip this guard.
 		if frappe.db.get_value("Donation", self.name, "paid"):
 			return
+		if payment_date:
+			payment_date = getdate(payment_date)
+			if getdate(self.date) != payment_date:
+				self.db_set("date", payment_date, update_modified=False)
+				self.date = payment_date
 		self.db_set("paid", 1)
 		self.load_from_db()
 		try:
-			self.create_payment_entry()
+			self.create_payment_entry(date=payment_date)
 		except Exception:
 			self.db_set("paid", 0)
 			frappe.log_error(
@@ -114,6 +125,8 @@ class Donation(Document):
 			raise
 		try:
 			self._dispatch_payment_thank_you()
+		except (frappe.QueryDeadlockError, frappe.QueryTimeoutError):  # fmt: skip
+			raise
 		except Exception:
 			frappe.log_error(
 				title=f"Thank-you dispatch failed for {self.name}",

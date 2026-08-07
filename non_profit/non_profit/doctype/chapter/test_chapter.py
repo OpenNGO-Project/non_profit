@@ -2,12 +2,12 @@
 # See license.txt
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 from non_profit.non_profit.doctype.chapter.chapter import join
 
 
-class TestChapter(FrappeTestCase):
+class TestChapter(IntegrationTestCase):
 	def test_create_chapter(self) -> None:
 		chapter_head = _make_member()
 		title = f"Test Chapter {frappe.generate_hash(length=6)}"

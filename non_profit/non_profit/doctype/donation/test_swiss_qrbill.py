@@ -1,8 +1,8 @@
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 
-class TestSwissQRBill(FrappeTestCase):
+class TestSwissQRBill(IntegrationTestCase):
 	def tearDown(self) -> None:
 		frappe.db.rollback()
 

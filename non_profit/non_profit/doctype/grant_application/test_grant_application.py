@@ -2,10 +2,10 @@
 # See license.txt
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 
-class TestGrantApplication(FrappeTestCase):
+class TestGrantApplication(IntegrationTestCase):
 	def test_public_template_hides_email_and_escapes_applicant_values(self) -> None:
 		template_path = frappe.get_app_path(
 			"non_profit",

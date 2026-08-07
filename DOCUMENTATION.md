@@ -2,20 +2,19 @@
 
 ## Purpose
 
-`non_profit` is this bench's shared NPO domain app. It is a hard fork of Frappe's Non Profit app with Swiss fundraising additions and membership changes used by `ilanga_app`, `miki_app`, and Goodvantage apps.
+`non_profit` is a reusable NPO domain app. It is a hard fork of Frappe's Non
+Profit app with Swiss fundraising additions and membership changes consumed by
+downstream site, presentation, analytics, and dispatch apps through neutral
+DocTypes, services, and hooks.
 
-## Important Consumers
+## Consumer Contract
 
-| App | Dependency |
-|---|---|
-| `ilanga_app` | Lowercase `ilanga` presentation and editable Builder website through `good_npo`. |
-| `miki_app` | Membership/Customer substrate for kibesuisse declarations. |
-| `good_npo` | Generic Goodvantage NPO presentation layer. |
-| `good_demo` | Demo signup/reset layer that seeds non_profit demo records. |
-| `good_direct_mail` | Postal campaigns consume canonical correspondence profiles and Household Donors without reversing the dependency. |
-| `good_newsletter` | Optionally discovers saved NPO Recipient Selections through a provider hook; non_profit has no runtime import dependency on it. |
+Downstream apps may present, seed, analyze, or dispatch from this app's domain
+records. Optional behavior crosses provider hooks; this public repository never
+imports a private consumer. ERPNext remains the only required app.
 
-Breaking changes are allowed while Miki is not production, but `miki_app` must be updated in the same change whenever shared membership behavior changes.
+Shared membership behavior is a downstream compatibility contract. Consumers
+must be updated in the same change whenever that contract changes.
 
 The historical `PARTY_MODEL_REFACTOR_PLAN.md` (self-declared non-authoritative,
 zero inbound references) was archived out of the repo in 16.7.0 to
@@ -493,9 +492,8 @@ the helper is a neutral seam like the audience provider hooks.
   Only `good_direct_mail` reads the factory hook, so it is inert when that app is
   not installed.
 - `non_profit_referenced_email_providers` (consumed by
-  `non_profit.non_profit.mailer.send_referenced_email`) lets a private
-  downstream app — usually good_npo via Good Connector's
-  `send_referenced_email` — deliver the app's doc-referenced emails
+  `non_profit.non_profit.mailer.send_referenced_email`) lets a downstream
+  delivery app deliver the app's doc-referenced emails
   (Membership acknowledgement, Donation thank-you, Donation Tax Receipt
   send, Grant review invitation) with a Communication on the reference
   document's timeline. The last registered provider wins; with no provider
@@ -517,7 +515,14 @@ the helper is a neutral seam like the audience provider hooks.
   new data loads and restores the mobile scroll position after replacement.
 - Daily scheduler jobs expire memberships and process recurring donations.
 - Recurring Donation processing creates submitted, unpaid Donation rows for due
-  active schedules. It obtains the complete current schedule document in one
+  active schedules **that no payment provider owns**. The candidate query
+  excludes any schedule carrying `payment_provider`, and the locked worker
+  rejects any provider linkage at all, including a pending mandate whose
+  subscription id has not been minted. It re-checks ownership because filters can go
+  stale between the query and the lock. This exclusion is what makes a
+  provider-backed schedule structurally incapable of being charged twice: the
+  provider reports every charge it takes, and a second generator running on a
+  date would duplicate each one. It obtains the complete current schedule document in one
   locking read, checks that current state is still active and due, and performs
   a locking lookup before reusing or creating the installment for that
   schedule/date. It advances `next_date` at most once, cancels schedules that
@@ -525,6 +530,58 @@ the helper is a neutral seam like the audience provider hooks.
   two-connection regression runs the real worker helper and proves that two due
   workers create one installment. The POST-only manual action also discards its
   caller's stale state and acts on the complete locking read.
+- **Provider-backed schedules.** A `Recurring Donation` may record that an
+  external payment provider owns it: `payment_provider`,
+  `provider_subscription_id`, `provider_reference`, `provider_account` and
+  `provider_next_payment`. The naming is deliberately provider-agnostic and
+  `provider_account` is a Data field, not a Link — this app is public and must
+  stay installable without any payment integration. It never talks to a
+  provider itself: `change_amount` and `cancel_schedule` delegate through
+  `non_profit_recurring_donation_providers`, and an unclaimed action throws
+  rather than silently succeeding, because a no-op would leave the donor
+  charged the old amount while the record claims otherwise. Both actions lock
+  and authorize the current row; an incomplete provider binding fails closed.
+  Once any provider state exists, ordinary saves cannot rewrite Company,
+  status, amount, currency, frequency, or linkage. Those fields and all
+  provider lifecycle fields are excluded from copies.
+- An incomplete provider-owned `Pending Mandate` cannot use ordinary
+  cancellation because a hosted checkout may still become a live mandate.
+  `retire_abandoned_pending_mandate` delegates provider verification through the
+  same hook and changes the row to Cancelled only after a provider returns
+  explicit `safe_to_retire: true` evidence. The action is POST-only, checks the
+  current locked row's write permission, stores the provider evidence on the
+  timeline, and otherwise fails closed.
+- `provider_account` is pinned when the subscription is adopted and never
+  re-resolved. A subscription lives inside one provider account and cannot be
+  moved between them, so re-resolving from configuration would address
+  whichever account is configured today rather than the one holding the
+  donor's mandate.
+- Installments from a provider are recorded by `record_provider_installment`,
+  keyed for idempotency on the **provider's transaction id** rather than the
+  date. Provider webhooks retry for days, so a replay reuses existing evidence
+  even when the Donation was later cancelled; it never posts replacement
+  accounting for the same transaction. A genuinely different charge inside one
+  period still records. New paid installments call Donation's authoritative
+  `on_payment_authorized` state machine for Payment Entry rollback, thank-you
+  dispatch, and donor/Major Gift roll-ups. A charge without a transaction id is
+  refused. A trusted provider may pass the authenticated amount, payment date,
+  and downstream Donation values; the payment date becomes both the Donation
+  date and generated Payment Entry posting/reference date.
+- `apply_provider_status` maps the provider's five lifecycle states onto
+  Active / Payment Retrying / Payment Failed / Ending / Cancelled. Payment
+  Retrying and Payment Failed stay distinct so staff do not chase donors the
+  provider is about to charge successfully, and **Ending still collects** —
+  the donor gave notice, and the remaining charges follow. `next_date` becomes
+  a mirror of the provider's `valid_until` rather than a driver. Ending cannot
+  regress to an earlier state; Payment Failed and Cancelled are terminal, so
+  delayed provider events cannot reopen a stopped instruction.
+- Provider actions run inside the caller's request transaction but mutate an
+  external system before local commit can be proven. Every provider
+  implementation must therefore write an immediate non-secret
+  `local_commit_pending` recovery journal entry after provider success and pair
+  it through `after_commit` / `after_rollback`. Amount updates and cancellation
+  must be idempotent so an operator can safely retry the exact action after a
+  rollback-confirmed or unpaired-pending entry.
 - `Payment Entry` is extended through `doc_events` hooks, not
   `override_doctype_class`: the override resolves to the last installed app
   (hrms wins on this bench), while doc_events fire for every Payment Entry
@@ -537,7 +594,7 @@ the helper is a neutral seam like the audience provider hooks.
 Non-profit setup also disables `auto_opt_in` on ERPNext's known loyalty test
 fixtures (`Test Single Loyalty` and `Test Multiple Loyalty`) when they exist.
 Those fixtures are created by ERPNext tests and match every Customer, which
-otherwise makes normal NPO/Miki Customer saves show "Multiple Loyalty Programs
+otherwise makes normal downstream Customer saves show "Multiple Loyalty Programs
 found" messages. Real Loyalty Program records are left untouched.
 
 ## Whitelisted API Contracts
@@ -602,10 +659,21 @@ POST-only and inert unless both `developer_mode` and
 `enable_non_profit_mock_payments` are set. It is not a production payment
 confirmation path.
 
+`/donate` and `/donate_confirm` are opt-in per site. `get_context` on both
+pages starts with `non_profit.www.donate.require_public_donate_pages()`, which
+raises `frappe.DoesNotExistError`, which Frappe's website exception wrapper
+turns into a real HTTP 404 response, unless `site_config.json` sets
+`enable_non_profit_public_donate_pages`. The gate runs before the POST branch,
+so a hidden page cannot create Donors or Donations either. The default is off
+because these pages are an unstyled EUR fallback and many sites already embed a
+branded donation surface;
+leaving them reachable duplicates the donation funnel. Flipping the flag needs
+`bench clear-website-cache`, since Frappe caches 404 responses per URL.
+
 Public donation pages that delegate to `non_profit.www.donate._handle_submission`
 must pass server-side validation for donor name, email syntax, an amount within
 the shared public bounds (CHF 5–100'000), accepted consent, and allowed frequency
-(`one_off`, `Monthly`, `Quarterly`, `Yearly`). The amount check rejects non-finite input explicitly: `float()`
+(`one_off`, `Monthly`; Quarterly and Yearly are staff-only). The amount check rejects non-finite input explicitly: `float()`
 accepts `inf`, `-inf`, `nan`, and overflowing literals such as `1e400`, and
 `nan` compares False against every bound, so a positivity test alone cannot keep
 those values out. `Donation.validate` repeats the same invariant at controller
@@ -613,12 +681,13 @@ level so no write path — Desk, import, portal, or bank reconciliation — can
 persist a non-finite or non-positive amount. Company is resolved server-side; a
 selected or listed Donation Campaign must be active and backed by an enabled
 leaf Cost Center belonging to that Company. That campaign/Company gate lives
-once in `non_profit.non_profit.campaign_gate.campaign_matches_company()` and is
-shared with Good NPO's public checkout, so the two guest surfaces cannot drift
-apart on a security boundary; ownership is derived from the campaign's Cost
-Center, never from the campaign name or historical Donations. Before any Donor/Customer lookup or creation, the normalized email
-acquires the same hashed `Individual` identity lock used by guided and Good NPO
-Member flows through transaction completion. Browser `required` attributes are
+once in `non_profit.non_profit.campaign_gate.campaign_matches_company()` so
+downstream guest surfaces can reuse the same security boundary; ownership is
+derived from the campaign's Cost Center, never from the campaign name or
+historical Donations. Before any
+Donor/Customer lookup or creation, the normalized email acquires the same hashed
+`Individual` identity lock used by other public and guided identity flows
+through transaction completion. Browser `required` attributes are
 UX only. The handler is rate-limited. Every guest submission must include a
 valid GoodVantage CAPTCHA response. Missing Good Connector or missing/unreadable
 CAPTCHA configuration fails closed; the app can still be installed without Good
@@ -670,8 +739,8 @@ runs.
 policy-capable orchestration service for public/presentation callers. Non Profit
 owns email normalization, Member-aware Customer lookup, Donor/Customer linking,
 and Contact/Address continuity; callers provide only presentation values,
-existing-Donor handling, insertion strategy, and ambiguity policy. Good NPO uses
-safe rejection: when more than one Donor or Customer resolves to an email, staff
+existing-Donor handling, insertion strategy, and ambiguity policy. Public
+consumers use safe rejection: when more than one Donor or Customer resolves to an email, staff
 must resolve the identity instead of a guest request choosing one arbitrarily.
 The older `find_donor_by_email()` and `get_or_create_customer_for_donor()`
 dotted paths remain supported.
@@ -696,8 +765,8 @@ On a site where Good Connector is not installed, the list action falls back to
 the original technical Contact/Customer selector instead of offering raw identity
 creation; this preserves the app's optional Connector dependency.
 
-The guided endpoint is an authenticated Desk workflow, not a wrapper around the
-Good NPO guest endpoint. Before writing, it requires create/read/write permission
+The guided endpoint is an authenticated Desk workflow, not a wrapper around a
+downstream guest endpoint. Before writing, it requires create/read/write permission
 on Contact, Address, Customer, Member, and Membership plus read access to the
 selected Membership Type and Country. It lets Frappe own the request transaction,
 does not commit, and does not create subscriptions, invoices, or emails. Good
@@ -751,7 +820,7 @@ legacy Contacts as `Person` and reject an explicit `Generic Endpoint` rather
 than silently reclassifying a shared mailbox. Volunteer creation intentionally
 accepts Contact only, stores `Volunteer.contact`, and does not create a Customer.
 
-`Donation.thank_you_sent` is a standard field on Donation for **Verdankungen**. `Donation.send_thank_you()` queues the configured Email Template, stores `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` when available, and marks this field once the email is queued. Presentation apps such as `ilanga_app` and `good_npo` read this field for pending thank-you queues. A Verdankung is not a Bescheinigung: an immediate thank-you never creates or touches a **Donation Tax Receipt**. A dedicated `Donation Acknowledgement` (Verdankung) document is planned as Phase 5 of `LETTER_DISPATCH_CONVERGENCE_PLAN_2026-07-31.md`; do not re-model it as a second Bescheinigung.
+`Donation.thank_you_sent` is a standard field on Donation for **Verdankungen**. `Donation.send_thank_you()` queues the configured Email Template, stores `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` when available, and marks this field once the email is queued. Downstream presentation apps read this field for pending thank-you queues. A Verdankung is not a Bescheinigung: an immediate thank-you never creates or touches a **Donation Tax Receipt**. A dedicated `Donation Acknowledgement` (Verdankung) document is planned as Phase 5 of `LETTER_DISPATCH_CONVERGENCE_PLAN_2026-07-31.md`; do not re-model it as a second Bescheinigung.
 
 `Donation.on_payment_authorized()` is the authoritative payment state machine.
 It ignores statuses other than `Authorized` / `Completed`, temporarily sets
@@ -871,14 +940,14 @@ Note: this bench intentionally runs two Swiss QR-bill engines. non_profit's
 `swiss_qrbill.py` (qrbill package, creditor from Non Profit Settings) renders
 Donation slips, while `good_connector.qr_bill` (chqr package, creditor from
 the Company bank account, with QRR/SCOR reference support) renders invoice
-QR pages for miki_app / good_event / good_npo. They remain separate
+QR pages for downstream invoice workflows. They remain separate
 payment-document implementations even though non_profit may optionally import
 Good Connector integration services such as CAPTCHA and identity matching.
 When changing payment-relevant QR behavior, check both engines.
 
-## Membership Compatibility
+## Membership Integration Compatibility
 
-Miki uses:
+Downstream membership consumers use:
 
 - `non_profit.non_profit.membership_sync.get_customer_for_membership`
 - `non_profit.non_profit.membership_sync.list_customer_memberships`
@@ -921,7 +990,7 @@ the linked Membership without marking the form dirty.
 The legacy manual `Membership.generate_invoice()` path requires the legacy
 `Membership.invoice` link field and is not exposed when that field is absent.
 Current app-specific membership billing should link Sales Invoices through the
-presentation app's own fields, for example `Sales Invoice.good_npo_membership`.
+presentation app's own fields.
 Legacy Membership invoice/Payment Entry implementations and Donation
 gateway-object helpers now live in `non_profit.non_profit.legacy_payments`.
 Their historical controller/module dotted paths remain thin compatibility
@@ -933,11 +1002,12 @@ Donation authorization services.
 The legacy Contact/Customer helper accepts Contact, Customer, or both, creates or
 reuses the Member first, links the Contact to both Member and Customer when both
 are selected, then creates or reuses an open-ended Membership for the selected
-Membership Type; presentation apps such as `miki_app` use this for parent-owned
-business memberships. The guided raw-data Desk input mode is additive on the
+Membership Type; downstream apps use this for parent-owned business
+memberships. The guided raw-data Desk input mode is additive on the
 same endpoint and does not change the original arguments or response keys.
 
-If any of these contracts change, adjust `miki_app` and run its membership-related tests.
+If any of these contracts change, adjust every downstream consumer and run its
+membership-related tests.
 
 The **Expiring Memberships** report derives one row per Member from the latest
 non-cancelled Membership (`MAX(to_date)`) and filters that date against the
@@ -951,8 +1021,8 @@ remains `to_date`; its Desk label is **Membership Until**.
 
 Recurring billing is opt-in per **Membership Type** with the **Is
 Subscription** checkbox. Leave it disabled for declaration or data-collection
-flows such as MiKi, where billing is triggered by a later process after
-customer data has been collected. The shared
+flows where billing is triggered by a later process after customer data has
+been collected. The shared
 `non_profit.non_profit.membership_subscription.ensure_membership_subscription`
 helper returns without creating anything unless the Membership Type is marked as
 a subscription. For subscription-enabled types, it creates or reuses an ERPNext
@@ -960,8 +1030,8 @@ a subscription. For subscription-enabled types, it creates or reuses an ERPNext
 linked Customer using **Non Profit Settings -> Company** as the accounting
 company unless an explicit company argument is passed, writes
 `Membership.subscription`, and clears
-`Membership.to_date` when requested. Presentation apps such as `good_npo`
-should call this helper instead of creating Subscription rows locally.
+`Membership.to_date` when requested. Presentation apps should call this helper
+instead of creating Subscription rows locally.
 
 Payment-provider integrations are intentionally outside `non_profit`. Gateway
 apps such as `payrexx_integration` should verify provider callbacks and then
@@ -1120,7 +1190,6 @@ bench --site development16.localhost run-tests --module non_profit.non_profit.do
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.recurring_donation.test_recurring_donation
 bench --site development16.localhost run-tests --module non_profit.non_profit.doctype.npo_recipient_selection.test_npo_recipient_selection
 bench --site development16.localhost run-tests --module non_profit.non_profit.test_tax_receipts
-bench --site development16.localhost run-tests --module miki_app.tests.test_end_to_end
 ```
 
 `non_profit.non_profit.utils.before_tests` uses a short in-process test host URL,

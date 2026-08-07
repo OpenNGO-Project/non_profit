@@ -1,11 +1,11 @@
 from pathlib import Path
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 from frappe.utils import nowdate
 
 
-class TestDonationCampaign(FrappeTestCase):
+class TestDonationCampaign(IntegrationTestCase):
 	@classmethod
 	def setUpClass(cls) -> None:
 		super().setUpClass()

@@ -2,10 +2,10 @@
 # See license.txt
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 
-class TestVolunteerType(FrappeTestCase):
+class TestVolunteerType(IntegrationTestCase):
 	def test_create_volunteer_type(self) -> None:
 		name = f"Test Volunteer Type {frappe.generate_hash(length=6)}"
 		doc = frappe.get_doc(

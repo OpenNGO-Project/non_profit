@@ -13,6 +13,7 @@
 
 	<form method="POST" class="donation-form" style="margin-top: 1.5em;">
 		<input type="hidden" name="csrf_token" value="{{ frappe.session.csrf_token }}">
+		<input type="hidden" name="request_key" value="{{ recurring_request_key | e }}">
 		<div class="form-group">
 			<label>{{ _("Name") }} *</label>
 			<input type="text" name="donor_name" required class="form-control" data-testid="donor-name">
@@ -22,7 +23,7 @@
 			<input type="email" name="email" required class="form-control" data-testid="donor-email">
 		</div>
 		<div class="form-group">
-			<label>{{ _("Betrag (EUR)") }} *</label>
+			<label>{{ _("Betrag") }} *</label>
 			<input type="number" name="amount" required min="1" step="0.01" class="form-control" value="50" data-testid="donor-amount">
 		</div>
 		<div class="form-group">
@@ -30,8 +31,6 @@
 			<select name="frequency" class="form-control" data-testid="donor-frequency">
 				<option value="one_off">{{ _("Einmalige Spende") }}</option>
 				<option value="Monthly">{{ _("Monatlich") }}</option>
-				<option value="Quarterly">{{ _("Vierteljährlich") }}</option>
-				<option value="Yearly">{{ _("Jährlich") }}</option>
 			</select>
 		</div>
 		<div class="form-group">

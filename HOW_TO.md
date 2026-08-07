@@ -1,6 +1,7 @@
 # Non Profit - How To
 
-This bench uses `non_profit` as the shared fundraising and membership substrate for `ilanga_app`, `miki_app`, and Goodvantage NPO layers.
+`non_profit` is the shared fundraising and membership substrate for downstream
+site, presentation, analytics, and dispatch apps.
 
 ## Install Or Update
 
@@ -44,6 +45,26 @@ Do not configure provider-specific checkout or webhook credentials in
 `payrexx_integration`; those apps should verify provider callbacks and then
 mark the relevant Donation, Sales Invoice, Membership, or Subscription through
 the standard document APIs.
+
+### Exposing the generic donation pages
+
+`/donate` and `/donate_confirm` are **off by default** — both answer 404 and
+`/donate` accepts no submission. Most sites should leave them off: they are an
+unstyled fallback with EUR labels, and a site that embeds its own branded
+donation form or campaign page would otherwise carry a second, off-brand
+donation surface.
+
+To serve them on a site that really needs them:
+
+```bash
+bench --site <site> set-config enable_non_profit_public_donate_pages 1
+bench --site <site> clear-website-cache
+```
+
+Clearing the website cache is not optional in either direction — Frappe caches
+404 responses per URL, so a freshly enabled page keeps 404-ing (and a freshly
+disabled one keeps rendering) until the cache is dropped. Remove the key from
+`site_config.json` and clear the cache again to hide the pages.
 
 ### Currency and receipt jurisdiction
 
@@ -432,7 +453,7 @@ Member form does not store its own Membership Type. If an older site still has
 the legacy `membership_expiry_date` field on Member, the Desk form refreshes it
 from Membership as a display sync without marking the Member form dirty.
 The legacy **Generate Invoice** action is only shown on sites that still carry a
-`Membership.invoice` link field. Current GoodNPO-style membership billing uses
+`Membership.invoice` link field. Current downstream membership billing may use
 Sales Invoice links owned by the presentation app instead.
 
 When **Send Membership Acknowledgement** is enabled in Non Profit Settings, a
@@ -446,9 +467,9 @@ has a `name_additional` field, it is appended to the display name.
 
 To create a complete member identity from Desk:
 
-Good Connector must be installed for this guided raw-data dialog (Good NPO and
-ilanga already include it). A standalone Non Profit site without Good Connector
-keeps the technical Contact/Customer selector.
+Good Connector must be installed for this guided raw-data dialog. A standalone
+Non Profit site without Good Connector keeps the technical Contact/Customer
+selector.
 
 1. Open **Member** and choose **Add Member** / **Mitglied anlegen**.
 2. Select **Individual / Privatperson** or **Organization / Organisation**.
@@ -480,7 +501,7 @@ postal consent.
 Users need create, read, and write permission for Contact, Address, Customer,
 Member, and Membership, plus read permission for Membership Type and Country.
 The action creates no Subscription, invoice, acknowledgement, or confirmation
-email. Public Good NPO signup billing remains a separate workflow.
+email. Public signup billing remains a downstream workflow.
 
 From a saved Member, use **Actions → Create Membership** to create or open the
 active open-ended Membership for that Member and chosen Membership Type. Existing
@@ -493,8 +514,8 @@ creates the Membership and must intentionally keep **Membership Until** blank, s
 
 Only enable **Is Subscription** on **Membership Type** when memberships of that
 type should create/link ERPNext Subscriptions automatically. Leave it disabled
-for declaration or data-collection memberships, for example MiKi memberships
-that are billed after a separate declaration process. To bill an open-ended
+for declaration or data-collection memberships that are billed after a separate
+declaration process. To bill an open-ended
 membership through ERPNext subscriptions, use
 `non_profit.non_profit.membership_subscription.ensure_membership_subscription`;
 it only creates a Subscription for subscription-enabled Membership Types, links
@@ -510,7 +531,8 @@ India-specific 80G certificate DocTypes instead of only hiding them from the
 form. Payment-note imports also skip PAN/tax-id keys before writing Donor
 comments.
 
-When changing Member or Membership behavior, run the relevant `miki_app` tests too because Miki depends on the shared membership substrate.
+When changing Member or Membership behavior, run the relevant downstream
+consumer tests too because they depend on this shared substrate.
 
 The **Expiring Memberships** report reads the latest non-cancelled Membership
 per Member and filters by its `to_date`. It no longer depends on the legacy
@@ -587,8 +609,60 @@ serializes each schedule and reuses an already-created installment for the same
 schedule/date, so retries or overlapping workers do not create duplicates.
 
 **Actions → Create Next Donation Now** creates an installment immediately and
-also advances the schedule. Use **Paused** to stop generation without ending the
-instruction.
+also advances the schedule. It is available only while no payment provider owns
+the schedule.
+
+The public `/donate` page offers one-off and monthly. When a payment
+integration is installed it owns the whole path: the donor is redirected to a
+hosted checkout and the gift is collected. With no integration installed the
+page records the gift and collects nothing — the historical behaviour.
+
+Donors are emailed at three moments only: when the mandate is confirmed, when a
+payment has finally failed (not while the provider is still retrying), and when
+the schedule is stopped. Each successful installment gets the normal Verdankung,
+and the annual Bescheinigung aggregates them as it does any other paid donation.
+
+### Provider-backed schedules
+
+When a payment integration owns a schedule, the **Payment Provider** section is
+filled in and the provider — not this app — decides when to charge. The daily
+job skips it entirely; installments appear as **paid** Donations when the
+provider reports each charge. Provider-owned Company, status, amount, currency,
+frequency, and linkage cannot be edited directly; use the supported actions.
+If the provider section is incomplete, amount change and ordinary cancellation
+stop for repair instead of applying a local-only change; abandoned-checkout
+retirement remains available only through explicit provider verification.
+
+- **Actions → Change Amount** applies from the provider's *next* charge, never
+  the one already taken.
+- **Actions → Cancel Schedule** stops future charges immediately. There is no
+  grace period, and a cancelled schedule cannot be resumed — create a new one.
+- **Actions → Retire Abandoned Checkout** appears for an incomplete **Pending
+  Mandate**. It asks the registered provider to prove that no payment or mandate
+  can still exist and changes the row only after positive proof. If verification
+  is unavailable or inconclusive, leave the row open and inspect the provider;
+  do not clear provider fields or cancel it locally.
+- **Payment Retrying** means a charge failed and the provider will try again.
+  Nothing is required from you yet.
+- **Payment Failed** means the provider gave up. This one needs attention.
+- **Ending** means the donor cancelled but the remaining charges still follow,
+  so installments keep arriving until the term ends.
+
+**Payment Failed** and **Cancelled** are terminal. A delayed active/retrying
+event cannot reopen them; create a new schedule when the donor starts again.
+
+If an amount change or cancellation reports an error after the provider already
+answered successfully, do not issue a different operation. Retry the exact same
+action and value: provider integrations must make these operations idempotent
+and journal `local_commit_pending`, `local_commit_confirmed`, or
+`local_rollback_confirmed` with the schedule, provider account, subscription,
+and requested action. An unpaired pending entry means local commit is unknown;
+verify the provider state and retry the same action until a commit-confirmed
+entry appears.
+
+**Paused** no longer exists. No provider offers a pause, and the gated daily job
+could not honour one; existing paused schedules were migrated to Cancelled.
+The migration adds a timeline note. Create a new schedule to restart giving.
 
 ## Chapters And Grants
 

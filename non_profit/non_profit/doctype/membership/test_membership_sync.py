@@ -88,7 +88,7 @@ def _make_membership(
 
 
 class TestMembershipSync(unittest.TestCase):
-	"""Plain unittest TestCase — avoids ERPNext's FrappeTestCase bootstrap
+	"""Plain unittest TestCase — avoids ERPNext's IntegrationTestCase bootstrap
 	which creates test Companies / Price Lists. We don't need that fixture
 	data, and it often fails on dev sites with prior-run data pollution.
 	We roll back each test manually."""

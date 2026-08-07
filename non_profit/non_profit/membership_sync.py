@@ -6,9 +6,9 @@ Provides:
   active (New/Current) Membership for the same Member has overlapping
   ``from_date`` / ``to_date``. Perpetual memberships (to_date empty) are
   treated as "open-ended" — any date from ``from_date`` onwards overlaps.
-* ``get_customer_for_membership`` / ``list_customer_memberships`` —
-  navigation helpers used by downstream apps (miki_app etc.) that also want
-  Customer-level views. Resolve via ``Membership.member → Member.customer``.
+* ``get_customer_for_membership`` / ``list_customer_memberships`` — navigation
+  helpers used by downstream apps that also want Customer-level views. Resolve
+  via ``Membership.member → Member.customer``.
 
 Membership no longer carries a direct Customer link — users create the
 Member up-front (pointing at a Customer for B2B, standalone for B2C) and

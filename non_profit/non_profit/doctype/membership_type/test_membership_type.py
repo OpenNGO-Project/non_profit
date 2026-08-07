@@ -2,10 +2,10 @@
 # See license.txt
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 
 
-class TestMembershipType(FrappeTestCase):
+class TestMembershipType(IntegrationTestCase):
 	def test_create_membership_type(self) -> None:
 		doc = frappe.get_doc(
 			{

@@ -6,14 +6,14 @@ from unittest.mock import patch
 
 import erpnext
 import frappe
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests import IntegrationTestCase
 from frappe.utils import add_days, add_months, nowdate
 
 from non_profit.non_profit.doctype.member.member import create_member
 from non_profit.setup import ensure_non_profit_desk_roles
 
 
-class TestNonProfitSetup(FrappeTestCase):
+class TestNonProfitSetup(IntegrationTestCase):
 	def test_setup_disables_erpnext_test_loyalty_auto_opt_in(self):
 		if not frappe.db.exists("DocType", "Loyalty Program"):
 			self.skipTest("ERPNext Loyalty Program is not installed")
@@ -127,7 +127,7 @@ class TestNonProfitSetup(FrappeTestCase):
 		self.assertTrue(frappe.has_permission("List Filter", "read", user=user.name))
 
 
-class TestMembershipMetadata(FrappeTestCase):
+class TestMembershipMetadata(IntegrationTestCase):
 	def test_to_date_has_field_specific_translated_label(self):
 		to_date = frappe.get_meta("Membership").get_field("to_date")
 
@@ -136,7 +136,7 @@ class TestMembershipMetadata(FrappeTestCase):
 		self.assertEqual(frappe._("Membership Details", lang="de"), "Mitgliedschaften")
 
 
-class TestMembership(FrappeTestCase):
+class TestMembership(IntegrationTestCase):
 	def setUp(self):
 		frappe.db.delete("Customer")
 		plan = setup_membership()

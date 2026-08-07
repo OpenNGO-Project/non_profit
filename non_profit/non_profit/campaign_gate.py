@@ -2,9 +2,8 @@
 
 H04 requires that a campaign offered to (or accepted from) an unauthenticated
 donor belongs to the Company the Donation will be booked in. The check was
-implemented verbatim in two guest entry points — non_profit's public donate
-page and Good NPO's public donation checkout — which is a drift risk on a
-security boundary. Both now call this single helper.
+previously tended to be copied into separate guest entry points, which is a
+drift risk on a security boundary. Public intake flows call this single helper.
 
 Ownership is derived from the campaign's Cost Center, never from the campaign
 name or from historical Donations.

@@ -89,6 +89,21 @@ good_direct_mail_audience_providers = [
 non_profit_audience_channel_creators = []
 non_profit_audience_source_providers = []
 
+# Neutral seam for payment providers that own a recurring schedule. Registered
+# providers are called as provider(action="change_amount"|"cancel"|
+# "verify_abandoned_pending_mandate", schedule=<Recurring Donation>, **kwargs).
+# Mutations return True once handled; recovery returns provider evidence with
+# safe_to_retire=True only after proving that no payment or mandate can exist.
+# non_profit is public and never imports a payment integration itself.
+non_profit_recurring_donation_providers = []
+
+# Neutral seam for the public /donate page. A payment integration registers a
+# provider that creates the Donation (and schedule, for a recurring gift) and
+# returns a checkout URL. The provider also receives the per-render request_key
+# so it can replay a recurring reservation idempotently. Without one, /donate
+# records the gift and collects nothing, which is the historical behaviour.
+non_profit_public_donation_checkout_providers = []
+
 scheduler_events = {
 	"daily": [
 		"non_profit.non_profit.doctype.membership.membership.set_expired_status",
