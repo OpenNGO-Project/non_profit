@@ -10,6 +10,7 @@
   "donor",
   "donor_name",
   "relationship_manager",
+  "inquiry_channel",
   "stage",
   "column_break_main",
   "campaign",
@@ -27,6 +28,7 @@
   "closed_on",
   "closed_amount",
   "column_break_closure",
+  "won_reason",
   "lost_reason"
  ],
  "fields": [
@@ -61,6 +63,13 @@
    "in_standard_filter": 1,
    "label": "Relationship Manager",
    "options": "User"
+  },
+  {
+   "fieldname": "inquiry_channel",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "First Contact / Inquiry Channel",
+   "options": "\nEmail\nLetter\nPhone\nWebsite Form\nOther"
   },
   {
    "default": "Qualification",
@@ -118,11 +127,12 @@
    "read_only": 1
   },
   {
+   "description": "Enter directly when no open Task is linked. An open Task controls this date.",
    "fieldname": "next_action_date",
    "fieldtype": "Date",
+   "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Next Action Date",
-   "read_only": 1
+   "label": "Follow-up Date"
   },
   {
    "fieldname": "next_action_task",
@@ -155,6 +165,12 @@
    "fieldtype": "Column Break"
   },
   {
+   "depends_on": "eval:doc.stage=='Won'",
+   "fieldname": "won_reason",
+   "fieldtype": "Small Text",
+   "label": "Won Reason"
+  },
+  {
    "depends_on": "eval:doc.stage=='Lost'",
    "fieldname": "lost_reason",
    "fieldtype": "Small Text",
@@ -173,7 +189,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-18 23:30:00.000000",
+ "modified": "2026-08-07 18:30:00.000000",
  "modified_by": "Administrator",
  "module": "Non Profit",
  "name": "Major Gift",

@@ -25,6 +25,49 @@ class TestMajorGift(IntegrationTestCase):
 		gift.reload()
 		self.assertTrue(gift.closed_on)
 
+	def test_interactive_won_transition_requires_reason(self) -> None:
+		from non_profit.non_profit.doctype.major_gift.major_gift import apply_outcome_workflow
+
+		gift = self._major_gift(stage="Solicitation", ask_amount=5000)
+		gift.flags.ignore_permissions = False
+		gift.stage = "Won"
+
+		with self.assertRaisesRegex(frappe.ValidationError, "Won Reason is required"):
+			gift.save()
+
+		gift.reload()
+		result = apply_outcome_workflow(gift.name, "Mark Won", "The donor accepted the proposal")
+		gift.reload()
+		self.assertEqual(result["stage"], "Won")
+		self.assertEqual(gift.won_reason, "The donor accepted the proposal")
+		self.assertFalse(gift.lost_reason)
+
+	def test_interactive_lost_transition_requires_reason(self) -> None:
+		from non_profit.non_profit.doctype.major_gift.major_gift import apply_outcome_workflow
+
+		gift = self._major_gift(stage="Qualification", ask_amount=2000)
+		gift.flags.ignore_permissions = False
+		gift.stage = "Lost"
+
+		with self.assertRaisesRegex(frappe.ValidationError, "Lost Reason is required"):
+			gift.save()
+
+		gift.reload()
+		result = apply_outcome_workflow(
+			gift.name, "Mark Lost", "The request does not fit the donor's priorities"
+		)
+		gift.reload()
+		self.assertEqual(result["stage"], "Lost")
+		self.assertEqual(gift.lost_reason, "The request does not fit the donor's priorities")
+		self.assertFalse(gift.won_reason)
+
+	def test_outcome_workflow_rejects_unsupported_actions(self) -> None:
+		from non_profit.non_profit.doctype.major_gift.major_gift import apply_outcome_workflow
+
+		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
+		with self.assertRaisesRegex(frappe.ValidationError, "Unsupported Major Gift outcome action"):
+			apply_outcome_workflow(gift.name, "Solicit", "Ready to ask")
+
 	def test_advance_from_mid_pipeline_stage_moves_forward_only(self) -> None:
 		from non_profit.non_profit.major_gifts import advance_major_gift_to_stage
 
@@ -230,6 +273,30 @@ class TestMajorGift(IntegrationTestCase):
 		gift.reload()
 		self.assertFalse(gift.next_action)
 		self.assertFalse(gift.next_action_task)
+		self.assertFalse(gift.next_action_date)
+
+	def test_manual_follow_up_date_is_preserved_without_task(self) -> None:
+		from non_profit.non_profit.next_actions import refresh_next_action
+
+		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
+		gift.next_action_date = add_days(nowdate(), 5)
+		gift.save(ignore_permissions=True)
+
+		refresh_next_action("Major Gift", gift.name)
+		gift.reload()
+		self.assertEqual(getdate(gift.next_action_date), getdate(add_days(nowdate(), 5)))
+		self.assertFalse(gift.next_action_task)
+
+	def test_task_owned_follow_up_date_cannot_be_edited_on_major_gift(self) -> None:
+		from non_profit.non_profit.next_actions import create_next_action_task
+
+		gift = self._major_gift(stage="Cultivation", ask_amount=5000)
+		create_next_action_task("Major Gift", gift.name, "Call the donor", add_days(nowdate(), 2))
+		gift.reload()
+		gift.next_action_date = add_days(nowdate(), 3)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "controlled by the open Next Action Task"):
+			gift.save(ignore_permissions=True)
 
 	def test_patch_converts_legacy_next_action(self) -> None:
 		from non_profit.patches.convert_next_actions_to_tasks import execute

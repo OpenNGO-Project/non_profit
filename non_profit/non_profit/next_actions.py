@@ -3,12 +3,11 @@
 
 """Next-action Tasks for Donors and Major Gifts.
 
-A moves-management "next action" is an ERPNext ``Task`` linked back to its
-parent through the ``Task.donor`` / ``Task.major_gift`` custom
-fields (created in ``non_profit.setup``). Each parent's read-only
-``next_action`` / ``next_action_date`` / ``next_action_task`` fields are
-*derived* from the earliest open linked Task, so the pipeline list and reports
-keep working off those fieldnames.
+A moves-management "next action" can be an ERPNext ``Task`` linked back to its
+parent through the ``Task.donor`` / ``Task.major_gift`` custom fields (created
+in ``non_profit.setup``). Task-backed fields are derived from the earliest open
+linked Task. Major Gifts may instead carry a manual ``next_action_date`` while
+no Task is linked.
 """
 
 import frappe
@@ -129,8 +128,11 @@ def validate_task_parent_permissions(doc, method: str | None = None) -> None:
 
 
 def refresh_next_action(parent_doctype: str, parent_name: str, exclude_task: str | None = None) -> None:
-	"""Recompute the parent's read-only ``next_action`` / ``next_action_date`` /
-	``next_action_task`` from its earliest open linked Task."""
+	"""Recompute the parent's next-action fields from its earliest open Task.
+
+	A Major Gift's unlinked manual follow-up date is preserved. Once a Task has
+	controlled the fields, completing or deleting the last open Task clears them.
+	"""
 	link_field = _PARENT_LINK_FIELD.get(parent_doctype)
 	if not link_field or not parent_name or not frappe.db.exists(parent_doctype, parent_name):
 		return
@@ -153,7 +155,10 @@ def refresh_next_action(parent_doctype: str, parent_name: str, exclude_task: str
 			"next_action_task": task.name,
 		}
 	else:
-		values = {"next_action": None, "next_action_date": None, "next_action_task": None}
+		current_task = frappe.db.get_value(parent_doctype, parent_name, "next_action_task")
+		values = {"next_action": None, "next_action_task": None}
+		if parent_doctype != "Major Gift" or current_task:
+			values["next_action_date"] = None
 	frappe.db.set_value(parent_doctype, parent_name, values, update_modified=False)
 
 

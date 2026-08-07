@@ -692,18 +692,28 @@ opt-in and re-enables **Visible on Doctype** during setup/migrate if it is
 cleared. The "next action" on either record is tracked as a real **Task**, not a
 text note:
 
+- Record **First Contact / Inquiry Channel** as Email, Letter, Phone, Website
+  Form, or Other.
+- **Mark Won** and **Mark Lost** open a required dialog. Enter the reason to
+  complete the workflow transition.
+- To track only a date, enter **Follow-up Date** directly while no open Task is
+  linked. The date is also shown in the Major Gift list.
+
 1. Open a Donor or Major Gift and choose **Actions → Set Next Action**.
 2. Enter the action, a due date, and who to assign it to (defaults to the gift's
    or donor's Relationship Manager), then **Create Task**.
 
 The Task is created, assigned (the assignee gets it in their To-Do list), and
-linked back. The record's read-only **Next Action**, **Next Action Date**, and
-**Next Action Task** fields always reflect the earliest *open* linked Task, and
+linked back. The record's **Next Action**, **Follow-up Date**, and **Next Action
+Task** fields reflect the earliest *open* linked Task, and
 update automatically when you complete or reschedule that Task (mark the Task
 **Completed** and the next action advances to the next open Task, or clears).
 All linked Tasks are listed under the form's **Connections** tab. A Major Gift
 Task links to both the gift and its Donor, so the Donor shows the earliest open
 relationship or gift Task. Requires write access to the Donor or Major Gift.
+While an open Task is linked, its due date controls **Follow-up Date** and the
+field cannot be edited on Major Gift. Completing the final open Task clears the
+date; enter a new manual date afterwards if no replacement Task is needed.
 
 The reduced workflow is **Qualification → Cultivation → Solicitation → Won**.
 Use **Mark Lost** from any open stage and **Reopen** to return a lost ask to

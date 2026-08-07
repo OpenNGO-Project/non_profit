@@ -1058,8 +1058,18 @@ Major-donor cultivation lives here as generic substrate (logic in
 reduced pipeline (Qualification → Cultivation → Solicitation, plus terminal
 **Won** / **Lost**) and is the Kanban field. It stores one `ask_amount`; the
 former expected/probability/weighted forecast fields and duplicate outcome field
-were removed. Entering a terminal stage stamps `closed_on`, and `closed_amount`
-is the sum of submitted, paid Donations linked through `Donation.major_gift`.
+were removed. `inquiry_channel` records the first-contact/inquiry source as
+Email, Letter, Phone, Website Form, or Other. The standard **Mark Won** and
+**Mark Lost** actions open a required reason dialog and store the answer in
+`won_reason` or `lost_reason` as part of the same workflow transition. The
+typed, POST-only `apply_outcome_workflow` endpoint checks write permission,
+accepts only Mark Won/Mark Lost, and delegates to Frappe's standard workflow
+engine with a request-local reason so the workflow reload and save remain
+authoritative. Server validation protects interactive transitions and explicit
+reason edits, while historical terminal records are not made invalid solely
+because they predate these fields. Entering a terminal stage stamps `closed_on`,
+and `closed_amount` is the sum of submitted, paid Donations linked through
+`Donation.major_gift`.
 Major Gift is not submittable.
 
 Relationship history uses native Frappe comments: general notes belong on the
@@ -1109,13 +1119,16 @@ its Donor through `Task.donor`; gift-specific Tasks also carry
 same work is visible from the ask and the long-term donor relationship.
 
 The Donor and Major Gift `next_action` (Small Text), `next_action_date` (Date), and
-`next_action_task` (Link → Task) fields are **read-only and derived** from the
-earliest *open* linked Task (`status not in Completed/Cancelled/Template`,
-ordered by `exp_end_date`). They are recomputed by `refresh_next_action`, which
-runs from `set_next_action` and from the `Task` `on_update`/`on_trash` doc_event
-(`on_task_change`) — so completing or rescheduling a Task updates the rollup.
-Keeping the `next_action*` fieldnames means the pipeline list and reports keep
-working off them.
+`next_action_task` (Link → Task) fields reflect the earliest *open* linked Task
+(`status not in Completed/Cancelled/Template`, ordered by `exp_end_date`). They
+are recomputed by `refresh_next_action`, which runs from `set_next_action` and
+from the `Task` `on_update`/`on_trash` doc_event (`on_task_change`) — so completing
+or rescheduling a Task updates the rollup. On Major Gift only, **Follow-up Date**
+(`next_action_date`) is editable when no Task is linked and is shown in the list
+view. Once an open Task controls the fields, the date is read-only; completing
+or deleting the last open Task clears it, and staff may then enter a new manual
+date. No hidden former manual date is restored. Donor remains Task-derived.
+Keeping the `next_action*` fieldnames means existing reports keep working.
 
 Operators use **Actions → Set Next Action** on either form (POST-only whitelisted
 `non_profit.non_profit.next_actions.set_next_action`, gated by parent write
