@@ -41,11 +41,16 @@
 - Good Connector owns shared EBICS ingestion, settings, `gc_*` QRR/audit fields,
   aggregate ambiguity handling, and Bank Transaction linking. non_profit owns
   only Donation QRR registration, side-effect-free candidate matching, and the
-  trusted unsaved Donation Payment Entry builder. Keep the existing qrbill
-  Donation-slip renderer only as the standalone fallback; QRR-referenced
-  slips come from `non_profit_qr_bill_svg_providers` (good_npo renders via
-  Good Connector and passes the shared QRR only for a real QR-IBAN — this
-  public repo itself must not import Good Connector in the print path).
+  trusted unsaved Donation Payment Entry builder. The public app owns only the
+  neutral `non_profit_qr_bill_svg_providers` print seam and has no standalone
+  QR renderer. A downstream provider owns the complete regulated payment part
+  and passes the shared QRR only for a real QR-IBAN; this public repo itself
+  must not import a private app in the print path. Retryable database errors
+  from providers propagate unchanged and without logging.
+  `Non Profit Settings.creditor_iban` is the optional public provider override;
+  the shared deployment provider checks it before the Donation Company's
+  default Bank Account. Keep account validation and fallback resolution in the
+  provider.
   Candidate providers use deterministic ordered reads and return every
   same-QRR Donation before amount checks so amount filtering cannot select among
   ambiguous identities. Unsafe sole identities remain ineligible candidates.
@@ -59,6 +64,10 @@
   emails use identity type `Individual`; leases renew while the transaction is
   open, are revalidated before commit, and release on commit or rollback. Keep
   renewal bounded and fail the transaction if ownership is lost.
+- `Contact.preferred_language` is owned by module `Non Profit` on a standalone
+  install. When Good Connector is installed, non_profit setup must preserve its
+  module `Good Connector` claim; Good Connector uninstall hands ownership back
+  before cleanup when non_profit remains installed.
 - **There is exactly one Bescheinigung: `Donation Tax Receipt`.** The legacy
   submittable `Donation Receipt` (+ `Donation Receipt Item`) was removed in
   16.10.0 (operator decision 2026-07-31, convergence plan Phase 2b). Do not

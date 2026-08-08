@@ -30,6 +30,11 @@ eine 27-stellige QR-Referenz. Mit der bankseitig ausgegebenen QR-IBAN auf dem
 Schweizer Spendenbeleg kann eine eindeutige gebuchte Zahlung automatisch als
 Payment Entry zugeordnet werden. Keine oder mehrere passende Spenden/Rechnungen
 bleiben in der Bank Transaction mit **Review** zur manuellen Prüfung.
+Für ein bestimmtes Empfangskonto setzen Sie **Non Profit Settings → Creditor
+IBAN**. Dieses optionale Konto hat Vorrang vor dem Standard-Bankkonto der Firma;
+bei leerem Feld verwendet der registrierte QR-Anbieter das Firmenkonto. Konto
+und vollständige Firmenadresse müssen gültig gepflegt sein, sonst enthält der
+Beleg keinen QR-Zahlteil.
 Die automatische Zuordnung unterstützt nur die Firmenwährung; Bankkonto und
 Spender-Debitorenkonto müssen dieselbe Währung verwenden. Fremdwährungsfälle
 bleiben zur manuellen Prüfung offen.

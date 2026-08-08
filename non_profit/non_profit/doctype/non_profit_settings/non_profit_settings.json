@@ -21,6 +21,7 @@
   "email_template",
   "donation_settings_section",
   "donation_company",
+  "creditor_iban",
   "default_donor_type",
   "column_break_22",
   "automate_donation_payment_entries",
@@ -166,6 +167,12 @@
    "label": "Company",
    "options": "Company",
    "reqd": 1
+  },
+  {
+   "description": "Optional account override for registered Swiss QR-bill providers. Used before the Donation Company's default Bank Account; enter the exact bank-issued QR-IBAN when QR references are required.",
+   "fieldname": "creditor_iban",
+   "fieldtype": "Data",
+   "label": "Creditor IBAN"
   },
   {
    "fieldname": "donation_settings_section",

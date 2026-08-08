@@ -79,8 +79,13 @@ Stage 1 also ships hidden, read-only identity preparation fields on Contact,
 Customer, and Supplier, plus the **NPO Organization** master. These fields are
 installed on both install and migrate; setup repairs partial metadata/schema
 states where a Custom Field record exists but its database column does not.
-All setup-owned Custom Fields carry module `Non Profit`, so uninstall removes
-their links before dropping app DocTypes such as NPO Organization.
+Setup-owned Custom Fields carry module `Non Profit`, except for
+`Contact.preferred_language` when the shared connector is installed. That app
+claims the shared person-language field as module `Good Connector`; later
+non_profit setup runs preserve the claim. A standalone non_profit install owns
+the field as `Non Profit`, and connector uninstall hands ownership back before
+its cleanup. This keeps either app's uninstall from deleting a field the other
+still uses while preserving normal cleanup for the remaining Non Profit fields.
 Addresses and Contacts attach to Household through standard Dynamic Links.
 `Household Person` replaces `Household Member` through ordered migration
 patches. Before model sync, each old Member/Donor row must resolve to exactly
@@ -102,9 +107,10 @@ table while retaining the orphan table as a recovery backup.
 ## Correspondence Profiles
 
 `Contact.preferred_language` is an editable setup-owned Custom Field (Link to
-Language), and `Household.preferred_language` is a normal Household Link field.
-Neither has a default: unresolved language remains visible to the consuming
-workflow instead of silently assuming a language.
+Language) with the shared ownership lifecycle described above, and
+`Household.preferred_language` is a normal Household Link field. Neither has a
+default: unresolved language remains visible to the consuming workflow instead
+of silently assuming a language.
 
 `non_profit.non_profit.correspondence` is the generic, non-whitelisted
 identity boundary for postal correspondence. It does not import or depend on a
@@ -926,24 +932,27 @@ it on `doc.qr_bill_svg` for the seeded `Donation Slip CH` Print Format. The
 Print Format only renders that prepared value; it must not call QR generators
 from Jinja. The slip body renders first, and the QR-bill is placed at the bottom
 of a separate final page so normal document footer behavior does not overlap the
-payment part. Missing creditor configuration is reported before checking the
-optional `qrbill` Python package, so setup errors remain visible even on CI
-images that do not install the QR-bill dependency.
+payment part.
 
-When the configured creditor account is a QR-IBAN and Good Connector is
-installed, the qrbill renderer receives the Donation's shared QRR as
-`reference_number`. Ordinary IBAN slips remain non-QRR. The qrbill renderer and
-its Non Profit Settings creditor source remain separate from Good Connector's
-chqr invoice renderer.
+`swiss_qrbill.py` is a neutral dispatch seam, not a renderer. It calls
+`non_profit_qr_bill_svg_providers` in hook order and uses the first non-empty
+SVG. With no provider, printing continues without a payment part. Ordinary
+provider errors are logged and dispatch continues; database deadlocks and lock
+timeouts propagate unchanged and without logging so the complete print/email
+transaction can retry.
 
-Note: this bench intentionally runs two Swiss QR-bill engines. non_profit's
-`swiss_qrbill.py` (qrbill package, creditor from Non Profit Settings) renders
-Donation slips, while `good_connector.qr_bill` (chqr package, creditor from
-the Company bank account, with QRR/SCOR reference support) renders invoice
-QR pages for downstream invoice workflows. They remain separate
-payment-document implementations even though non_profit may optionally import
-Good Connector integration services such as CAPTCHA and identity matching.
-When changing payment-relevant QR behavior, check both engines.
+The downstream provider owns creditor/debtor resolution, IBAN and address
+validation, QRR behavior, and recipient language. A real QR-IBAN receives the
+Donation's stored shared QRR; an ordinary IBAN never receives a QRR. Keeping the
+public app renderer-free avoids a second regulated payment implementation that
+can drift from the shared engine.
+
+`Non Profit Settings.creditor_iban` is an optional provider-facing override.
+The shared deployment provider normalizes and validates that value first; when
+it is blank, it resolves the Donation Company's default Bank Account. Creditor
+identity and structured address still come from the Company master data. If
+neither account source plus the Company Address is valid, the provider returns
+no payment part.
 
 ## Membership Integration Compatibility
 

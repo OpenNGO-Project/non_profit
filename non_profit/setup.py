@@ -134,6 +134,9 @@ def make_custom_fields(update=True):
 
 
 def get_custom_fields():
+	person_language_module = (
+		"Good Connector" if "good_connector" in frappe.get_installed_apps() else "Non Profit"
+	)
 	custom_fields = {
 		"Contact": [
 			{
@@ -147,7 +150,8 @@ def get_custom_fields():
 				"label": "Preferred Language",
 				"fieldtype": "Link",
 				"options": "Language",
-				"insert_after": "title",
+				"insert_after": "salutation",
+				"module": person_language_module,
 			},
 			{
 				"fieldname": "npo_identity_kind",

@@ -282,12 +282,27 @@ and places the Swiss QR-bill at the bottom of a separate final page. QR data is
 prepared by the Donation controller before print rendering; do not add QR
 generator calls directly to editable Jinja templates.
 
+Install and configure an app that registers
+`non_profit_qr_bill_svg_providers` before issuing Donation slips. non_profit
+does not ship a second QR renderer: with no provider, the document prints
+without a payment part. Confirm the payment part is present before delivery.
+Database deadlocks and lock timeouts abort rendering for a complete retry; do
+not catch them and send a document without its payment part.
+
+Set **Non Profit Settings → Creditor IBAN** when Donation slips must use a
+specific receiving account. This optional override wins over the Donation
+Company's default Bank Account. Leave it blank to let the provider use that
+Company fallback. In both cases, use the exact bank-issued account and maintain
+a complete Company Address; the provider rejects invalid IBAN and creditor
+master data instead of fabricating a payment part.
+
 For automatic EBICS matching, install Good Connector and configure **Good
 Connector Settings → EBICS Bank Integration** with the receiving Bank Account
 and Mode of Payment. A submitted Donation receives a Donation-namespaced
 27-digit QR reference; an already stored valid legacy reference is preserved. To
-put that reference on the Donation Slip CH, the Non Profit creditor account must
-be the exact QR-IBAN issued by the bank; an ordinary IBAN cannot carry QRR.
+put that reference on the Donation Slip CH, either **Creditor IBAN** or the
+Donation Company's fallback Bank Account must be the exact QR-IBAN issued by the
+bank; an ordinary IBAN cannot carry QRR.
 Automatic Donation matching supports only the Company currency: the receiving
 bank Account and expected Donor receivable Account must use that same currency.
 Foreign-currency cases remain **Review** for manual accounting.

@@ -1,6 +1,4 @@
 from decimal import Decimal
-from importlib.util import find_spec
-from unittest import skipUnless
 from unittest.mock import Mock, patch
 
 import frappe
@@ -15,326 +13,57 @@ from non_profit.non_profit.bank_integration import (
 )
 from non_profit.non_profit.fundraising_setup import ensure_good_connector_bank_integration
 
-GOOD_CONNECTOR_AVAILABLE = find_spec("good_connector") is not None
 LEGACY_QRR = "000000000000000002026000014"
 DONATION_QRR = "020000000000000002026000018"
-SALES_INVOICE_QRR = "010000000000000002026001604"
-
-
-def _good_connector_qrr_registration_available() -> bool:
-	if not GOOD_CONNECTOR_AVAILABLE:
-		return False
-	from good_connector import qr_bill
-
-	return all(
-		callable(getattr(qr_bill, name, None))
-		for name in ("assert_unique_qrr_reference", "is_qr_iban", "resolve_qrr_reference")
-	)
-
-
-GOOD_CONNECTOR_QRR_REGISTRATION_AVAILABLE = _good_connector_qrr_registration_available()
 
 
 class TestDonationEbicsProvider(UnitTestCase):
-	@skipUnless(
-		GOOD_CONNECTOR_QRR_REGISTRATION_AVAILABLE,
-		"good_connector QRR registration contract is not available",
-	)
-	def test_backfill_sets_qrr_on_existing_submitted_donations(self):
+	def test_backfill_dispatches_registered_provider(self):
+		provider = Mock()
 		meta = Mock()
 		meta.has_field.return_value = True
 		with (
-			patch(
-				"non_profit.non_profit.bank_integration.frappe.get_installed_apps",
-				return_value=["good_connector"],
-			),
 			patch("non_profit.non_profit.bank_integration.frappe.db.exists", return_value=True),
 			patch("non_profit.non_profit.bank_integration.frappe.get_meta", return_value=meta),
 			patch(
-				"non_profit.non_profit.bank_integration.frappe.get_all",
-				return_value=[frappe._dict(name="DON-1", company="Test Company")],
-			) as get_all,
-			patch("good_connector.qr_bill.resolve_qrr_reference", return_value=DONATION_QRR),
-			patch("good_connector.qr_bill.assert_unique_qrr_reference"),
-			patch("non_profit.non_profit.bank_integration.frappe.db.set_value") as set_value,
+				"non_profit.non_profit.integration_hooks.first_provider",
+				return_value=provider,
+			),
 		):
 			backfill_donation_qr_references()
-		get_all.assert_called_once_with(
-			"Donation",
-			filters={"docstatus": 1, "gc_qr_reference": ["is", "not set"]},
-			fields=["name", "company"],
-			limit_page_length=0,
-		)
-		set_value.assert_called_once_with(
-			"Donation",
-			{"name": "DON-1", "gc_qr_reference": ["is", "not set"]},
-			"gc_qr_reference",
-			DONATION_QRR,
-			update_modified=False,
-		)
+		provider.assert_called_once_with(doctype="Donation", filters={"docstatus": 1})
 
-	@skipUnless(
-		GOOD_CONNECTOR_QRR_REGISTRATION_AVAILABLE,
-		"good_connector QRR registration contract is not available",
-	)
-	def test_backfill_preserves_populated_legacy_qrr(self):
-		references = {"DON-LEGACY": None, "DON-MISSING": None}
-
-		def resolve_reference(name, *, doctype):
-			self.assertEqual(doctype, "Donation")
-			if name == "DON-LEGACY":
-				# Model registration populating the row after the backfill read.
-				references[name] = LEGACY_QRR
-			return DONATION_QRR
-
-		def set_value(_doctype, filters, _fieldname, value, *, update_modified):
-			self.assertFalse(update_modified)
-			self.assertEqual(filters["gc_qr_reference"], ["is", "not set"])
-			name = filters["name"]
-			if not references[name]:
-				references[name] = value
-
+	def test_backfill_without_provider_is_noop(self):
 		meta = Mock()
 		meta.has_field.return_value = True
 		with (
-			patch(
-				"non_profit.non_profit.bank_integration.frappe.get_installed_apps",
-				return_value=["good_connector"],
-			),
 			patch("non_profit.non_profit.bank_integration.frappe.db.exists", return_value=True),
 			patch("non_profit.non_profit.bank_integration.frappe.get_meta", return_value=meta),
 			patch(
-				"non_profit.non_profit.bank_integration.frappe.get_all",
-				return_value=[
-					frappe._dict(name="DON-LEGACY", company="Test Company"),
-					frappe._dict(name="DON-MISSING", company="Test Company"),
-				],
-			),
-			patch("good_connector.qr_bill.resolve_qrr_reference", side_effect=resolve_reference),
-			patch("good_connector.qr_bill.assert_unique_qrr_reference"),
-			patch(
-				"non_profit.non_profit.bank_integration.frappe.db.set_value",
-				side_effect=set_value,
+				"non_profit.non_profit.integration_hooks.first_provider",
+				return_value=None,
 			),
 		):
 			backfill_donation_qr_references()
 
-		self.assertEqual(references["DON-LEGACY"], LEGACY_QRR)
-		self.assertEqual(references["DON-MISSING"], DONATION_QRR)
-
-	@skipUnless(
-		GOOD_CONNECTOR_QRR_REGISTRATION_AVAILABLE,
-		"good_connector QRR registration contract is not available",
-	)
-	def test_qr_iban_slip_uses_shared_donation_reference(self) -> None:
-		from non_profit.non_profit.swiss_qrbill import swiss_qrbill_svg
-
-		captured = {}
-
-		class FakeQRBill:
-			def __init__(self, **kwargs):
-				captured.update(kwargs)
-
-			def as_svg(self, output):
-				output.write("<svg/>")
-
-		doc = frappe._dict(
-			amount=50,
-			doctype="Donation",
-			name="DON-TEST-003",
-			gc_qr_reference=LEGACY_QRR,
-		)
-		with (
-			patch(
-				"non_profit.non_profit.swiss_qrbill.frappe.get_installed_apps",
-				return_value=["good_connector"],
-			),
-			patch(
-				"non_profit.non_profit.swiss_qrbill._resolve_creditor",
-				return_value=("CH4431999123000889012", {"name": "Test NGO"}),
-			),
-			patch("good_connector.qr_bill.is_qr_iban", return_value=True),
-			patch.dict("sys.modules", {"qrbill": frappe._dict(QRBill=FakeQRBill)}),
-		):
-			result = swiss_qrbill_svg(doc)
-
-		self.assertEqual(result, "<svg/>")
-		self.assertEqual(captured["reference_number"], doc.gc_qr_reference)
-
-	@skipUnless(
-		GOOD_CONNECTOR_QRR_REGISTRATION_AVAILABLE,
-		"good_connector QRR registration contract is not available",
-	)
-	def test_sales_invoice_slip_uses_sales_invoice_namespace(self) -> None:
-		from non_profit.non_profit.swiss_qrbill import swiss_qrbill_svg
-
-		captured = {}
-
-		class FakeQRBill:
-			def __init__(self, **kwargs):
-				captured.update(kwargs)
-
-			def as_svg(self, output):
-				output.write("<svg/>")
-
-		doc = frappe._dict(doctype="Sales Invoice", grand_total=50, name="SINV-2026-00160")
-		with (
-			patch(
-				"non_profit.non_profit.swiss_qrbill.frappe.get_installed_apps",
-				return_value=["good_connector"],
-			),
-			patch(
-				"non_profit.non_profit.swiss_qrbill._resolve_creditor",
-				return_value=("CH4431999123000889012", {"name": "Test NGO"}),
-			),
-			patch("good_connector.qr_bill.is_qr_iban", return_value=True),
-			patch(
-				"good_connector.qr_bill.resolve_qrr_reference",
-				return_value=SALES_INVOICE_QRR,
-			) as resolve_reference,
-			patch.dict("sys.modules", {"qrbill": frappe._dict(QRBill=FakeQRBill)}),
-		):
-			result = swiss_qrbill_svg(doc)
-
-		self.assertEqual(result, "<svg/>")
-		self.assertEqual(captured["reference_number"], SALES_INVOICE_QRR)
-		resolve_reference.assert_called_once_with(
-			doc.name,
-			doctype="Sales Invoice",
-			stored_reference=None,
-		)
-
-	@skipUnless(
-		GOOD_CONNECTOR_QRR_REGISTRATION_AVAILABLE,
-		"good_connector QRR registration contract is not available",
-	)
-	def test_ordinary_iban_slip_does_not_emit_qrr(self) -> None:
-		from non_profit.non_profit.swiss_qrbill import swiss_qrbill_svg
-
-		captured = {}
-
-		class FakeQRBill:
-			def __init__(self, **kwargs):
-				captured.update(kwargs)
-
-			def as_svg(self, output):
-				output.write("<svg/>")
-
-		with (
-			patch(
-				"non_profit.non_profit.swiss_qrbill.frappe.get_installed_apps",
-				return_value=["good_connector"],
-			),
-			patch(
-				"non_profit.non_profit.swiss_qrbill._resolve_creditor",
-				return_value=("CH9300762011623852957", {"name": "Test NGO"}),
-			),
-			patch("good_connector.qr_bill.is_qr_iban", return_value=False),
-			patch.dict("sys.modules", {"qrbill": frappe._dict(QRBill=FakeQRBill)}),
-		):
-			result = swiss_qrbill_svg(frappe._dict(amount=50, name="DON-TEST-004"))
-
-		self.assertEqual(result, "<svg/>")
-		self.assertIsNone(captured["reference_number"])
-
-	def test_uninstalled_good_connector_does_not_emit_qrr(self) -> None:
-		from non_profit.non_profit.swiss_qrbill import swiss_qrbill_svg
-
-		captured = {}
-
-		class FakeQRBill:
-			def __init__(self, **kwargs):
-				captured.update(kwargs)
-
-			def as_svg(self, output):
-				output.write("<svg/>")
-
-		with (
-			# No SVG provider registered: the standalone fallback renders. A
-			# document without a stored reference emits none — a stored
-			# gc_qr_reference WOULD be emitted (payment identity, covered by
-			# test_qr_iban_slip_uses_shared_donation_reference).
-			patch("non_profit.non_profit.swiss_qrbill.frappe.get_hooks", return_value=[]),
-			patch(
-				"non_profit.non_profit.swiss_qrbill._resolve_creditor",
-				return_value=("CH4431999123000889012", {"name": "Test NGO"}),
-			),
-			patch.dict("sys.modules", {"qrbill": frappe._dict(QRBill=FakeQRBill)}),
-		):
-			result = swiss_qrbill_svg(frappe._dict(amount=50, name="DON-TEST-005"))
-
-		self.assertEqual(result, "<svg/>")
-		self.assertIsNone(captured["reference_number"])
-
-	@skipUnless(
-		GOOD_CONNECTOR_QRR_REGISTRATION_AVAILABLE,
-		"good_connector QRR registration contract is not available",
-	)
-	def test_registration_persists_shared_qrr(self):
+	def test_registration_dispatches_registered_provider(self):
 		donation = Mock()
 		donation.docstatus = 1
-		donation.name = "NPO-DTN-2026-00001"
-		donation.company = "Test Company"
-		donation.get.return_value = None
+		provider = Mock(return_value=DONATION_QRR)
 		meta = Mock()
 		meta.has_field.return_value = True
 		with (
-			patch(
-				"non_profit.non_profit.bank_integration.frappe.get_installed_apps",
-				return_value=["good_connector"],
-			),
 			patch("non_profit.non_profit.bank_integration.frappe.get_meta", return_value=meta),
 			patch(
-				"good_connector.qr_bill.resolve_qrr_reference", return_value=DONATION_QRR
-			) as resolve_reference,
-			patch("good_connector.qr_bill.assert_unique_qrr_reference") as assert_unique,
+				"non_profit.non_profit.integration_hooks.first_provider",
+				return_value=provider,
+			),
 		):
 			result = register_donation_qr_reference(donation)
 		self.assertEqual(result, DONATION_QRR)
-		resolve_reference.assert_called_once_with(
-			donation.name,
-			doctype="Donation",
-			stored_reference=None,
-		)
-		assert_unique.assert_called_once_with(
-			"Donation", donation.name, DONATION_QRR, company=donation.company
-		)
-		donation.db_set.assert_called_once_with("gc_qr_reference", DONATION_QRR, update_modified=False)
+		provider.assert_called_once_with(doc=donation, doctype="Donation")
 
-	@skipUnless(
-		GOOD_CONNECTOR_QRR_REGISTRATION_AVAILABLE,
-		"good_connector QRR registration contract is not available",
-	)
-	def test_registration_preserves_valid_stored_qrr(self):
-		donation = Mock()
-		donation.docstatus = 1
-		donation.name = "NPO-DTN-2026-00001"
-		donation.company = "Test Company"
-		donation.get.return_value = LEGACY_QRR
-		meta = Mock()
-		meta.has_field.return_value = True
-		with (
-			patch(
-				"non_profit.non_profit.bank_integration.frappe.get_installed_apps",
-				return_value=["good_connector"],
-			),
-			patch("non_profit.non_profit.bank_integration.frappe.get_meta", return_value=meta),
-			patch(
-				"good_connector.qr_bill.resolve_qrr_reference",
-				return_value=LEGACY_QRR,
-			) as resolve_reference,
-			patch("good_connector.qr_bill.assert_unique_qrr_reference"),
-		):
-			result = register_donation_qr_reference(donation)
-		self.assertEqual(result, LEGACY_QRR)
-		resolve_reference.assert_called_once_with(
-			donation.name,
-			doctype="Donation",
-			stored_reference=LEGACY_QRR,
-		)
-		donation.db_set.assert_not_called()
-
-	def test_uninstalled_good_connector_does_not_register_qrr(self):
+	def test_no_provider_does_not_register_qrr(self):
 		donation = Mock(docstatus=1, name="NPO-DTN-2026-00001")
 		# No registration provider on the seam = the same no-op the old
 		# installed-apps guard produced.

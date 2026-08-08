@@ -380,15 +380,15 @@ class TestMember(unittest.TestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, "From Date is required"):
 			create_member_and_membership(**values)
 
-	def test_guided_creation_requires_connector_installed_on_site(self):
+	def test_guided_creation_requires_identity_provider(self):
 		values = self._guided_person_values()
 		before = {
 			doctype: frappe.db.count(doctype) for doctype in ("Contact", "Address", "Customer", "Member")
 		}
 
 		with (
-			patch("non_profit.non_profit.member_identity.frappe.get_installed_apps", return_value=[]),
-			self.assertRaisesRegex(frappe.ValidationError, "Good Connector identity matching is required"),
+			patch("non_profit.non_profit.integration_hooks.frappe.get_hooks", return_value=[]),
+			self.assertRaisesRegex(frappe.ValidationError, "An identity resolution provider is required"),
 		):
 			create_member_and_membership(**values)
 
