@@ -342,7 +342,7 @@ def _resolve_person_contact(
 
 
 def _member_for_person(contact: str, first_name: str, last_name: str, email: str):
-	from non_profit.non_profit.doctype.member.member import _link_contact_to_member
+	from non_profit.non_profit.doctype.member.member import link_contact_to_member
 
 	contact_members = _canonical_members_for_contact(contact)
 	member_doctype = frappe.qb.DocType("Member")
@@ -380,7 +380,7 @@ def _member_for_person(contact: str, first_name: str, last_name: str, email: str
 				"contact": contact,
 			}
 		).insert()
-	_link_contact_to_member(contact, member.name)
+	link_contact_to_member(contact, member.name)
 	member.reload()
 	return member
 

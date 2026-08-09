@@ -544,7 +544,13 @@ def _legacy_donor_names_for_email(email: str) -> list[str]:
 	)
 
 
-def _create_customer_for_donor(donor, *, values_provider=None) -> str:
+def create_customer_for_donor(donor, *, values_provider=None) -> str:
+	"""Create (never reuse) the Customer for a Donor.
+
+	Public API (ledger N6): good_npo consumes this with a values_provider;
+	the name and keyword signature are pinned by its tests. Prefer
+	get_or_create_customer_for_donor unless create-only semantics are needed.
+	"""
 	values = {
 		"doctype": "Customer",
 		"customer_name": donor.donor_name,
@@ -558,6 +564,10 @@ def _create_customer_for_donor(donor, *, values_provider=None) -> str:
 	customer.flags.ignore_mandatory = True
 	customer.insert(ignore_permissions=True)
 	return customer.name
+
+
+#: Backward-compatible alias for the pre-N6 private name.
+_create_customer_for_donor = create_customer_for_donor
 
 
 def _link_contact_and_address_to_customer(donor, customer: str, email: str | None = None) -> None:

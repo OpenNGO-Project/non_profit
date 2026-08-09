@@ -123,7 +123,7 @@ def get_or_create_member_for_contact(
 
 	linked_member = _member_linked_to_contact(contact)
 	if linked_member:
-		_link_contact_to_member(contact, linked_member, ignore_permissions=ignore_permissions)
+		link_contact_to_member(contact, linked_member, ignore_permissions=ignore_permissions)
 		member = frappe.get_doc("Member", linked_member)
 		if not ignore_permissions:
 			member.check_permission("read")
@@ -134,7 +134,7 @@ def get_or_create_member_for_contact(
 	if email:
 		existing_member = frappe.db.exists("Member", {"email_id": email})
 		if existing_member:
-			_link_contact_to_member(contact, existing_member, ignore_permissions=ignore_permissions)
+			link_contact_to_member(contact, existing_member, ignore_permissions=ignore_permissions)
 			member = frappe.get_doc("Member", existing_member)
 			if not ignore_permissions:
 				member.check_permission("read")
@@ -148,7 +148,7 @@ def get_or_create_member_for_contact(
 	member.subject_type = "Individual"
 	member.contact = contact
 	member.insert(ignore_permissions=ignore_permissions)
-	_link_contact_to_member(contact, member.name, ignore_permissions=ignore_permissions)
+	link_contact_to_member(contact, member.name, ignore_permissions=ignore_permissions)
 	return member
 
 
@@ -222,7 +222,7 @@ def create_member_and_membership(
 				_("Contact is already linked to another Member."),
 				frappe.ValidationError,
 			)
-		_link_contact_to_member(contact, member.name)
+		link_contact_to_member(contact, member.name)
 		_link_contact_to_customer(contact, customer)
 	elif contact:
 		member = get_or_create_member_for_contact(contact)
@@ -379,7 +379,7 @@ def _member_linked_to_contact(contact: str) -> str | None:
 	)
 
 
-def _link_contact_to_member(
+def link_contact_to_member(
 	contact: str,
 	member: str,
 	*,
@@ -421,6 +421,10 @@ def _link_contact_to_member(
 	contact_doc.append("links", {"link_doctype": "Member", "link_name": member})
 	contact_doc.save(ignore_permissions=ignore_permissions)
 	return current_household
+
+
+#: Backward-compatible alias for the pre-N6 private name (public API per ledger N6).
+_link_contact_to_member = link_contact_to_member
 
 
 def _link_contact_to_customer(
@@ -511,7 +515,7 @@ def create_member(user_details):
 	member.insert(ignore_permissions=True)
 	contact = _contact_for_email(user_details.email)
 	if contact:
-		_link_contact_to_member(contact, member.name, ignore_permissions=True)
+		link_contact_to_member(contact, member.name, ignore_permissions=True)
 		member.reload()
 
 	return member

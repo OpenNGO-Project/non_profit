@@ -856,7 +856,7 @@ class TestMember(unittest.TestCase):
 			member.save(ignore_permissions=True)
 
 	def test_contact_cannot_be_canonical_for_two_members(self):
-		from non_profit.non_profit.doctype.member.member import _link_contact_to_member
+		from non_profit.non_profit.doctype.member.member import link_contact_to_member
 
 		contact = frappe.get_doc({"doctype": "Contact", "first_name": "One Canonical Member Role"}).insert(
 			ignore_permissions=True
@@ -873,7 +873,7 @@ class TestMember(unittest.TestCase):
 		).insert(ignore_permissions=True)
 
 		with self.assertRaisesRegex(frappe.ValidationError, first_member.name):
-			_link_contact_to_member(contact.name, second_member.name, ignore_permissions=True)
+			link_contact_to_member(contact.name, second_member.name, ignore_permissions=True)
 
 	def test_legacy_member_contact_link_cannot_be_reclassified_as_generic_endpoint(self):
 		member = frappe.get_doc({"doctype": "Member", "member_name": "Legacy Dynamic Link Member"}).insert(

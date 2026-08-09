@@ -139,6 +139,10 @@ def _lock_and_validate_captured_next_action_links(
 
 
 def _existing_captured(side_effect_scope: Mapping[str, Iterable[str]]) -> dict[str, list[str]]:
+	# Deliberate copy (ledger N4): reset providers must stay import-free of
+	# good_demo (pinned by the provider purity tests), so this primitive is
+	# replicated per provider and its behavior is pinned by good_demo's
+	# provider contract test instead of being shared.
 	names = tuple(side_effect_scope.get("Recurring Donation Installment") or ())
 	if not names:
 		return {}

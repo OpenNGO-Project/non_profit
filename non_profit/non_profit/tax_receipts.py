@@ -52,6 +52,11 @@ DEFAULT_LETTER_BODY = """<p>{{ salutation }}</p>
 ({{ donation_count }} Zuwendungen):</p>
 {{ donation_table_html }}
 <p>Diese Bescheinigung dient als Nachweis für Ihre Steuererklärung.</p>"""
+# "Direct Mail Manager" is created and owned by the private good_direct_mail
+# app (its setup.DIRECT_MAIL_MANAGER_ROLE); this public repository cannot
+# import it, so the role name is a string contract documented on both sides
+# (ledger N11). Renaming the role there without updating this tuple silently
+# strips dispatch authorization here.
 DISPATCH_ROLES = ("System Manager", "Direct Mail Manager")
 
 
