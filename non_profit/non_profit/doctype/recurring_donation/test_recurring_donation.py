@@ -1508,13 +1508,26 @@ class TestRecurringDonationReconciliation(IntegrationTestCase):
 			reversal_amount=25,
 		)
 
-		with self.assertRaisesRegex(frappe.ValidationError, "conflicts with existing"):
+		from non_profit.non_profit.recurring_reconciliation import RecurringReversalMismatchError
+
+		# Terminal mismatches carry the typed error so provider apps can keep
+		# the event as review evidence instead of retrying it forever.
+		with self.assertRaisesRegex(RecurringReversalMismatchError, "conflicts with existing"):
 			record_recurring_installment_reversal(
 				donation.name,
 				reversal_kind="Chargeback",
 				reversal_reference="CHARGEBACK-EVENT-2",
 				reversal_date=nowdate(),
 				reversal_amount=25,
+			)
+
+		with self.assertRaisesRegex(RecurringReversalMismatchError, "Only a full"):
+			record_recurring_installment_reversal(
+				donation.name,
+				reversal_kind="Full Refund",
+				reversal_reference="REFUND-EVENT-PARTIAL",
+				reversal_date=nowdate(),
+				reversal_amount=10,
 			)
 
 	def test_original_actual_snapshot_cannot_be_rewritten(self) -> None:

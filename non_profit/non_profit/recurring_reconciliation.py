@@ -134,6 +134,13 @@ def reconcile_recurring_donations() -> None:
 		last_name = names[-1]
 
 
+class RecurringReversalMismatchError(frappe.ValidationError):
+	"""Terminal mismatch between a reversal event and immutable installment
+	evidence: redelivering the identical event can never succeed. Provider
+	apps keep such events as review evidence instead of failing every
+	redelivery into Error Logs."""
+
+
 def record_recurring_installment_reversal(
 	donation: str,
 	*,
@@ -187,7 +194,10 @@ def record_recurring_installment_reversal(
 		frappe.throw(_("The recurring installment has no original actual settlement snapshot."))
 	amount = flt(reversal_amount)
 	if not isfinite(amount) or amount <= 0 or abs(amount - actual_amount) >= 0.000001:
-		frappe.throw(_("Only a full recurring installment reversal can be recorded."))
+		frappe.throw(
+			_("Only a full recurring installment reversal can be recorded."),
+			RecurringReversalMismatchError,
+		)
 	if current.reversal_kind:
 		matching_replay = (
 			current.reversal_source == REVERSAL_SOURCES[reversal_kind]
@@ -197,7 +207,10 @@ def record_recurring_installment_reversal(
 			and (not reversal_date or getdate(current.reversal_date) == getdate(reversal_date))
 		)
 		if not matching_replay:
-			frappe.throw(_("The reversal conflicts with existing immutable installment evidence."))
+			frappe.throw(
+				_("The reversal conflicts with existing immutable installment evidence."),
+				RecurringReversalMismatchError,
+			)
 		return _reversal_result(current)
 	_update_installment(
 		current,
