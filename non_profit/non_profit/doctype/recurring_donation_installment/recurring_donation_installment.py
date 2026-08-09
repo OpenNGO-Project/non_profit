@@ -9,6 +9,7 @@ from frappe.model.document import Document
 from frappe.utils import flt
 
 _RECONCILIATION_WRITE_CAPABILITY = object()
+_EVIDENCE_REMAP_CAPABILITY = object()
 ACTUAL_SNAPSHOT_FIELDS = ("donation", "actual_date", "actual_amount")
 REVERSAL_EVIDENCE_FIELDS = (
 	"reversal_source",
@@ -45,6 +46,17 @@ class RecurringDonationInstallment(Document):
 			)
 
 	def _validate_immutable_evidence(self) -> None:
+		if self.flags.get("evidence_remap_capability") is _EVIDENCE_REMAP_CAPABILITY:
+			if (
+				not self.is_retired
+				or any(
+					_has_actual_snapshot_value(fieldname, self.get(fieldname))
+					for fieldname in ACTUAL_SNAPSHOT_FIELDS
+				)
+				or _has_any_reversal_evidence(self)
+			):
+				frappe.throw(_("Only complete evidence removal from a retired installment can be remapped."))
+			return
 		before = self.get_doc_before_save()
 		if not before:
 			return
@@ -69,6 +81,11 @@ class RecurringDonationInstallment(Document):
 
 def allow_reconciliation_write(installment) -> None:
 	installment.flags.reconciliation_write_capability = _RECONCILIATION_WRITE_CAPABILITY
+
+
+def allow_evidence_remap(installment) -> None:
+	allow_reconciliation_write(installment)
+	installment.flags.evidence_remap_capability = _EVIDENCE_REMAP_CAPABILITY
 
 
 def _has_actual_snapshot_value(fieldname: str, value) -> bool:

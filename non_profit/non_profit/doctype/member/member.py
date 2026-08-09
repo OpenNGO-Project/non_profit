@@ -423,7 +423,7 @@ def link_contact_to_member(
 	return current_household
 
 
-#: Backward-compatible alias for the pre-N6 private name (public API per ledger N6).
+#: Compatibility alias for callers of the former internal helper.
 _link_contact_to_member = link_contact_to_member
 
 

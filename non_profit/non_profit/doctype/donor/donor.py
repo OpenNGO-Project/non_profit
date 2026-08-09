@@ -105,7 +105,7 @@ def get_or_create_donor_for_customer(
 	# Serialize concurrent create-or-return on the Customer row, then read the
 	# Donor with a locking (current) read: two parallel settlements for one
 	# Customer otherwise both pass the exists check and insert twin Donors
-	# (the Good Direct Mail EBICS settlement caller runs in parallel workers).
+	# when settlement callers run in parallel workers.
 	# Under snapshot isolation a stale locking read raises a retryable error,
 	# which callers already treat as retry-the-whole-transaction.
 	frappe.db.get_value("Customer", customer, "name", for_update=True)
@@ -547,9 +547,8 @@ def _legacy_donor_names_for_email(email: str) -> list[str]:
 def create_customer_for_donor(donor, *, values_provider=None) -> str:
 	"""Create (never reuse) the Customer for a Donor.
 
-	Public API (ledger N6): good_npo consumes this with a values_provider;
-	the name and keyword signature are pinned by its tests. Prefer
-	get_or_create_customer_for_donor unless create-only semantics are needed.
+	Downstream extensions may supply ``values_provider``. Prefer
+	``get_or_create_customer_for_donor`` unless create-only semantics are needed.
 	"""
 	values = {
 		"doctype": "Customer",
@@ -566,7 +565,7 @@ def create_customer_for_donor(donor, *, values_provider=None) -> str:
 	return customer.name
 
 
-#: Backward-compatible alias for the pre-N6 private name.
+#: Compatibility alias for callers of the former internal helper.
 _create_customer_for_donor = create_customer_for_donor
 
 
@@ -876,11 +875,9 @@ def _link_donor_address_to_customer(donor_name: str, customer: str) -> None:
 		)
 
 
-# Local behavioral twin of good_connector.party_defaults: this public
-# repository cannot import private apps, and the private-side parity test pins
-# both engines to the same contract. Runtime Customer creation uses the
-# configured Selling Settings leaf defaults and fails with a clear setup error
-# otherwise — never an arbitrary first database row.
+# Shared party-default contract: Customer creation uses the configured Selling
+# Settings leaf defaults and fails with a clear setup error otherwise, never an
+# arbitrary first database row. Downstream adapters parity-test these helpers.
 def _default_customer_group() -> str:
 	return _configured_selling_leaf("Customer Group", "customer_group")
 

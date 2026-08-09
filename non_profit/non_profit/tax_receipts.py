@@ -3,13 +3,13 @@
 non_profit owns the *business* data: which donations qualify, how they are
 aggregated per donor and tax year, and the receipt lifecycle
 (`Donation Tax Receipt`). Production and postal dispatch of the actual letters
-belong to `good_direct_mail`, which this module feeds through its documented
-audience-provider contract (`good_direct_mail_audience_providers`).
+belong to an optional downstream campaign app, which this module feeds through
+an audience-provider contract.
 
 The seam is deliberately one-directional and late-bound: nothing here imports
-`good_direct_mail` at module level, so non_profit stays installable without it.
-`create_receipt_campaign` resolves the direct-mail helper with `frappe.get_attr`
-and fails with a clear message when the app is absent.
+the campaign app at module level, so non_profit stays independently installable.
+`create_receipt_campaign` resolves its helper with `frappe.get_attr` and fails
+with a clear message when the integration is absent.
 
 Operator procedure (see HOW_TO.md): generate → review the Drafts →
 `create_receipt_campaign` → prepare/freeze/generate/post in direct mail →
@@ -52,11 +52,8 @@ DEFAULT_LETTER_BODY = """<p>{{ salutation }}</p>
 ({{ donation_count }} Zuwendungen):</p>
 {{ donation_table_html }}
 <p>Diese Bescheinigung dient als Nachweis für Ihre Steuererklärung.</p>"""
-# "Direct Mail Manager" is created and owned by the private good_direct_mail
-# app (its setup.DIRECT_MAIL_MANAGER_ROLE); this public repository cannot
-# import it, so the role name is a string contract documented on both sides
-# (ledger N11). Renaming the role there without updating this tuple silently
-# strips dispatch authorization here.
+# The optional postal integration owns "Direct Mail Manager". The role name is
+# a cross-app string contract because this app must not import the integration.
 DISPATCH_ROLES = ("System Manager", "Direct Mail Manager")
 
 
@@ -66,7 +63,7 @@ def receipt_campaign_reference(company: str, tax_year: int) -> str:
 
 
 def direct_mail_audience_provider() -> dict[str, str]:
-	"""Describe the tax-receipt audience to good_direct_mail."""
+	"""Describe the tax-receipt audience to a postal campaign consumer."""
 	return {
 		"key": AUDIENCE_PROVIDER_KEY,
 		"label": _("Donation Tax Receipts"),
@@ -133,11 +130,11 @@ def generate_receipts(company: str, tax_year: int) -> dict[str, Any]:
 
 
 def direct_mail_candidate_rows(reference: str) -> list[dict[str, Any]]:
-	"""good_direct_mail audience provider: one letter row per receipt.
+	"""Postal audience provider: one letter row per receipt.
 
 	`reference` is `<company>|<tax_year>`. Donors whose canonical postal
 	subject cannot be resolved (no Contact, Customer, or Household) are skipped
-	and logged; direct mail can only address a canonical subject.
+	and logged; postal output can only address a canonical subject.
 	"""
 	company, tax_year = _parse_reference(reference)
 	receipts = frappe.get_all(
@@ -223,14 +220,12 @@ def create_receipt_campaign(
 	"""Generate the receipts, then open a postal Campaign for them.
 
 	`title` and `body_html` override the German *letter* defaults (the Campaign
-	itself is titled from the Company and tax year). Returns the new
-	`Good Direct Mail Campaign` name.
+	itself is titled from the Company and tax year). Returns the created postal
+	Campaign name.
 	"""
 	_require_dispatch_operator()
 	if not frappe.db.exists("DocType", CAMPAIGN_DOCTYPE):
-		frappe.throw(
-			_("Postal donation tax receipts require the good_direct_mail app, which is not installed.")
-		)
+		frappe.throw(_("Postal donation tax receipts require the configured campaign integration."))
 	company = _validated_company(company)
 	tax_year = _validated_tax_year(tax_year)
 	if not letter_head or not frappe.db.exists("Letter Head", letter_head):

@@ -64,21 +64,14 @@ def _candidate(donation_name: str, *, eligible: bool = True) -> dict:
 
 
 def _account_currency_matches(account: str | None, currency: str | None) -> bool:
-	"""Behavioral twin of ``good_connector.bank_integration.account_currency_matches``.
-
-	This public repository cannot import the connector; the private-side
-	twin-7 parity suite pins both formulations, so a boundary change on either
-	side fails a test instead of silently changing which bank credits
-	auto-reconcile.
-	"""
+	"""Parity helper for downstream bank adapters; blank inputs never match."""
 	if not account or not currency:
 		return False
 	return get_account_currency(account) == currency
 
 
 def _amount_within_outstanding(amount, outstanding) -> bool:
-	"""Behavioral twin of ``good_connector.bank_integration.amount_within_outstanding``:
-	quantized to 0.01, boundary equality stays eligible."""
+	"""Shared adapter boundary: quantize outstanding and keep equality eligible."""
 	return Decimal(str(amount)) <= Decimal(str(outstanding)).quantize(Decimal("0.01"))
 
 
@@ -115,8 +108,8 @@ def get_ebics_reconciliation_candidates(
 	if company_currency != bank_transaction.currency:
 		return [_candidate(donation_name, eligible=False) for donation_name in donation_names]
 	if len(donation_names) != 1:
-		# Preserve every identity collision for Good Connector's aggregate
-		# candidate-count check; amount eligibility must never pick a winner.
+		# Preserve every identity collision for the aggregate candidate-count
+		# check; amount eligibility must never pick a winner.
 		return [_candidate(donation_name) for donation_name in donation_names]
 	donation_name = donation_names[0]
 	if not _supports_automatic_currency_matching(donation_name, bank_transaction):

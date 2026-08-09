@@ -247,6 +247,10 @@ procedures), and the code. Record new or changed requirements in
   to call a provider or initiate a charge. Obsolete cadence expectations are
   retired, never deleted, and the first actual snapshot plus approved full
   accounting/provider reversal evidence are immutable and remain auditable.
+  The 16.18.1 anchored-date repair may move complete accounting evidence from a
+  cumulative-step legacy date to its unique cadence-ordinal anchored row. It
+  retains the retired date row, validates every pair before writing, and fails
+  closed on duplicate, conflicting, or partial evidence.
   Reconciliation runs against the current processing date, not a historical
   reversal date, and its horizon includes both `provider_next_payment` and a
   future local `next_date` before terminal/end-date caps. Natural end-date closure

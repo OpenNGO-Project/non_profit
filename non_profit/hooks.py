@@ -81,8 +81,8 @@ good_newsletter_audience_providers = [
 	"non_profit.non_profit.recipient_selection.newsletter_audience_provider",
 ]
 
-# Postal letter production for Spendenbescheinigungen. Only good_direct_mail
-# reads this hook, so it is inert when that app is not installed.
+# Optional postal letter production for Spendenbescheinigungen. The hook is
+# inert when no downstream campaign app consumes it.
 good_direct_mail_audience_providers = [
 	"non_profit.non_profit.tax_receipts.direct_mail_audience_provider",
 ]

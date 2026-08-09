@@ -529,6 +529,22 @@ materialized date, reconciliation sets `is_retired` and `retired_on` instead of
 deleting the row. Retired dates leave active expected/missed/variance roll-ups,
 but keep linked Donation, reversal, amount, and date evidence. A later schedule
 change that makes the same date expected again reactivates the row.
+The 16.18.1 anchored-date compatibility rebuild is one narrow exception to where
+that evidence resides. For schedules persisted by the former cumulative stepping
+algorithm (for example Jan 31, Feb 28, Mar 28), it pairs each legacy and anchored
+date by cadence ordinal, never by nearest-date guessing. Before writing, it
+requires one evidenced legacy source and at most one empty anchored target for
+every pair, and validates a Donation assignment plus either no actual snapshot or
+a complete positive actual snapshot and, when present, a matching complete
+reversal snapshot. It then moves those fields to the anchored row while retaining
+the retired legacy expected date and amount as cadence audit. Multiple sources or
+targets, a non-empty target, and partial or malformed evidence fail before any row
+changes. Once the source is clear and the
+anchored row owns the snapshot, rerunning performs no remap. A uniquely scoped
+controller capability permits only complete evidence removal from an already
+retired source. The post-model
+`repair_anchored_recurring_installment_evidence` patch reruns the bounded backfill
+under these rules for sites that already recorded the original 16.18 backfill.
 Direct insert/update/delete remains capability-guarded. Deleting the owning
 Recurring Donation is the only normal cascade: its `on_trash` deletes installment
 rows through the same guarded framework lifecycle before link validation.
@@ -922,11 +938,12 @@ Frappe's `Language` DocType, matching core language selectors such as
 `non_profit.non_profit.doctype.donor.donor.get_or_create_customer_for_donor()`
 reuse a Customer from a same-email Member first, then a same-email Customer, and
 otherwise create a new Customer. The helper links Contact and Address rows to
-both Donor and Customer. New Customers use the Selling Settings Customer Group
-only when it is a non-group row, otherwise a deterministic non-group fallback;
-the `All Customer Groups` root is never assigned. Every Donor-linked Address is
-propagated to the Customer, while an existing Customer primary Address is
-preserved. When that pointer is blank, only a unique enabled primary Address or
+both Donor and Customer. New Customers require the configured Selling Settings
+Customer Group and Territory. Both names must exist and resolve to non-group leaf
+rows; blank, nonexistent, or group defaults raise a setup error, with no fallback
+to another database row. The `All Customer Groups` root is never assigned. Every
+Donor-linked Address is propagated to the Customer, while an existing Customer
+primary Address is preserved. When that pointer is blank, only a unique enabled primary Address or
 the sole enabled Address is selected. Disabled or unresolved multiple Addresses
 never become primary, leaving downstream correspondence to report the ambiguity
 instead of hiding it behind an arbitrary pointer. A one-time migrate patch preserves existing

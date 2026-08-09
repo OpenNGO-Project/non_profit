@@ -542,8 +542,8 @@ def _newsletter_members(candidates: list[_RecipientCandidate]) -> list[dict[str,
 	"""Return at most one import row per canonical candidate.
 
 	A candidate that resolves to no reachable address keeps a row with an empty
-	``email`` so good_newsletter's import summary can report it as
-	skipped-without-email instead of silently losing it.
+	``email`` so the consuming import can report it as skipped-without-email
+	instead of silently losing it.
 	"""
 	members = []
 	seen_emails: set[str] = set()

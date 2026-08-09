@@ -1381,6 +1381,221 @@ class TestRecurringDonationReconciliation(IntegrationTestCase):
 		self.assertTrue(all(not row.is_retired for row in current_rows))
 		self.assertTrue(all(row.status == "Missed" for row in current_rows[:-1]))
 
+	def test_pre_16_18_month_end_settlement_is_remapped_and_rerun_safe(self) -> None:
+		schedule = self._schedule(start_date=getdate("2026-01-31"), amount=25)
+		self._paid_donation(schedule, "2026-01-31")
+		self._paid_donation(schedule, "2026-02-28")
+		march_donation = self._paid_donation(schedule, "2026-03-28")
+		legacy_name = self._make_legacy_march_installment(schedule, march_donation)
+
+		for _index in range(2):
+			reconcile_recurring_donation(
+				schedule.name,
+				as_of="2026-04-01",
+				through_date="2026-04-01",
+			)
+
+		anchored = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name, "expected_date": "2026-03-31"},
+			[
+				"name",
+				"status",
+				"donation",
+				"actual_date",
+				"actual_amount",
+				"is_retired",
+			],
+			as_dict=True,
+		)
+		legacy = frappe.db.get_value(
+			"Recurring Donation Installment",
+			legacy_name,
+			[
+				"status",
+				"expected_date",
+				"donation",
+				"actual_date",
+				"actual_amount",
+				"is_retired",
+			],
+			as_dict=True,
+		)
+		self.assertEqual(anchored.status, "Settled")
+		self.assertEqual(anchored.donation, march_donation.name)
+		self.assertEqual(anchored.actual_date, getdate("2026-03-28"))
+		self.assertEqual(anchored.actual_amount, 25)
+		self.assertFalse(anchored.is_retired)
+		self.assertEqual(legacy.status, "Cancelled")
+		self.assertEqual(legacy.expected_date, getdate("2026-03-28"))
+		self.assertFalse(legacy.donation)
+		self.assertFalse(legacy.actual_date)
+		self.assertFalse(legacy.actual_amount)
+		self.assertTrue(legacy.is_retired)
+		self.assertEqual(
+			frappe.db.count(
+				"Recurring Donation Installment",
+				{"recurring_donation": schedule.name, "donation": march_donation.name},
+			),
+			1,
+		)
+
+		schedule.reload()
+		self.assertEqual(schedule.expected_installment_count, 3)
+		self.assertEqual(schedule.actual_installment_count, 3)
+		self.assertEqual(schedule.missed_installment_count, 0)
+		self.assertEqual(schedule.variance_installment_count, 0)
+		self.assertEqual(schedule.due_expected_amount, 75)
+		self.assertEqual(schedule.settled_actual_amount, 75)
+		self.assertEqual(schedule.settlement_variance, 0)
+		with open(frappe.get_app_path("non_profit", "patches.txt")) as patches_file:
+			self.assertIn(
+				"non_profit.patches.repair_anchored_recurring_installment_evidence",
+				patches_file.read().split("[post_model_sync]", 1)[1],
+			)
+
+	def test_anchored_rebuild_fails_before_writing_ambiguous_legacy_evidence(self) -> None:
+		schedule = self._schedule(start_date=getdate("2026-01-31"), amount=25)
+		self._paid_donation(schedule, "2026-01-31")
+		self._paid_donation(schedule, "2026-02-28")
+		march_donations = [
+			self._paid_donation(schedule, "2026-03-28"),
+			self._paid_donation(schedule, "2026-03-28"),
+		]
+		for index, donation in enumerate(march_donations):
+			self._make_legacy_march_installment(
+				schedule,
+				donation,
+				delete_anchored=index == 0,
+			)
+
+		before = frappe.get_all(
+			"Recurring Donation Installment",
+			filters={"recurring_donation": schedule.name},
+			fields=[
+				"name",
+				"installment_kind",
+				"expected_date",
+				"donation",
+				"actual_date",
+				"actual_amount",
+				"is_retired",
+			],
+			order_by="name asc",
+		)
+		with self.assertRaisesRegex(frappe.ValidationError, "ambiguous legacy installment evidence"):
+			reconcile_recurring_donation(
+				schedule.name,
+				as_of="2026-04-01",
+				through_date="2026-04-01",
+			)
+		self.assertEqual(
+			frappe.get_all(
+				"Recurring Donation Installment",
+				filters={"recurring_donation": schedule.name},
+				fields=list(before[0]),
+				order_by="name asc",
+			),
+			before,
+		)
+
+	def test_anchored_rebuild_duplicate_targets_write_nothing(self) -> None:
+		schedule, _donation, _legacy_name = self._anchored_remap_fixture()
+		target = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name, "expected_date": "2026-03-31"},
+			["status", "expected_amount", "currency", "is_retired", "retired_on"],
+			as_dict=True,
+		)
+		duplicate = frappe.get_doc(
+			{
+				"doctype": "Recurring Donation Installment",
+				"recurring_donation": schedule.name,
+				"installment_kind": "Expected",
+				"expected_date": "2026-03-31",
+				**target,
+			}
+		)
+		from non_profit.non_profit.doctype.recurring_donation_installment.recurring_donation_installment import (
+			allow_reconciliation_write,
+		)
+
+		allow_reconciliation_write(duplicate)
+		duplicate.insert(ignore_permissions=True)
+
+		self._assert_anchored_rebuild_rejected_without_writes(
+			schedule,
+			"ambiguous anchored installments",
+		)
+
+	def test_anchored_rebuild_target_with_evidence_writes_nothing(self) -> None:
+		schedule, donation, _legacy_name = self._anchored_remap_fixture()
+		target = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name, "expected_date": "2026-03-31"},
+			"name",
+		)
+		frappe.db.set_value(
+			"Recurring Donation Installment",
+			target,
+			{
+				"donation": donation.name,
+				"actual_date": donation.date,
+				"actual_amount": donation.amount,
+			},
+			update_modified=False,
+		)
+
+		self._assert_anchored_rebuild_rejected_without_writes(
+			schedule,
+			"conflicting installment evidence",
+		)
+
+	def test_anchored_rebuild_partial_or_malformed_actual_evidence_writes_nothing(self) -> None:
+		cases = {
+			"partial actual snapshot": {"actual_date": None},
+			"nonpositive actual amount": {"actual_amount": -25},
+		}
+		for label, updates in cases.items():
+			with self.subTest(label=label):
+				schedule, _donation, legacy_name = self._anchored_remap_fixture()
+				frappe.db.set_value(
+					"Recurring Donation Installment",
+					legacy_name,
+					updates,
+					update_modified=False,
+				)
+				self._assert_anchored_rebuild_rejected_without_writes(
+					schedule,
+					"incomplete legacy installment evidence",
+				)
+
+	def test_anchored_rebuild_partial_or_malformed_reversal_evidence_writes_nothing(self) -> None:
+		cases = {
+			"partial reversal": {"reversal_source": "Accounting"},
+			"source and kind mismatch": {
+				"reversal_source": "Accounting",
+				"reversal_kind": "Full Refund",
+				"reversal_reference": "MALFORMED-REVERSAL",
+				"reversal_date": "2026-03-29",
+				"reversal_amount": 25,
+				"reversal_recorded_on": "2026-03-29 10:00:00",
+			},
+		}
+		for label, updates in cases.items():
+			with self.subTest(label=label):
+				schedule, _donation, legacy_name = self._anchored_remap_fixture()
+				frappe.db.set_value(
+					"Recurring Donation Installment",
+					legacy_name,
+					updates,
+					update_modified=False,
+				)
+				self._assert_anchored_rebuild_rejected_without_writes(
+					schedule,
+					"incomplete legacy reversal evidence",
+				)
+
 	def test_natural_end_keeps_the_final_generated_installment_active(self) -> None:
 		schedule = self._schedule(start_date=nowdate(), amount=25)
 		schedule.end_date = nowdate()
@@ -1651,6 +1866,125 @@ class TestRecurringDonationReconciliation(IntegrationTestCase):
 		frappe.delete_doc("Recurring Donation", schedule.name, ignore_permissions=True)
 
 		self.assertFalse(frappe.db.exists("Recurring Donation Installment", installment))
+
+	def _anchored_remap_fixture(self):
+		schedule = self._schedule(start_date=getdate("2026-01-31"), amount=25)
+		self._paid_donation(schedule, "2026-01-31")
+		self._paid_donation(schedule, "2026-02-28")
+		march_donation = self._paid_donation(schedule, "2026-03-28")
+		legacy_name = self._make_legacy_march_installment(
+			schedule,
+			march_donation,
+			delete_anchored=False,
+		)
+		return schedule, march_donation, legacy_name
+
+	def _assert_anchored_rebuild_rejected_without_writes(self, schedule, message: str) -> None:
+		before = self._anchored_rebuild_state(schedule)
+		with self.assertRaisesRegex(frappe.ValidationError, message):
+			reconcile_recurring_donation(
+				schedule.name,
+				as_of="2026-04-01",
+				through_date="2026-04-01",
+			)
+		self.assertEqual(self._anchored_rebuild_state(schedule), before)
+
+	@staticmethod
+	def _anchored_rebuild_state(schedule) -> dict:
+		return {
+			"schedule": frappe.db.get_value(
+				"Recurring Donation",
+				schedule.name,
+				[
+					"expected_installment_count",
+					"actual_installment_count",
+					"missed_installment_count",
+					"variance_installment_count",
+					"due_expected_amount",
+					"settled_actual_amount",
+					"settlement_variance",
+					"last_reconciled_on",
+					"modified",
+				],
+				as_dict=True,
+			),
+			"installments": frappe.get_all(
+				"Recurring Donation Installment",
+				filters={"recurring_donation": schedule.name},
+				fields=[
+					"name",
+					"installment_kind",
+					"status",
+					"expected_date",
+					"expected_amount",
+					"currency",
+					"is_retired",
+					"retired_on",
+					"donation",
+					"actual_date",
+					"actual_amount",
+					"amount_variance",
+					"reversal_source",
+					"reversal_kind",
+					"reversal_reference",
+					"reversal_date",
+					"reversal_amount",
+					"reversal_recorded_on",
+					"reconciled_on",
+					"modified",
+				],
+				order_by="name asc",
+			),
+		}
+
+	def _paid_donation(self, schedule, donation_date):
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"donor": schedule.donor,
+				"company": schedule.company,
+				"date": donation_date,
+				"amount": schedule.amount,
+				"paid": 1,
+				"recurring_donation": schedule.name,
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+		return donation
+
+	def _make_legacy_march_installment(self, schedule, donation, *, delete_anchored=True) -> str:
+		from non_profit.non_profit.doctype.recurring_donation_installment.recurring_donation_installment import (
+			allow_reconciliation_write,
+		)
+
+		if delete_anchored:
+			anchored_name = frappe.db.get_value(
+				"Recurring Donation Installment",
+				{"recurring_donation": schedule.name, "expected_date": "2026-03-31"},
+				"name",
+			)
+			anchored = frappe.get_doc("Recurring Donation Installment", anchored_name)
+			allow_reconciliation_write(anchored)
+			anchored.delete(ignore_permissions=True, delete_permanently=True)
+
+		legacy_name = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name, "donation": donation.name},
+			"name",
+		)
+		legacy = frappe.get_doc("Recurring Donation Installment", legacy_name)
+		self.assertEqual(legacy.installment_kind, "Unexpected")
+		legacy.update(
+			{
+				"installment_kind": "Expected",
+				"expected_date": "2026-03-28",
+				"expected_amount": schedule.amount,
+				"status": "Settled",
+			}
+		)
+		allow_reconciliation_write(legacy)
+		legacy.save(ignore_permissions=True)
+		return legacy.name
 
 	def _schedule(self, *, start_date, amount):
 		donor_type = frappe.db.get_value("Donor Type", {}, "name")

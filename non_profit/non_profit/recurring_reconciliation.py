@@ -45,6 +45,7 @@ def reconcile_recurring_donation(
 	horizon = _reconciliation_horizon(schedule, as_of, through_date)
 	expected_dates = _expected_dates(schedule, horizon)
 	installments = _load_installments(schedule.name)
+	evidence_remaps = _prepare_legacy_evidence_remaps(schedule, expected_dates, installments)
 	expected_by_date = {
 		getdate(row.expected_date): row for row in installments if row.installment_kind == "Expected"
 	}
@@ -85,6 +86,8 @@ def reconcile_recurring_donation(
 				{"is_retired": 1, "retired_on": now_datetime()},
 			)
 
+	installments = _load_installments(schedule.name)
+	_apply_legacy_evidence_remaps(schedule, installments, evidence_remaps)
 	installments = _load_installments(schedule.name)
 	donations = frappe.get_all(
 		"Donation",
@@ -276,6 +279,195 @@ def _expected_dates(schedule, horizon) -> list:
 		else:
 			frappe.throw(_("Unsupported Recurring Donation frequency {0}.").format(schedule.frequency))
 	return dates
+
+
+def _prepare_legacy_evidence_remaps(schedule, expected_dates, installments) -> list[dict]:
+	"""Map cumulative-date evidence to the equivalent anchored cadence row."""
+	if not expected_dates:
+		return []
+	expected_rows_by_date = {}
+	for row in installments:
+		if row.installment_kind == "Expected":
+			expected_rows_by_date.setdefault(getdate(row.expected_date), []).append(row)
+
+	remaps = []
+	legacy_date = getdate(schedule.start_date)
+	for target_date in expected_dates:
+		if legacy_date != target_date:
+			sources = [
+				row for row in expected_rows_by_date.get(legacy_date, []) if _has_installment_evidence(row)
+			]
+			if len(sources) > 1:
+				frappe.throw(
+					_("Recurring Donation {0} has ambiguous legacy installment evidence for {1}.").format(
+						schedule.name, legacy_date
+					)
+				)
+			if sources:
+				targets = expected_rows_by_date.get(target_date, [])
+				if len(targets) > 1:
+					frappe.throw(
+						_("Recurring Donation {0} has ambiguous anchored installments for {1}.").format(
+							schedule.name, target_date
+						)
+					)
+				if targets and _has_installment_evidence(targets[0]):
+					frappe.throw(
+						_("Recurring Donation {0} has conflicting installment evidence for {1}.").format(
+							schedule.name, target_date
+						)
+					)
+				remaps.append(
+					{
+						"source": sources[0].name,
+						"source_date": legacy_date,
+						"target_date": target_date,
+						"evidence": _validated_installment_evidence(schedule, sources[0]),
+					}
+				)
+		legacy_date = _next_legacy_expected_date(schedule, legacy_date)
+	return remaps
+
+
+def _next_legacy_expected_date(schedule, current):
+	if schedule.frequency == "Monthly":
+		return add_months(current, 1)
+	if schedule.frequency == "Quarterly":
+		return add_months(current, 3)
+	if schedule.frequency == "Yearly":
+		return add_years(current, 1)
+	frappe.throw(_("Unsupported Recurring Donation frequency {0}.").format(schedule.frequency))
+
+
+def _has_installment_evidence(installment) -> bool:
+	return bool(
+		cstr(installment.donation).strip()
+		or installment.actual_date
+		or flt(installment.actual_amount)
+		or any(
+			installment.get(fieldname) not in (None, "", 0, 0.0)
+			for fieldname in (
+				"reversal_source",
+				"reversal_kind",
+				"reversal_reference",
+				"reversal_date",
+				"reversal_amount",
+				"reversal_recorded_on",
+			)
+		)
+	)
+
+
+def _validated_installment_evidence(schedule, installment) -> dict:
+	donation = cstr(installment.donation).strip()
+	actual_amount = flt(installment.actual_amount)
+	has_actual_date = bool(installment.actual_date)
+	has_actual_amount = actual_amount != 0
+	if (
+		not donation
+		or has_actual_date != has_actual_amount
+		or (has_actual_amount and (not isfinite(actual_amount) or actual_amount <= 0))
+	):
+		frappe.throw(
+			_("Recurring Donation {0} has incomplete legacy installment evidence on {1}.").format(
+				schedule.name, installment.expected_date
+			)
+		)
+
+	reversal_amount = flt(installment.reversal_amount)
+	has_reversal = any(
+		installment.get(fieldname) not in (None, "", 0, 0.0)
+		for fieldname in (
+			"reversal_source",
+			"reversal_kind",
+			"reversal_reference",
+			"reversal_date",
+			"reversal_amount",
+			"reversal_recorded_on",
+		)
+	)
+	if has_reversal and not (
+		has_actual_date
+		and isfinite(reversal_amount)
+		and reversal_amount > 0
+		and abs(reversal_amount - actual_amount) < 0.000001
+		and REVERSAL_SOURCES.get(installment.reversal_kind) == installment.reversal_source
+		and installment.reversal_reference
+		and installment.reversal_date
+		and installment.reversal_recorded_on
+	):
+		frappe.throw(
+			_("Recurring Donation {0} has incomplete legacy reversal evidence on {1}.").format(
+				schedule.name, installment.expected_date
+			)
+		)
+
+	return {
+		"donation": donation,
+		"actual_date": installment.actual_date,
+		"actual_amount": actual_amount,
+		"reversal_source": installment.reversal_source,
+		"reversal_kind": installment.reversal_kind,
+		"reversal_reference": installment.reversal_reference,
+		"reversal_date": installment.reversal_date,
+		"reversal_amount": reversal_amount,
+		"reversal_recorded_on": installment.reversal_recorded_on,
+	}
+
+
+def _apply_legacy_evidence_remaps(schedule, installments, remaps: list[dict]) -> None:
+	if not remaps:
+		return
+	expected_rows_by_date = {}
+	for row in installments:
+		if row.installment_kind == "Expected":
+			expected_rows_by_date.setdefault(getdate(row.expected_date), []).append(row)
+
+	for remap in remaps:
+		targets = expected_rows_by_date.get(remap["target_date"], [])
+		if len(targets) != 1:
+			frappe.throw(
+				_("Recurring Donation {0} could not resolve anchored installment {1}.").format(
+					schedule.name, remap["target_date"]
+				)
+			)
+		source = frappe.get_doc("Recurring Donation Installment", remap["source"])
+		if (
+			source.installment_kind != "Expected"
+			or getdate(source.expected_date) != remap["source_date"]
+			or _validated_installment_evidence(schedule, source) != remap["evidence"]
+			or _has_installment_evidence(targets[0])
+		):
+			frappe.throw(
+				_("Recurring Donation {0} installment evidence changed during anchored rebuild.").format(
+					schedule.name
+				)
+			)
+		_update_installment(targets[0], remap["evidence"])
+		_clear_remapped_installment_evidence(source)
+
+
+def _clear_remapped_installment_evidence(installment) -> None:
+	from non_profit.non_profit.doctype.recurring_donation_installment.recurring_donation_installment import (
+		allow_evidence_remap,
+	)
+
+	installment.update(
+		{
+			"donation": None,
+			"actual_date": None,
+			"actual_amount": 0,
+			"reversal_source": "",
+			"reversal_kind": "",
+			"reversal_reference": None,
+			"reversal_date": None,
+			"reversal_amount": 0,
+			"reversal_recorded_on": None,
+			"reconciled_on": now_datetime(),
+		}
+	)
+	allow_evidence_remap(installment)
+	installment.save(ignore_permissions=True)
 
 
 def _load_installments(schedule_name: str):

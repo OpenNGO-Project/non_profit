@@ -207,9 +207,11 @@ existing Customer primary Address. When none is set, only a unique active
 primary Donor Address or the sole active Donor Address is selected; with several
 unresolved Addresses the Customer primary stays blank so postal readiness can
 report the ambiguity. Disabled Addresses are never selected as primary. New
-Customers require a non-group Default Customer Group; the root **All Customer
-Groups** is not valid. For an individual Donor,
-the hidden canonical Contact field is persisted as well.
+Customers require both **Default Customer Group** and **Default Territory** in
+Selling Settings. Each configured record must exist and be a non-group leaf; a
+blank, missing, or group default is a setup error and never falls back to an
+arbitrary row. The root **All Customer Groups** is not valid. For an individual
+Donor, the hidden canonical Contact field is persisted as well.
 When creating a Donor from Desk, use the Contact/Customer dialog to select a
 Contact, a Customer, or both. Contact-only Donors stay linked to the Contact
 without forcing Customer creation; selecting a Customer links both Contact and
@@ -703,6 +705,13 @@ If schedule cadence or dates change, obsolete expected rows remain as **Retired
 Expectation** audit evidence and no longer affect active expected/missed totals.
 Do not delete them. A later change that makes the same date expected again
 reactivates the row; linked payment and reversal evidence remains visible.
+The 16.18.1 migration repairs the older cumulative month-end drift (for example,
+Jan 31 → Feb 28 → Mar 28) by moving a settled Donation snapshot from the retired
+legacy date to the matching anchored cadence row (Mar 31). The legacy date row
+remains for schedule audit but no longer duplicates the accounting evidence.
+The repair is safe to rerun. If it reports ambiguous, conflicting, or incomplete
+evidence, inspect the named schedule; migration deliberately stops instead of
+guessing which installment owns the settlement.
 Daily reconciliation keeps a future local **Next Date** or provider next-payment
 date in scope. A historical reversal date remains audit evidence; it does not
 move the current reconciliation clock backward.
