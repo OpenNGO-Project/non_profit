@@ -943,7 +943,7 @@ def _run_concurrent_donor_for_customer(site: str, customer_name: str, barrier: B
 		barrier.wait(timeout=30)
 		try:
 			donor = get_or_create_donor_for_customer(customer_name, ignore_permissions=True)
-		except frappe.QueryDeadlockError, frappe.QueryTimeoutError:
+		except (frappe.QueryDeadlockError, frappe.QueryTimeoutError):  # fmt: skip
 			frappe.db.rollback()
 			return "retryable"
 		frappe.db.commit()  # nosemgrep: frappe-manual-commit
