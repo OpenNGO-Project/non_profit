@@ -766,6 +766,8 @@ _ORGANIZATION_GREETINGS = {
 
 _SALUTATION_FALLBACK_LANGUAGE = "de"
 
+_ADDRESSEE_KINDS = ("person", "household", "organization")
+
 
 def _complete_neutral_salutation(addressee: str, language: str, *, kind: str) -> str:
 	"""Greeting for an addressee with no separable name parts.
@@ -773,8 +775,12 @@ def _complete_neutral_salutation(addressee: str, language: str, *, kind: str) ->
 	``kind`` "household"/"person" are greeted by name; "organization" is not,
 	because addressing a company by its own name reads as addressing a person.
 	Required, with no default, so a new caller cannot silently greet a company
-	by its own name — the defect this argument exists to prevent.
+	by its own name — the defect this argument exists to prevent. An unknown
+	value throws for the same reason: a misspelled "organisation" must not
+	silently fall into greet-by-name.
 	"""
+	if kind not in _ADDRESSEE_KINDS:
+		raise ValueError(f"unknown addressee kind {kind!r}; expected one of {_ADDRESSEE_KINDS}")
 	# `.get()` rather than `[...]`: an unsupported language must fall back, not
 	# raise mid-campaign. Newsletter languages are already normalized, but this
 	# helper is also reachable with a raw stored value.

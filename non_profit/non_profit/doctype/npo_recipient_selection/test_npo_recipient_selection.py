@@ -118,6 +118,15 @@ class TestNPORecipientSelectionValidation(UnitTestCase):
 			"Guten Tag Ada Example",
 		)
 
+	def test_an_unknown_addressee_kind_is_rejected(self) -> None:
+		# A wrong kind must be as loud as a missing one: "organisation",
+		# "Organization", or any typo would otherwise silently fall into the
+		# greet-by-name branch and greet a company by its own name.
+		for wrong in ("organisation", "Organization", "company", "", None):
+			with self.subTest(kind=wrong):
+				with self.assertRaises(ValueError):
+					_complete_neutral_salutation("Example Organization", "de", kind=wrong)
+
 	def test_source_rows_respect_row_level_visibility(self) -> None:
 		selection = self._selection()
 		selection.include_contacts = 1
