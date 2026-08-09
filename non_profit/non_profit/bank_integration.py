@@ -63,6 +63,25 @@ def _candidate(donation_name: str, *, eligible: bool = True) -> dict:
 	return candidate
 
 
+def _account_currency_matches(account: str | None, currency: str | None) -> bool:
+	"""Behavioral twin of ``good_connector.bank_integration.account_currency_matches``.
+
+	This public repository cannot import the connector; the private-side
+	twin-7 parity suite pins both formulations, so a boundary change on either
+	side fails a test instead of silently changing which bank credits
+	auto-reconcile.
+	"""
+	if not account or not currency:
+		return False
+	return get_account_currency(account) == currency
+
+
+def _amount_within_outstanding(amount, outstanding) -> bool:
+	"""Behavioral twin of ``good_connector.bank_integration.amount_within_outstanding``:
+	quantized to 0.01, boundary equality stays eligible."""
+	return Decimal(str(amount)) <= Decimal(str(outstanding)).quantize(Decimal("0.01"))
+
+
 def _supports_automatic_currency_matching(
 	donation_name: str, bank_transaction, bank_account: str | None = None
 ) -> bool:
@@ -73,7 +92,7 @@ def _supports_automatic_currency_matching(
 	bank_account = bank_account or frappe.get_cached_value(
 		"Bank Account", bank_transaction.bank_account, "account"
 	)
-	if not bank_account or get_account_currency(bank_account) != bank_transaction.currency:
+	if not _account_currency_matches(bank_account, bank_transaction.currency):
 		return False
 
 	from non_profit.non_profit.custom_doctype.payment_entry import expected_donation_party_account
@@ -84,7 +103,7 @@ def _supports_automatic_currency_matching(
 	party_account = expected_donation_party_account(
 		frappe._dict(company=donation.company, donor=donation.donor)
 	)
-	return bool(party_account and get_account_currency(party_account) == bank_transaction.currency)
+	return _account_currency_matches(party_account, bank_transaction.currency)
 
 
 def get_ebics_reconciliation_candidates(
@@ -105,7 +124,7 @@ def get_ebics_reconciliation_candidates(
 
 	from non_profit.non_profit.custom_doctype.payment_entry import _donation_outstanding_amount
 
-	if amount > Decimal(str(_donation_outstanding_amount(donation_name))).quantize(Decimal("0.01")):
+	if not _amount_within_outstanding(amount, _donation_outstanding_amount(donation_name)):
 		return [_candidate(donation_name, eligible=False)]
 	return [_candidate(donation_name)]
 
