@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase, UnitTestCase
@@ -47,10 +47,9 @@ class TestRecurringDonation(UnitTestCase):
 		create_donation.assert_not_called()
 
 	def test_worker_skips_schedule_advanced_after_candidate_query(self) -> None:
-		candidate = frappe._dict(name="REC-TEST")
 		recurring = Mock(status="Active", next_date="2026-08-01", is_provider_managed=False)
 		with (
-			patch.object(frappe, "get_all", return_value=[candidate]),
+			patch.object(frappe, "get_all", side_effect=[["REC-TEST"], []]),
 			patch(
 				"non_profit.non_profit.doctype.recurring_donation.recurring_donation.nowdate",
 				return_value="2026-07-23",
@@ -70,11 +69,10 @@ class TestRecurringDonation(UnitTestCase):
 		recurring.advance_next_date.assert_not_called()
 
 	def test_worker_advances_observed_installment_once(self) -> None:
-		candidate = frappe._dict(name="REC-TEST")
 		recurring = Mock(status="Active", next_date="2026-07-01", is_provider_managed=False)
 		recurring.close_if_next_date_is_past_end.return_value = False
 		with (
-			patch.object(frappe, "get_all", return_value=[candidate]),
+			patch.object(frappe, "get_all", side_effect=[["REC-TEST"], []]),
 			patch(
 				"non_profit.non_profit.doctype.recurring_donation.recurring_donation.nowdate",
 				return_value="2026-07-23",
@@ -129,7 +127,6 @@ class TestRecurringDonation(UnitTestCase):
 		current.advance_next_date.assert_not_called()
 
 	def test_worker_closes_past_end_before_creating(self) -> None:
-		candidate = frappe._dict(name="REC-TEST")
 		recurring = Mock(
 			name="REC-TEST",
 			status="Active",
@@ -138,7 +135,7 @@ class TestRecurringDonation(UnitTestCase):
 		)
 		recurring.close_if_next_date_is_past_end.return_value = True
 		with (
-			patch.object(frappe, "get_all", return_value=[candidate]),
+			patch.object(frappe, "get_all", side_effect=[["REC-TEST"], []]),
 			patch(
 				"non_profit.non_profit.doctype.recurring_donation.recurring_donation.nowdate",
 				return_value="2026-07-23",
@@ -154,6 +151,150 @@ class TestRecurringDonation(UnitTestCase):
 		recurring.close_if_next_date_is_past_end.assert_called_once_with(ignore_permissions=True)
 		recurring._get_or_create_current_donation.assert_not_called()
 		commit.assert_called_once_with()
+
+	def test_advance_next_date_keeps_the_month_end_anchor(self) -> None:
+		# Stepping cumulatively from the previous date turned a Jan-31 monthly
+		# schedule into Feb 28, Mar 28, ... — permanently off the day the donor
+		# agreed to. Advancing on the start-date anchor recovers Mar 31.
+		recurring = RecurringDonation(
+			{
+				"doctype": "Recurring Donation",
+				"start_date": "2026-01-31",
+				"next_date": "2026-02-28",
+				"frequency": "Monthly",
+			}
+		)
+		recurring.advance_next_date()
+		self.assertEqual(getdate(recurring.next_date), getdate("2026-03-31"))
+
+	def test_advance_next_date_self_heals_a_drifted_schedule(self) -> None:
+		# A schedule that already drifted under the old cumulative stepping
+		# (Mar 28 instead of Mar 31) snaps back onto the anchor cadence.
+		recurring = RecurringDonation(
+			{
+				"doctype": "Recurring Donation",
+				"start_date": "2026-01-31",
+				"next_date": "2026-03-28",
+				"frequency": "Monthly",
+			}
+		)
+		recurring.advance_next_date()
+		self.assertEqual(getdate(recurring.next_date), getdate("2026-04-30"))
+
+	def test_advance_next_date_anchors_quarterly_and_yearly_frequencies(self) -> None:
+		quarterly = RecurringDonation(
+			{
+				"doctype": "Recurring Donation",
+				"start_date": "2026-01-31",
+				"next_date": "2026-04-30",
+				"frequency": "Quarterly",
+			}
+		)
+		quarterly.advance_next_date()
+		self.assertEqual(getdate(quarterly.next_date), getdate("2026-07-31"))
+		leap_yearly = RecurringDonation(
+			{
+				"doctype": "Recurring Donation",
+				"start_date": "2024-02-29",
+				"next_date": "2025-02-28",
+				"frequency": "Yearly",
+			}
+		)
+		leap_yearly.advance_next_date()
+		self.assertEqual(getdate(leap_yearly.next_date), getdate("2026-02-28"))
+
+	def test_advance_next_date_without_start_date_stays_on_the_current_cadence(self) -> None:
+		recurring = RecurringDonation(
+			{
+				"doctype": "Recurring Donation",
+				"next_date": "2026-05-15",
+				"frequency": "Monthly",
+			}
+		)
+		recurring.advance_next_date()
+		self.assertEqual(getdate(recurring.next_date), getdate("2026-06-15"))
+
+	def test_worker_drains_every_due_page(self) -> None:
+		# One fixed page of 100 left day N's overflow to day N+1, and one
+		# persistently failing schedule occupied a slot every run. The keyset
+		# drain pages until the due set is empty.
+		first = Mock(status="Active", next_date="2026-07-01", is_provider_managed=False)
+		first.close_if_next_date_is_past_end.return_value = False
+		second = Mock(status="Active", next_date="2026-07-01", is_provider_managed=False)
+		second.close_if_next_date_is_past_end.return_value = False
+		with (
+			patch.object(frappe, "get_all", side_effect=[["REC-A"], ["REC-B"], []]) as get_all,
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation.nowdate",
+				return_value="2026-07-23",
+			),
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._lock_recurring_donation",
+				side_effect=[first, second],
+			) as lock,
+			patch.object(frappe.db, "commit"),
+		):
+			process_recurring_donations()
+
+		self.assertEqual(lock.call_args_list, [call("REC-A"), call("REC-B")])
+		self.assertEqual(get_all.call_count, 3)
+		self.assertEqual(get_all.call_args_list[1].kwargs["filters"]["name"], [">", "REC-A"])
+		self.assertEqual(get_all.call_args_list[2].kwargs["filters"]["name"], [">", "REC-B"])
+		first._get_or_create_current_donation.assert_called_once_with()
+		second._get_or_create_current_donation.assert_called_once_with()
+
+	def test_worker_drain_terminates_past_a_failing_schedule(self) -> None:
+		# A schedule whose processing throws stays due; keyset ordering must
+		# move past it rather than refetch it forever, and the Error Log must
+		# carry a bounded message, not a recipient-bearing title.
+		with (
+			patch.object(frappe, "get_all", side_effect=[["REC-FAIL"], []]) as get_all,
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation.nowdate",
+				return_value="2026-07-23",
+			),
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._lock_recurring_donation",
+				side_effect=RuntimeError("boom"),
+			),
+			patch.object(frappe.db, "rollback") as rollback,
+			patch.object(frappe, "log_error") as log_error,
+		):
+			process_recurring_donations()
+
+		self.assertEqual(get_all.call_count, 2)
+		rollback.assert_called_once_with()
+		self.assertEqual(log_error.call_args.kwargs["title"], "Recurring Donation fan-out failed")
+		self.assertIn("RuntimeError", log_error.call_args.kwargs["message"])
+		self.assertIn("REC-FAIL", log_error.call_args.kwargs["message"])
+
+
+class TestExpectedDateAnchoring(UnitTestCase):
+	def test_expected_dates_keep_the_month_end_anchor(self) -> None:
+		# Cumulative stepping produced Jan 31, Feb 28, Mar 28, Apr 28 — off the
+		# provider's charge anchor from March on. Anchored advancement recovers
+		# the month-end day whenever the month has it.
+		from non_profit.non_profit.recurring_reconciliation import _expected_dates
+
+		schedule = frappe._dict(name="REC-ANCHOR", start_date="2026-01-31", frequency="Monthly")
+		self.assertEqual(
+			_expected_dates(schedule, getdate("2026-04-30")),
+			[getdate("2026-01-31"), getdate("2026-02-28"), getdate("2026-03-31"), getdate("2026-04-30")],
+		)
+
+	def test_expected_dates_anchor_quarterly_and_leap_yearly(self) -> None:
+		from non_profit.non_profit.recurring_reconciliation import _expected_dates
+
+		quarterly = frappe._dict(name="REC-Q", start_date="2026-01-31", frequency="Quarterly")
+		self.assertEqual(
+			_expected_dates(quarterly, getdate("2026-08-01")),
+			[getdate("2026-01-31"), getdate("2026-04-30"), getdate("2026-07-31")],
+		)
+		leap_yearly = frappe._dict(name="REC-Y", start_date="2024-02-29", frequency="Yearly")
+		self.assertEqual(
+			_expected_dates(leap_yearly, getdate("2026-03-01")),
+			[getdate("2024-02-29"), getdate("2025-02-28"), getdate("2026-02-28")],
+		)
 
 
 class TestRecurringDonationConcurrency(IntegrationTestCase):
@@ -334,10 +475,9 @@ class TestProviderBackedSchedules(UnitTestCase):
 
 	def test_worker_re_checks_provider_ownership_under_the_lock(self):
 		"""The filter can go stale between the candidate query and the lock."""
-		candidate = frappe._dict(name="REC-PROVIDER")
 		recurring = Mock(status="Active", next_date="2026-07-01", is_provider_managed=True)
 		with (
-			patch.object(frappe, "get_all", return_value=[candidate]),
+			patch.object(frappe, "get_all", side_effect=[["REC-PROVIDER"], []]),
 			patch(
 				"non_profit.non_profit.doctype.recurring_donation.recurring_donation.nowdate",
 				return_value="2026-08-07",

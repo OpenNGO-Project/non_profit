@@ -125,9 +125,12 @@ def reconcile_recurring_donations() -> None:
 			try:
 				reconcile_recurring_donation(name)
 				frappe.db.commit()  # nosemgrep: frappe-manual-commit
-			except Exception:
+			except Exception as exc:
 				frappe.db.rollback()
-				frappe.log_error(title=f"Recurring Donation reconciliation failed: {name}")
+				frappe.log_error(
+					title="Recurring Donation reconciliation failed",
+					message=f"operation=reconcile schedule={name} exception={type(exc).__name__}",
+				)
 		last_name = names[-1]
 
 
@@ -237,7 +240,8 @@ def _reconciliation_horizon(schedule, as_of, through_date):
 def _expected_dates(schedule, horizon) -> list:
 	if not schedule.start_date or not schedule.frequency:
 		return []
-	current = getdate(schedule.start_date)
+	start = getdate(schedule.start_date)
+	current = start
 	dates = []
 	while current <= horizon:
 		dates.append(current)
@@ -247,12 +251,15 @@ def _expected_dates(schedule, horizon) -> list:
 					schedule.name
 				)
 			)
+		# Advance from the schedule anchor, not the previous date: cumulative
+		# steps turn a Jan-31 monthly schedule into Feb 28, Mar 28, ... and
+		# permanently lose the month-end day the provider keeps charging on.
 		if schedule.frequency == "Monthly":
-			current = add_months(current, 1)
+			current = add_months(start, len(dates))
 		elif schedule.frequency == "Quarterly":
-			current = add_months(current, 3)
+			current = add_months(start, 3 * len(dates))
 		elif schedule.frequency == "Yearly":
-			current = add_years(current, 1)
+			current = add_years(start, len(dates))
 		else:
 			frappe.throw(_("Unsupported Recurring Donation frequency {0}.").format(schedule.frequency))
 	return dates

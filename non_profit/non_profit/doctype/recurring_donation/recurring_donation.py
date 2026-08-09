@@ -179,12 +179,19 @@ class RecurringDonation(Document):
 		return _has_provider_state(self)
 
 	def advance_next_date(self):
+		# Advance on the start-date anchor rather than stepping from the current
+		# date: cumulative steps turn a Jan-31 monthly schedule into Feb 28,
+		# Mar 28, ... and never recover the month-end day the donor agreed to.
+		# Anchoring also self-heals schedules that already drifted.
+		start = getdate(self.start_date) if self.start_date else getdate(self.next_date)
+		current = getdate(self.next_date)
+		elapsed_months = (current.year - start.year) * 12 + (current.month - start.month)
 		if self.frequency == "Monthly":
-			self.next_date = add_months(getdate(self.next_date), 1)
+			self.next_date = add_months(start, elapsed_months + 1)
 		elif self.frequency == "Quarterly":
-			self.next_date = add_months(getdate(self.next_date), 3)
+			self.next_date = add_months(start, elapsed_months + 3)
 		elif self.frequency == "Yearly":
-			self.next_date = add_years(getdate(self.next_date), 1)
+			self.next_date = add_years(start, current.year - start.year + 1)
 		if self.end_date and getdate(self.next_date) > getdate(self.end_date):
 			self.status = "Cancelled"
 			self.update(
@@ -588,27 +595,41 @@ def process_recurring_donations():
 	running on a date would duplicate each one.
 	"""
 	today = getdate(nowdate())
-	due = frappe.get_all(
-		"Recurring Donation",
-		filters={
+	# Keyset drain like reconcile_recurring_donations: a fixed single page would
+	# leave day N's overflow to day N+1, and a persistently failing schedule
+	# would occupy a slot every run. Keyset order also terminates even when a
+	# failing row stays due.
+	last_name = ""
+	while True:
+		filters = {
 			"status": "Active",
 			"next_date": ["<=", today],
 			"payment_provider": ["in", ["", None]],
-		},
-		fields=["name"],
-		order_by="name asc",
-		limit_page_length=100,
-	)
-	for candidate in due:
-		name = candidate.name
-		try:
-			if not _process_due_recurring_donation(name, today):
+		}
+		if last_name:
+			filters["name"] = [">", last_name]
+		due = frappe.get_all(
+			"Recurring Donation",
+			filters=filters,
+			pluck="name",
+			order_by="name asc",
+			limit_page_length=100,
+		)
+		if not due:
+			break
+		for name in due:
+			try:
+				if not _process_due_recurring_donation(name, today):
+					frappe.db.rollback()
+					continue
+				frappe.db.commit()  # nosemgrep: frappe-manual-commit
+			except Exception as exc:
 				frappe.db.rollback()
-				continue
-			frappe.db.commit()  # nosemgrep: frappe-manual-commit
-		except Exception:
-			frappe.log_error(title=f"Recurring Donation fan-out failed: {name}")
-			frappe.db.rollback()
+				frappe.log_error(
+					title="Recurring Donation fan-out failed",
+					message=f"operation=fan_out schedule={name} exception={type(exc).__name__}",
+				)
+		last_name = due[-1]
 
 
 def _process_due_recurring_donation(name: str, today) -> str | None:
