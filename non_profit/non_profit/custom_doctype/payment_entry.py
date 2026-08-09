@@ -11,7 +11,7 @@ from erpnext.accounts.utils import get_account_currency
 from frappe import _
 from frappe.query_builder import Order
 from frappe.query_builder.functions import Sum
-from frappe.utils.data import comma_or, flt, getdate
+from frappe.utils.data import comma_or, flt, getdate, nowdate
 
 
 class NonProfitPaymentEntry(PaymentEntry):
@@ -189,8 +189,67 @@ def build_donation_payment_entry(
 
 
 def sync_donation_accounting_state_for_payment_entry(payment_entry, method: str | None = None) -> None:
+	if payment_entry.docstatus == 2:
+		_record_full_recurring_reversals_for_cancelled_payment_entry(payment_entry)
 	sync_donation_paid_state_for_payment_entry(payment_entry)
 	sync_donation_reconciliation_state_for_payment_entry(payment_entry)
+
+
+def _record_full_recurring_reversals_for_cancelled_payment_entry(payment_entry) -> None:
+	"""Preserve settled installment evidence before cancellation clears ``Donation.paid``."""
+	for donation_name in sorted(_donation_names_for_payment_entry(payment_entry)):
+		schedule_name = frappe.db.get_value("Donation", donation_name, "recurring_donation")
+		if not schedule_name:
+			continue
+		# Match the provider reversal path's schedule -> Donation lock order.
+		frappe.get_doc("Recurring Donation", schedule_name, for_update=True)
+		donation = frappe.db.get_value(
+			"Donation",
+			donation_name,
+			["amount", "recurring_donation"],
+			as_dict=True,
+			for_update=True,
+		)
+		if not donation or donation.recurring_donation != schedule_name:
+			frappe.throw(_("The Donation changed recurring schedule during Payment Entry cancellation."))
+		if not _has_full_recurring_settlement_snapshot(donation_name, schedule_name, donation.amount):
+			continue
+		# Every submitted allocation must be gone and the persisted cancelled
+		# allocations must cover the complete settlement. This handles split
+		# payments without treating one partial cancellation as a full reversal.
+		if _submitted_donation_payment_total(donation_name, for_update=True) > 0:
+			continue
+		if _cancelled_donation_payment_total(donation_name) < flt(donation.amount):
+			continue
+		from non_profit.non_profit.recurring_reconciliation import (
+			record_recurring_installment_reversal,
+		)
+
+		record_recurring_installment_reversal(
+			donation_name,
+			reversal_kind="Payment Entry Cancellation",
+			reversal_reference=payment_entry.name,
+			reversal_date=nowdate(),
+			reversal_amount=donation.amount,
+		)
+
+
+def _has_full_recurring_settlement_snapshot(
+	donation_name: str,
+	schedule_name: str,
+	donation_amount: float,
+) -> bool:
+	installment = frappe.qb.DocType("Recurring Donation Installment")
+	rows = (
+		frappe.qb.from_(installment)
+		.select(installment.actual_date, installment.actual_amount)
+		.where(installment.recurring_donation == schedule_name)
+		.where(installment.donation == donation_name)
+		.orderby(installment.name)
+		.limit(2)
+		.for_update()
+	).run()
+	return bool(len(rows) == 1 and rows[0][0] and abs(flt(rows[0][1]) - flt(donation_amount)) < 0.000001)
 
 
 def sync_donation_paid_state_for_payment_entry(payment_entry) -> None:
@@ -224,6 +283,15 @@ def sync_donation_paid_state(donation_name: str) -> None:
 			recompute_donor_giving(donor)
 		if major_gift:
 			recompute_major_gift_closed(major_gift)
+		from non_profit.non_profit.household_giving import recompute_households_for_donor
+
+		if donor:
+			recompute_households_for_donor(donor)
+		recurring_donation = frappe.db.get_value("Donation", donation_name, "recurring_donation")
+		if recurring_donation:
+			from non_profit.non_profit.recurring_reconciliation import reconcile_recurring_donation
+
+			reconcile_recurring_donation(recurring_donation)
 
 	sync_donation_advance_paid(donation_name)
 
@@ -280,6 +348,24 @@ def _submitted_donation_payment_total(
 	query = query.select(Sum(payment_reference.allocated_amount))
 	total = query.run()[0][0]
 	return flt(total)
+
+
+def _cancelled_donation_payment_total(donation_name: str) -> float:
+	payment_entry = frappe.qb.DocType("Payment Entry")
+	payment_reference = frappe.qb.DocType("Payment Entry Reference")
+	rows = (
+		frappe.qb.from_(payment_reference)
+		.inner_join(payment_entry)
+		.on(payment_entry.name == payment_reference.parent)
+		.select(payment_reference.allocated_amount)
+		.where(payment_entry.docstatus == 2)
+		.where(payment_reference.reference_doctype == "Donation")
+		.where(payment_reference.reference_name == donation_name)
+		.orderby(payment_entry.name)
+		.orderby(payment_reference.name)
+		.for_update()
+	).run()
+	return sum(flt(row[0]) for row in rows)
 
 
 def _donation_outstanding_amount(donation_name: str, exclude_payment_entry: str | None = None) -> float:

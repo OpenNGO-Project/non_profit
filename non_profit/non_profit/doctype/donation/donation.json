@@ -32,6 +32,22 @@
   "column_break_12",
   "payment_id",
   "confirmation_key",
+  "tribute_section",
+  "tribute_type",
+  "tribute_honouree",
+  "tribute_notification_requested",
+  "tribute_notification_name",
+  "tribute_notification_contact",
+  "tribute_notification_email",
+  "tribute_column_break",
+  "tribute_notification_address",
+  "tribute_notification_address_text",
+  "tribute_notification_message",
+  "tribute_fulfillment_section",
+  "tribute_fulfillment_status",
+  "tribute_fulfilled_on",
+  "tribute_fulfilled_by",
+  "tribute_fulfillment_note",
   "amended_from"
  ],
  "fields": [
@@ -89,7 +105,8 @@
    "fieldtype": "Link",
    "label": "Recurring Donation",
    "options": "Recurring Donation",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "major_gift",
@@ -216,7 +233,8 @@
   {
    "fieldname": "payment_id",
    "fieldtype": "Data",
-   "label": "Payment ID"
+   "label": "Payment ID",
+   "search_index": 1
   },
   {
    "fieldname": "confirmation_key",
@@ -230,6 +248,127 @@
   {
    "fieldname": "column_break_12",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "tribute_section",
+   "fieldtype": "Section Break",
+   "label": "Tribute Gift"
+  },
+  {
+   "fieldname": "tribute_type",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Tribute Type",
+   "no_copy": 1,
+   "options": "\nIn Honour\nIn Memory"
+  },
+  {
+   "depends_on": "eval:doc.tribute_type",
+   "fieldname": "tribute_honouree",
+   "fieldtype": "Data",
+   "label": "Honouree",
+   "no_copy": 1
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.tribute_type",
+   "fieldname": "tribute_notification_requested",
+   "fieldtype": "Check",
+   "label": "Notification Requested",
+   "no_copy": 1
+  },
+  {
+   "depends_on": "eval:doc.tribute_notification_requested",
+   "fieldname": "tribute_notification_name",
+   "fieldtype": "Data",
+   "label": "Notification Recipient",
+   "no_copy": 1
+  },
+  {
+   "depends_on": "eval:doc.tribute_notification_requested",
+   "fieldname": "tribute_notification_contact",
+   "fieldtype": "Link",
+   "label": "Notification Contact",
+   "no_copy": 1,
+   "options": "Contact"
+  },
+  {
+   "depends_on": "eval:doc.tribute_notification_requested",
+   "fieldname": "tribute_notification_email",
+   "fieldtype": "Data",
+   "label": "Notification Email",
+   "no_copy": 1,
+   "options": "Email"
+  },
+  {
+   "fieldname": "tribute_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.tribute_notification_requested",
+   "fieldname": "tribute_notification_address",
+   "fieldtype": "Link",
+   "label": "Notification Address",
+   "no_copy": 1,
+   "options": "Address"
+  },
+  {
+   "depends_on": "eval:doc.tribute_notification_requested",
+   "description": "Guest-provided address snapshot. Public forms never create or modify Address master data for a tribute recipient.",
+   "fieldname": "tribute_notification_address_text",
+   "fieldtype": "Small Text",
+   "label": "Notification Address Snapshot",
+   "no_copy": 1
+  },
+  {
+   "depends_on": "eval:doc.tribute_notification_requested",
+   "fieldname": "tribute_notification_message",
+   "fieldtype": "Small Text",
+   "label": "Tribute Message",
+   "no_copy": 1
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.tribute_type",
+   "fieldname": "tribute_fulfillment_section",
+   "fieldtype": "Section Break",
+   "label": "Tribute Fulfillment"
+  },
+  {
+   "allow_on_submit": 1,
+   "default": "Not Requested",
+   "fieldname": "tribute_fulfillment_status",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Fulfillment Status",
+   "no_copy": 1,
+   "options": "Not Requested\nPending\nFulfilled\nUnable",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "tribute_fulfilled_on",
+   "fieldtype": "Datetime",
+   "label": "Fulfilled On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "tribute_fulfilled_by",
+   "fieldtype": "Link",
+   "label": "Fulfilled By",
+   "no_copy": 1,
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "allow_on_submit": 1,
+   "fieldname": "tribute_fulfillment_note",
+   "fieldtype": "Small Text",
+   "label": "Fulfillment Note",
+   "no_copy": 1,
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,

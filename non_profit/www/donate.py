@@ -6,10 +6,7 @@ from frappe.rate_limiter import rate_limit
 from frappe.utils import cint, cstr, nowdate, validate_email_address
 
 from non_profit.non_profit.campaign_gate import campaign_matches_company
-from non_profit.non_profit.doctype.donor.donor import (
-	find_donor_by_email,
-	get_or_create_customer_for_donor,
-)
+from non_profit.non_profit.donor_identity import resolve_donor_customer_identity
 from non_profit.non_profit.identity_lock import acquire_public_email_identity_lock
 from non_profit.non_profit.integration_hooks import CAPTCHA, first_provider
 
@@ -69,6 +66,12 @@ def get_context(context):
 		try:
 			donation_name = _handle_submission(frappe.form_dict)
 		except frappe.ValidationError as e:
+			# The website handler converts validation failures into a normal page
+			# response, so Frappe will not perform its usual exception rollback.
+			# Roll back the complete request before redisplaying the form: identity
+			# helpers and checkout providers may already have written rows or
+			# registered transaction callbacks before a later validation failed.
+			frappe.db.rollback()
 			context.error = str(e)
 			context.campaigns = _get_active_campaigns()
 			return context
@@ -149,25 +152,8 @@ def _handle_submission(form):
 		frappe.throw(_("Selected campaign is not available for the Donation company."))
 
 	donor_type = settings.default_donor_type or "Individual"
-	if not frappe.db.exists("Donor Type", donor_type):
-		dt = frappe.get_doc({"doctype": "Donor Type", "donor_type": donor_type})
-		dt.flags.ignore_permissions = True
-		dt.insert()
 
-	donor_record = find_donor_by_email(email)
-	if not donor_record:
-		donor = frappe.get_doc(
-			{
-				"doctype": "Donor",
-				"donor_name": donor_name,
-				"donor_type": donor_type,
-			}
-		)
-		donor.flags.ignore_permissions = True
-		donor.insert()
-		donor_record = donor.name
-	else:
-		donor = frappe.get_doc("Donor", donor_record)
+	def preserve_existing_donor_name(donor) -> None:
 		if donor.donor_name != donor_name:
 			# Never let unauthenticated input rewrite an existing master
 			# record (the old rename let anyone knowing a donor's email
@@ -176,7 +162,15 @@ def _handle_submission(form):
 				"Comment",
 				_("Public donation form submitted a different donor name: {0}").format(donor_name),
 			)
-	get_or_create_customer_for_donor(donor, email=email)
+
+	donor, _customer = resolve_donor_customer_identity(
+		donor_name=donor_name,
+		email=email,
+		donor_type=donor_type,
+		ambiguous_email_policy="reject",
+		existing_donor_handler=preserve_existing_donor_name,
+	)
+	donor_record = donor.name
 
 	# A payment integration, when one is installed, owns the whole collection
 	# path: it creates the schedule with its own provider linkage and returns a

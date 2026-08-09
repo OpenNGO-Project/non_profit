@@ -16,7 +16,13 @@ frappe.ui.form.on("Recurring Donation", {
 		if (!provider_managed && frm.doc.status === "Active") {
 			frm.page.add_action_item(__("Create Next Donation Now"), () => {
 				frm.call("create_next_donation").then((r) => {
-					frappe.msgprint(__("Created donation {0}", [r.message]));
+					if (r.message === "Cancelled") {
+						frappe.msgprint(
+							__("Schedule closed because its next date is after the end date.")
+						);
+					} else {
+						frappe.msgprint(__("Created donation {0}", [r.message]));
+					}
 					frm.reload_doc();
 				});
 			});

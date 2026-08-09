@@ -1,7 +1,9 @@
 ## Non Profit
 
 A Goodvantage-maintained hard fork of the Frappe Non Profit app for Frappe v16
-and ERPNext.
+and ERPNext. It includes provider-neutral recurring-gift reconciliation,
+Household giving summaries, tribute-gift fulfillment state, membership, and
+Swiss fundraising workflows.
 
 
 ### Installation
@@ -27,6 +29,7 @@ Current fork documentation:
 
 - `HOW_TO.md` - operator/admin workflows.
 - `DOCUMENTATION.md` - technical architecture and app contracts.
+- `REQUIREMENTS.md` - numbered behavior requirements.
 - `AGENTS.md` - coding-agent rules and gotchas.
 
 

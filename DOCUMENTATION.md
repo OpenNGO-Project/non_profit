@@ -28,7 +28,7 @@ else described a Customer-regime redesign that was never shipped.
 - **NPO Organization** is the canonical organization identity anchor. ERPNext Customer and Supplier remain operating/accounting parties linked through hidden preparatory identity fields. NPO Organization is a legal-identity grouping only and is never a ledger party: several operating Customers (for example a parent and its branch) may share one legal identity without being merged, and verified-identifier uniqueness belongs to the NPO Organization rather than to any operating Customer. `legal_form` and identifiers owned by other apps are source evidence, not verified identity; base `non_profit` ships no country-specific identifier normalizer.
 - **`Customer.npo_subject_type` is the authoritative NPO subject classification.** Code branches on it and never infers person/Household-ness from `customer_type`, name, address, or email. `Customer.npo_household` means "this Customer *is* the Household"; the legacy `Customer.household` means "this individual Customer *belongs to* a Household". The two must never be conflated — `household` is retired only once its social meaning has fully moved to Household Person rows. Supplier deliberately carries `npo_subject_type` / `npo_contact` / `npo_organization` but **no** `npo_household`.
 - **Household** (with the **Household Person** child table) groups Contacts who share an address into one solicitation unit; see [Households](#households).
-- **Donor**, **Donation**, **Donation Campaign**, **Recurring Donation**, and **Donation Tax Receipt** for fundraising. `Donor.customer` is the canonical ERPNext Customer relation for donor identity; Donation still links to Donor.
+- **Donor**, **Donation**, **Donation Campaign**, **Recurring Donation**, read-only **Recurring Donation Installment**, and **Donation Tax Receipt** for fundraising. `Donor.customer` is the canonical ERPNext Customer relation for donor identity; Donation still links to Donor.
   Donation carries analysis dimensions `cost_center` (fetched from the campaign's cost center when empty) and `project` (both ERPNext doctypes) for downstream fundraising analytics (e.g. the `good_analytics` app).
 - **Donation Tax Receipt** is the Swiss annual *Spendenbescheinigung*: one row per Donor, calendar tax year, and Company (unique index), holding the aggregated total, donation count, and the `{donation, date, amount}` detail list behind it. It is a plain (non-submittable) document whose `status` (Draft / Issued / Cancelled) can only be changed through `non_profit.non_profit.tax_receipts`; see [Donation Tax Receipts](#donation-tax-receipts). Since 16.10.0 it is the **single** Bescheinigung of the app — the older submittable `Donation Receipt` (+ `Donation Receipt Item`) was removed outright. It serves both dispatch paths: annual postal batches through `good_direct_mail`, and individual email issuance with the seeded `Spendenbescheinigung` PDF.
 - **Sponsor**, **Sponsor Tier**, **Volunteer**, and **Grant Application** for broader NPO operations.
@@ -104,6 +104,25 @@ DocType metadata but retained a populated `tabHousehold Member`, the pre-model
 patch validates and copies those rows into an already-synced Household Person
 table while retaining the orphan table as a recovery backup.
 
+Household also carries a materialized giving summary: lifetime total, gift
+count, first/last gift dates, last amount, and largest amount. Its population is
+the set union of Donors backed by **current** Household People and the canonical
+Household-subject Donor used for joint giving. The union prevents double
+counting when one Donor is reachable by both paths. The basis is exactly
+submitted, paid Donation (`docstatus = 1`, `paid = 1`), matching Donor roll-ups.
+Every recompute locks the Household first and locks the bounded identity set,
+but deliberately does not lock every historical Donation. Donation/payment
+writers run the same Household-serialized recompute after changing qualifying
+state, so the final writer repairs any concurrent snapshot without a broad lock.
+Linking a historical Donor to a canonical Contact refreshes both its former
+projected Household and its current Contact Household. Gift
+count and dates remain meaningful across currencies. Monetary fields use
+`giving_currency` only when every qualifying Donation Company resolves to one
+common default currency; mixed or unresolved currency clears all money fields
+and sets `giving_currency_conflict` for review. Donation/payment/cancellation
+hooks, Household person changes, the daily fundraising reconciliation, and the
+migration backfill refresh these fields in bounded Household batches.
+
 ## Correspondence Profiles
 
 `Contact.preferred_language` is an editable setup-owned Custom Field (Link to
@@ -151,10 +170,11 @@ to those lookups.
 
 Current Household people are ordered primary first and then by Contact name.
 Profiles expose structured people/name components and an addressee, plus a
-resolved language and exact `{doctype, name, fieldname}` provenance. The
-language precedence available in this substrate is current Household, source or
-related Donor, backing or related Customer, then canonical/current or related
-Contact. A campaign-level
+resolved language and exact `{doctype, name, fieldname}` provenance. Current
+Household remains first. An Organization then uses its canonical/backing Customer
+before source or related Donor, so a role's default cannot override the legal
+entity's explicit language; other subjects keep Donor before Customer. Canonical,
+current, or related Contact follows both. A campaign-level
 recipient override and run default remain consumer-owned fallbacks.
 
 Active (`Address.disabled = 0`) Addresses are collected set-based from standard
@@ -276,7 +296,7 @@ again; it never trusts the earlier source list — a disabled selection, or one
 whose `available_for_newsletter` flag is off, is refused there as well.
 
 Each row carries `email`, optional `contact`, `first_name`, `last_name`, the
-complete `salutation` (`Guten Tag …` / `Bonjour …,`), and `language`, matching
+complete `salutation`, and `language`, matching
 good_newsletter's contact-aware provider contract. A candidate that resolves to
 no reachable address keeps its row with an empty `email`; good_newsletter counts
 those as `skipped_no_email` in the import summary rather than silently losing
@@ -311,6 +331,16 @@ or missing values remain blank so the target Audience applies its configured
 default. The complete neutral salutation uses the same default German greeting
 when language is blank, matching Good Newsletter's default Audience language,
 without inventing a stored language on the source identity.
+
+Greeting rendering is identity-kind safe. Person and Household addressees use
+`Guten Tag <name>`, `Bonjour <name>,`, `Buongiorno <name>,`, or
+`Dear <name>,`. Organization candidates never address a legal entity as though
+its organization name were a person; they use `Sehr geehrte Damen und Herren,`,
+`Madame, Monsieur,`, `Gentili Signore e Signori,`, or `Dear Sir or Madam,`.
+Their canonical Customer language wins over a related Donor's default language.
+Unsupported and blank languages fall back to German. When a person/Household
+addressee is blank, the renderer returns only the greeting and removes the comma
+that would otherwise dangle after an empty name.
 
 The typed, GET-only `preview_recipient_selection(selection)` endpoint checks
 selection and source permissions, counts the complete canonical union, and
@@ -478,6 +508,99 @@ exclusion reason. It deliberately does not replace channel-owned
 consent/suppression machinery, and non_profit itself imports no consumer app —
 the helper is a neutral seam like the audience provider hooks.
 
+## Recurring Donation Reconciliation And Closure
+
+`Recurring Donation Installment` is a read-only, service-owned audit row. It is
+not an invoice, a provider request, or a charge instruction. Reconciliation
+materializes cadence dates from `start_date` through the latest of the current
+processing date, an explicit requested horizon, a reported provider next-payment
+date, and a future local `next_date`, then caps that horizon by terminal closure
+and `end_date`. A historical reversal date remains audit evidence and never
+moves the reconciliation clock backward. It snapshots expected amount/currency, assigns an
+exact-date Donation first, then assigns a late paid Donation to the latest
+unfilled due expectation. Extra submitted paid Donations become `Unexpected`.
+Only `docstatus = 1, paid = 1` establishes the first actual settlement; an unpaid
+generated Donation may link to its expectation but never contributes actual
+amount. Once established, the Donation/date/amount snapshot is immutable and is
+not cleared when a Payment Entry cancellation later clears `Donation.paid`.
+
+When cadence, start/end dates, or provider horizon remove a previously
+materialized date, reconciliation sets `is_retired` and `retired_on` instead of
+deleting the row. Retired dates leave active expected/missed/variance roll-ups,
+but keep linked Donation, reversal, amount, and date evidence. A later schedule
+change that makes the same date expected again reactivates the row.
+Direct insert/update/delete remains capability-guarded. Deleting the owning
+Recurring Donation is the only normal cascade: its `on_trash` deletes installment
+rows through the same guarded framework lifecycle before link validation.
+
+Statuses are Expected, Settled, Missed, Variance, Unexpected, Reversed, and
+Cancelled. Reversed is derived only from complete immutable source/kind/reference/
+date/amount evidence written by the neutral full-reversal service. The Payment
+Entry cancellation hook records accounting evidence before clearing paid;
+authenticated providers may record a Full Refund or Chargeback through the same
+public API. Donation cancellation, docstatus, partial refund, and dispute state
+alone never manufacture a reversal. The reversal Source and Kind Selects carry
+explicit blank defaults and blank first options so a new expectation has no
+reversal evidence. A versioned post-model cleanup clears only the exact former
+automatic `Accounting` / `Payment Entry Cancellation` pair when reference, date,
+amount, and recorded-on evidence are all absent. It is idempotent and preserves
+both partial review evidence and complete legitimate reversals. Currency stores
+a blank reversal amount as zero; the controller treats that zero as absent and
+allows the reversal service to replace it. Any partial evidence or nonpositive
+amount fails validation. A finite positive amount plus every other reversal field
+is complete evidence, and a source/kind-compatible complete reversal makes every
+reversal field immutable. The same numeric rule lets reconciliation replace the
+blank zero `actual_amount` while retaining per-field immutability after an actual
+snapshot value exists. Full-reversal paths lock the corresponding schedule before
+the Donation. Payment Entry cancellation also requires one locked installment
+whose persisted actual date and amount prove that the complete Donation was
+settled. Only then can no submitted allocation plus locked cancelled-allocation
+history covering the full amount establish reversal. Cancelling the final leg of
+a concurrently full split settlement records the Donation amount and that final
+Payment Entry reference. Separate partial settle/cancel attempts never combine
+into a full reversal because no full actual snapshot existed.
+An exact replay must match the immutable kind/source/reference/amount and any
+supplied date, while conflicting provider or accounting evidence is rejected.
+Recurring
+Donation stores counts plus due expected amount, settled actual amount, and
+settlement variance. Reconciliation runs on schedule,
+Donation, and Payment Entry changes and daily. The daily job pages schedule
+names and commits or rolls back each locked schedule independently; migration
+backfills page names without loading the entire table. Composite lookup indexes
+cover provider identity, provider transaction replay, and installment matching.
+Reconciliation never imports or calls a provider, so it cannot initiate charges.
+The post-model backfill uses each schedule's current amount for historical
+expected dates because the previous schema retained no amount-effective-date
+history. It validates every legacy schedule against the Company's default
+currency before writing and aborts with examples on mismatch rather than
+relabelling historical amounts. Per-schedule Donation reads are capped.
+
+`Payment Failed` and `Cancelled` are terminal and require category/reason,
+optional details, date, and user. Allowed reasons distinguish donor request,
+provider final failure/cancellation, end date, provider-verified abandoned
+mandate, administration, retired Pause migration, and unknown historical state.
+The category/reason Select metadata includes explicit blank defaults and blank
+first options; without both, Frappe initializes a new Active schedule with the
+first business values. A versioned post-model cleanup removes only that exact
+`Donor` / `Donor requested cancellation` contamination from non-terminal rows.
+It is idempotent and deliberately leaves every terminal row untouched because
+the same values may be legitimate closure evidence there.
+The first terminal transition always overwrites submitted date/user values with
+the server timestamp and acting session user. Terminal schedules cannot reopen,
+repeated terminal actions do not rewrite them,
+and their category/reason/details/date/user audit is immutable after closure.
+Failure count/date/decline reason remain separate provider evidence. The closure
+patch recognizes known retired-Pause
+and abandoned-mandate comments; otherwise an old terminal row becomes
+Historical rather than being falsely attributed to the donor. The final
+expectation on a Payment Failed closure date is Missed; a true Cancelled closure
+cancels expectations from that effective date. Natural end-date closure is the
+exception: after the final due Donation is generated, its expectation stays
+active so it can settle, vary, or become missed. Manual and scheduled local fan-out
+close a locked schedule before creating anything when its next date is already
+beyond the end date. Provider-verified abandoned mandates reconcile their
+expectations immediately after closure.
+
 ## Hooks
 
 - `after_install = non_profit.setup.setup_non_profit`
@@ -497,6 +620,18 @@ the helper is a neutral seam like the audience provider hooks.
   descriptor maps the `donation_tax_receipt` key to `direct_mail_candidate_rows`.
   Only `good_direct_mail` reads the factory hook, so it is inert when that app is
   not installed.
+- `demo_data_reset_declarations` registers the app-neutral
+  `non_profit.non_profit.demo_data_reset.get_reset_declaration` provider. It
+  declares the app-owned fundraising/member records that a reset coordinator may
+  marker-scope and delete. Its checker captures only `Recurring Donation
+  Installment` rows linked to the captured schedules; cleanup locks each frozen
+  row, revalidates its current schedule owner, and deletes those exact names
+  through the reconciliation write capability. Cleanup also locks and clears
+  `Donor.next_action_task` and `Major Gift.next_action_task` only when both the
+  parent and linked Task are in the frozen reset scope; those exact metadata
+  edges are declared in `cleanup_managed_links`. Verification queries only the
+  frozen names. The provider imports or names no private reset consumer and is
+  inert when no consumer resolves the hook.
 - `non_profit_referenced_email_providers` (consumed by
   `non_profit.non_profit.mailer.send_referenced_email`) lets a downstream
   delivery app deliver the app's doc-referenced emails
@@ -519,7 +654,10 @@ the helper is a neutral seam like the audience provider hooks.
   columns so the form dashboard does not overflow horizontally on narrow Desk
   layouts. Changing the chart year keeps the existing chart in place while the
   new data loads and restores the mobile scroll position after replacement.
-- Daily scheduler jobs expire memberships and process recurring donations.
+- Four daily scheduler jobs expire memberships, process due recurring Donations,
+  reconcile fundraising roll-ups, and reconcile recurring expected-versus-actual
+  evidence. Recurring reconciliation uses independently committed schedule
+  batches so one malformed schedule does not undo earlier repairs.
 - Recurring Donation processing creates submitted, unpaid Donation rows for due
   active schedules **that no payment provider owns**. The candidate query
   excludes any schedule carrying `payment_provider`, and the locked worker
@@ -531,8 +669,9 @@ the helper is a neutral seam like the audience provider hooks.
   date would duplicate each one. It obtains the complete current schedule document in one
   locking read, checks that current state is still active and due, and performs
   a locking lookup before reusing or creating the installment for that
-  schedule/date. It advances `next_date` at most once, cancels schedules that
-  pass `end_date`, and commits or rolls back each schedule independently. A
+  schedule/date. It closes a schedule before creation when the locked
+  `next_date` is already after `end_date`, advances `next_date` at most once,
+  and commits or rolls back each schedule independently. A
   two-connection regression runs the real worker helper and proves that two due
   workers create one installment. The POST-only manual action also discards its
   caller's stale state and acts on the complete locking read.
@@ -547,6 +686,8 @@ the helper is a neutral seam like the audience provider hooks.
   rather than silently succeeding, because a no-op would leave the donor
   charged the old amount while the record claims otherwise. Both actions lock
   and authorize the current row; an incomplete provider binding fails closed.
+  Cancellation reconciles the local schedule before dispatch, so invalid local
+  evidence cannot be followed by an external cancellation.
   Once any provider state exists, ordinary saves cannot rewrite Company,
   status, amount, currency, frequency, or linkage. Those fields and all
   provider lifecycle fields are excluded from copies.
@@ -556,13 +697,14 @@ the helper is a neutral seam like the audience provider hooks.
   same hook and changes the row to Cancelled only after a provider returns
   explicit `safe_to_retire: true` evidence. The action is POST-only, checks the
   current locked row's write permission, stores the provider evidence on the
-  timeline, and otherwise fails closed.
+  timeline, immediately reconciles installment expectations, and otherwise fails closed.
 - `provider_account` is pinned when the subscription is adopted and never
   re-resolved. A subscription lives inside one provider account and cannot be
   moved between them, so re-resolving from configuration would address
   whichever account is configured today rather than the one holding the
   donor's mandate.
 - Installments from a provider are recorded by `record_provider_installment`,
+  which first locks and reloads the current provider-managed schedule. They are
   keyed for idempotency on the **provider's transaction id** rather than the
   date. Provider webhooks retry for days, so a replay reuses existing evidence
   even when the Donation was later cancelled; it never posts replacement
@@ -570,9 +712,12 @@ the helper is a neutral seam like the audience provider hooks.
   period still records. New paid installments call Donation's authoritative
   `on_payment_authorized` state machine for Payment Entry rollback, thank-you
   dispatch, and donor/Major Gift roll-ups. A charge without a transaction id is
-  refused. A trusted provider may pass the authenticated amount, payment date,
-  and downstream Donation values; the payment date becomes both the Donation
-  date and generated Payment Entry posting/reference date.
+  refused. The Donation's Donor and Company must match the schedule. A trusted
+  provider may pass the authenticated amount/payment date and decorate only
+  installed value-bearing Donation Custom Fields; standard identity, schedule,
+  payment, amount, date, and doctype fields cannot be overridden. The payment
+  date becomes both the Donation date and generated Payment Entry
+  posting/reference date.
 - `apply_provider_status` maps the provider's five lifecycle states onto
   Active / Payment Retrying / Payment Failed / Ending / Cancelled. Payment
   Retrying and Payment Failed stay distinct so staff do not chase donors the
@@ -690,16 +835,38 @@ leaf Cost Center belonging to that Company. That campaign/Company gate lives
 once in `non_profit.non_profit.campaign_gate.campaign_matches_company()` so
 downstream guest surfaces can reuse the same security boundary; ownership is
 derived from the campaign's Cost Center, never from the campaign name or
-historical Donations. Before any
-Donor/Customer lookup or creation, the normalized email acquires the same hashed
-`Individual` identity lock used by other public and guided identity flows
-through transaction completion. Browser `required` attributes are
+historical Donations. Before any Donor/Customer lookup or creation, the
+normalized email acquires the same hashed `Individual` identity lock used by
+other public and guided identity flows through transaction completion. The
+handler then calls
+`resolve_donor_customer_identity(..., ambiguous_email_policy="reject")`; it
+never selects the first Donor by email. Candidate discovery includes the
+individual Donor's canonical `Donor.contact -> Contact.email_id` path as well as
+Member/Customer and legacy compatibility paths. Multiple Donors or Customers
+return the same neutral guest failure before any identity master or Donation is
+created or changed. One Donor plus one same-email Customer is also rejected
+unless `Donor.customer` already links them, or the Customer is explicitly
+classified as `Person` and shares the Donor's canonical Contact through
+`npo_contact`, `customer_primary_contact`, or a Contact Dynamic Link. A Company
+Customer's primary contact never proves that the person and company are one
+identity. Ambiguity diagnostics use the
+`non_profit` application logger with a SHA-256 email fingerprint and candidate
+counts, never Error Log: Frappe's Error Log automatically captures request form
+metadata that includes the submitted email. Missing Donor Type setup fails
+closed only if a new Donor is needed; the guest request never provisions
+configuration. Reusing one existing Donor
+preserves its name; a different submitted name is an audit Comment only, never
+an unauthenticated rename. Browser `required` attributes are
 UX only. The handler is rate-limited. Every guest submission must include a
 valid GoodVantage CAPTCHA response. Missing Good Connector or missing/unreadable
 CAPTCHA configuration fails closed; the app can still be installed without Good
 Connector, but public donation submission is unavailable until CAPTCHA support
 is installed and configured. The submit control starts disabled and follows the
 shared loader's `data-load-state`; server verification remains authoritative.
+Because the website handler redisplays `ValidationError` as a normal response,
+it performs a full database rollback first. Partial identity, Comment, Donation,
+or provider writes and transaction callbacks therefore cannot be committed by a
+late public-form validation failure.
 
 The base public page and confirmation label amounts as EUR, and the seeded
 `Donation Thank You DE` template formats EUR. The separate `Donation Slip CH`
@@ -718,6 +885,27 @@ build their own confirm redirect must use `donation_confirm_query()`.
 Donations created before the field existed have no key and are therefore not
 guest-viewable.
 
+## Tribute Gifts
+
+Donation stores tribute designation and fulfillment without introducing a
+second donor/recipient master. `tribute_type` is `In Honour` or `In Memory` and
+requires `tribute_honouree`. A notification request can carry a recipient name,
+staff-selected Contact/Address, email, postal-address snapshot, and personal
+message. `non_profit.non_profit.tribute.public_tribute_values()` is the guest
+boundary: it validates bounded snapshots and never creates, links, renames, or
+updates Contact/Address records.
+
+Fulfillment begins as `Pending` only when notification was explicitly requested;
+otherwise it is `Not Requested`. No Donation insert, submit, payment callback,
+or reconciliation sends a tribute notification. Staff explicitly use the
+Donation action to mark a submitted paid gift `Fulfilled` or `Unable`; the latter
+requires an internal note. The action requires Donation write permission and
+read permission on a linked recipient Contact or Address. Terminal fulfillment
+writes date/user/note audit and cannot be supplied by insert/import, direct
+submitted-document PUT/save, edited, or switched to another outcome. The guard
+runs explicitly in `before_update_after_submit`. The service response contains only the Donation and
+status, not recipient details.
+
 ## Donation Thank-Yous
 
 Donor identity mirrors the Member/Customer pattern: `Donation.donor` points to a
@@ -734,7 +922,14 @@ Frappe's `Language` DocType, matching core language selectors such as
 `non_profit.non_profit.doctype.donor.donor.get_or_create_customer_for_donor()`
 reuse a Customer from a same-email Member first, then a same-email Customer, and
 otherwise create a new Customer. The helper links Contact and Address rows to
-both Donor and Customer. A one-time migrate patch preserves existing
+both Donor and Customer. New Customers use the Selling Settings Customer Group
+only when it is a non-group row, otherwise a deterministic non-group fallback;
+the `All Customer Groups` root is never assigned. Every Donor-linked Address is
+propagated to the Customer, while an existing Customer primary Address is
+preserved. When that pointer is blank, only a unique enabled primary Address or
+the sole enabled Address is selected. Disabled or unresolved multiple Addresses
+never become primary, leaving downstream correspondence to report the ambiguity
+instead of hiding it behind an arbitrary pointer. A one-time migrate patch preserves existing
 `Donor.email` values by creating/linking Customers before the Donor email field
 is removed from the model. The patch runs after DocType model sync so fresh
 installs have the newer `Donor.customer` column before it queries donor rows;
@@ -744,10 +939,18 @@ runs.
 `non_profit.non_profit.donor_identity.resolve_donor_customer_identity()` is the
 policy-capable orchestration service for public/presentation callers. Non Profit
 owns email normalization, Member-aware Customer lookup, Donor/Customer linking,
-and Contact/Address continuity; callers provide only presentation values,
-existing-Donor handling, insertion strategy, and ambiguity policy. Public
-consumers use safe rejection: when more than one Donor or Customer resolves to an email, staff
-must resolve the identity instead of a guest request choosing one arbitrarily.
+canonical Donor Contact-email lookup, and Contact/Address continuity; callers
+provide only presentation values, existing-Donor handling, insertion strategy,
+and ambiguity policy. Public consumers use safe rejection: when more than one
+Donor or Customer resolves to an email, or when a sole Donor and sole Customer
+have no existing Donor-Customer link or explicitly Person-classified shared
+canonical Contact proving one identity, staff must resolve the records instead
+of a guest request choosing or linking them arbitrarily.
+The generic `/donate` page is one such consumer and explicitly passes
+`ambiguous_email_policy="reject"`; the legacy first-match lookup is not allowed
+on this guest path. A missing Donor Type is a setup error rather than a reason to
+create configuration from public input. Its existing-Donor callback may record
+a submitted name mismatch but does not rename the master.
 The older `find_donor_by_email()` and `get_or_create_customer_for_donor()`
 dotted paths remain supported.
 

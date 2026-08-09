@@ -1,5 +1,6 @@
 import frappe
 from frappe import _
+from frappe.model import NO_VALUE_FIELDS
 from frappe.model.document import Document
 from frappe.utils import add_months, add_years, cint, cstr, escape_html, getdate, now_datetime, nowdate
 
@@ -26,6 +27,26 @@ PROVIDER_MANAGED_IMMUTABLE_FIELDS = (
 	"frequency",
 	*PROVIDER_LINK_FIELDS,
 )
+TERMINAL_STATUSES = ("Payment Failed", "Cancelled")
+CLOSURE_FIELDS = (
+	"closure_category",
+	"closure_reason",
+	"closure_details",
+	"closed_on",
+	"closed_by",
+)
+CLOSURE_REASONS = {
+	"Donor": ("Donor requested cancellation",),
+	"Provider": (
+		"Provider final payment failure",
+		"Provider reported cancellation",
+		"Abandoned mandate retired",
+	),
+	"Schedule": ("End date reached",),
+	"Administrative": ("Administrative closure",),
+	"Migration": ("Paused status retired",),
+	"Historical": ("Historical terminal state",),
+}
 
 # Provider-reported lifecycle, mapped to schedule status. Two are easy to get
 # wrong and both cost money:
@@ -56,7 +77,6 @@ PROVIDER_STATUS_TRANSITIONS = {
 
 class RecurringDonation(Document):
 	def validate(self):
-		self._validate_provider_managed_fields()
 		if self.donor:
 			self.email = get_donor_email(self.donor) or self.email
 		if not self.start_date:
@@ -67,6 +87,54 @@ class RecurringDonation(Document):
 			frappe.throw(_("End Date cannot be before Start Date"))
 		if not self.currency:
 			self.currency = self._default_currency()
+		validate_recurring_donation_currency(self)
+		self._validate_provider_managed_fields()
+		self._validate_terminal_closure()
+
+	def after_insert(self) -> None:
+		_reconcile_schedule(self, through_date=self.next_date)
+
+	def on_update(self) -> None:
+		_reconcile_schedule(self, through_date=self.provider_next_payment or self.next_date)
+
+	def on_trash(self) -> None:
+		if not frappe.db.exists("DocType", "Recurring Donation Installment"):
+			return
+		from non_profit.non_profit.doctype.recurring_donation_installment.recurring_donation_installment import (
+			allow_reconciliation_write,
+		)
+
+		for installment in frappe.get_all(
+			"Recurring Donation Installment",
+			filters={"recurring_donation": self.name},
+			pluck="name",
+			order_by="name asc",
+			limit_page_length=0,
+		):
+			installment_doc = frappe.get_doc("Recurring Donation Installment", installment)
+			allow_reconciliation_write(installment_doc)
+			installment_doc.delete(ignore_permissions=True, delete_permanently=True)
+
+	def _validate_terminal_closure(self) -> None:
+		before = self.get_doc_before_save()
+		entering_terminal = not before or before.status not in TERMINAL_STATUSES
+		if before and before.status in TERMINAL_STATUSES:
+			if self.status != before.status:
+				frappe.throw(_("A terminal Recurring Donation cannot be reopened; create a new schedule."))
+			if any(self.has_value_changed(fieldname) for fieldname in CLOSURE_FIELDS):
+				frappe.throw(_("Terminal closure audit fields cannot be changed."))
+		closure_values = tuple(self.get(fieldname) for fieldname in CLOSURE_FIELDS)
+		if self.status not in TERMINAL_STATUSES:
+			if any(closure_values):
+				frappe.throw(_("Closure fields are only valid for a terminal Recurring Donation."))
+			return
+		if self.closure_category not in CLOSURE_REASONS:
+			frappe.throw(_("Closure Category is required for a terminal Recurring Donation."))
+		if self.closure_reason not in CLOSURE_REASONS[self.closure_category]:
+			frappe.throw(_("Closure Reason does not match the selected Closure Category."))
+		if entering_terminal:
+			self.closed_on = now_datetime()
+			self.closed_by = frappe.session.user
 
 	def _validate_provider_managed_fields(self) -> None:
 		before = self.get_doc_before_save()
@@ -119,6 +187,32 @@ class RecurringDonation(Document):
 			self.next_date = add_years(getdate(self.next_date), 1)
 		if self.end_date and getdate(self.next_date) > getdate(self.end_date):
 			self.status = "Cancelled"
+			self.update(
+				_terminal_closure_values(
+					"Schedule",
+					"End date reached",
+					_("The next installment date passed the configured End Date."),
+				)
+			)
+
+	def close_if_next_date_is_past_end(self, *, ignore_permissions: bool = False) -> bool:
+		"""Close a local schedule before an out-of-range installment can be created."""
+		if (
+			self.status in TERMINAL_STATUSES
+			or not self.next_date
+			or not self.end_date
+			or getdate(self.next_date) <= getdate(self.end_date)
+		):
+			return False
+		self.update(
+			_terminal_closure_values(
+				"Schedule",
+				"End date reached",
+				_("The next installment date is after the configured End Date."),
+			)
+		)
+		self.save(ignore_permissions=ignore_permissions)
+		return True
 
 	def create_donation(self, mark_paid: bool = False, **values):
 		donation = frappe.get_doc(
@@ -165,6 +259,8 @@ class RecurringDonation(Document):
 					current.payment_provider
 				)
 			)
+		if current.close_if_next_date_is_past_end():
+			return current.status
 		donation = current._get_or_create_current_donation()
 		current.advance_next_date()
 		current.save()
@@ -196,17 +292,19 @@ class RecurringDonation(Document):
 		current = _lock_recurring_donation(self.name)
 		current.check_permission("write")
 		new_amount = _validated_amount(amount)
+		if current.status not in COLLECTING_STATUSES:
+			frappe.throw(_("This schedule is {0} and is no longer charged.").format(_(current.status)))
+		_reconcile_schedule(current)
 		if current.is_provider_managed and not current.is_provider_backed:
 			frappe.throw(_("This provider-managed schedule is incomplete and cannot be changed safely."))
 		if not current.is_provider_backed:
 			current.db_set("amount", new_amount)
+			_reconcile_schedule(current)
 			return cstr(new_amount)
-		if current.status not in COLLECTING_STATUSES:
-			frappe.throw(_("This schedule is {0} and is no longer charged.").format(_(current.status)))
-
 		previous = current.amount
 		_dispatch_provider(current, "change_amount", amount=new_amount)
 		current.db_set("amount", new_amount)
+		_reconcile_schedule(current, through_date=current.provider_next_payment)
 		current.add_comment(
 			"Comment",
 			_("Amount changed from {0} to {1}. The provider applies it from the next charge.").format(
@@ -216,17 +314,25 @@ class RecurringDonation(Document):
 		return cstr(new_amount)
 
 	@frappe.whitelist(methods=["POST"])
-	def cancel_schedule(self) -> str:
+	def cancel_schedule(self, details: str | None = None) -> str:
 		"""Stop future charges. Immediate — no provider here offers a grace period."""
 		current = _lock_recurring_donation(self.name)
 		current.check_permission("write")
-		if current.status == "Cancelled":
+		if current.status in TERMINAL_STATUSES:
 			return current.status
 		if current.is_provider_managed and not current.is_provider_backed:
 			frappe.throw(_("This provider-managed schedule is incomplete and cannot be cancelled safely."))
+		_reconcile_schedule(current)
 		if current.is_provider_backed:
 			_dispatch_provider(current, "cancel")
-		current.db_set("status", "Cancelled")
+		current.db_set(
+			_terminal_closure_values(
+				"Donor",
+				"Donor requested cancellation",
+				cstr(details).strip() or None,
+			)
+		)
+		_reconcile_schedule(current)
 		current.add_comment("Comment", _("Schedule cancelled by {0}.").format(frappe.session.user))
 		notify(current, CANCELLED)
 		return "Cancelled"
@@ -249,7 +355,14 @@ class RecurringDonation(Document):
 		if not isinstance(evidence, dict) or evidence.get("safe_to_retire") is not True:
 			frappe.throw(_("The payment provider did not prove that this pending mandate is safe to retire."))
 
-		current.db_set("status", "Cancelled")
+		current.db_set(
+			_terminal_closure_values(
+				"Provider",
+				"Abandoned mandate retired",
+				frappe.as_json(evidence),
+			)
+		)
+		_reconcile_schedule(current)
 		current.add_comment(
 			"Comment",
 			_("Abandoned Pending Mandate retired by {0} after provider verification: {1}").format(
@@ -282,10 +395,14 @@ class RecurringDonation(Document):
 		transaction_id = cstr(transaction_id).strip()
 		if not transaction_id:
 			frappe.throw(_("A provider installment needs the provider's transaction id."))
+		current = _lock_recurring_donation(self.name)
+		if not current.is_provider_managed:
+			frappe.throw(_("Provider installments require a provider-managed Recurring Donation."))
+		donation_values = _provider_installment_donation_values(donation_values)
 
 		existing = frappe.db.get_value(
 			"Donation",
-			{"recurring_donation": self.name, "payment_id": transaction_id},
+			{"recurring_donation": current.name, "payment_id": transaction_id},
 			"name",
 			order_by="creation asc",
 			for_update=True,
@@ -296,14 +413,15 @@ class RecurringDonation(Document):
 			# post the same money a second time.
 			return frappe.get_doc("Donation", existing, for_update=True)
 
-		donation = self.create_donation(
+		donation = current.create_donation(
 			mark_paid=True,
 			date=getdate(paid_on) if paid_on else nowdate(),
-			amount=amount if amount is not None else self.amount,
+			amount=amount if amount is not None else current.amount,
 			payment_id=transaction_id,
-			**(donation_values or {}),
+			**donation_values,
 		)
-		self.db_set({"failure_count": 0, "last_decline_reason": None})
+		current.db_set({"failure_count": 0, "last_decline_reason": None})
+		_reconcile_schedule(current, as_of=getattr(donation, "date", paid_on))
 		return donation
 
 	def apply_provider_status(self, provider_status: str, *, next_payment=None) -> str | None:
@@ -312,6 +430,8 @@ class RecurringDonation(Document):
 		if not mapped:
 			return None
 		previous = self.status
+		if previous in TERMINAL_STATUSES and mapped == previous:
+			return previous
 		if mapped != previous and mapped not in PROVIDER_STATUS_TRANSITIONS.get(previous, frozenset()):
 			frappe.log_error(
 				title="Recurring Donation: stale provider status ignored",
@@ -327,7 +447,24 @@ class RecurringDonation(Document):
 			# two from drifting into contradicting each other in reports.
 			updates["next_date"] = getdate(next_payment)
 		if mapped != previous:
-			updates["status"] = mapped
+			if mapped == "Payment Failed":
+				updates.update(
+					_terminal_closure_values(
+						"Provider",
+						"Provider final payment failure",
+						cstr(self.last_decline_reason).strip() or None,
+					)
+				)
+			elif mapped == "Cancelled":
+				updates.update(
+					_terminal_closure_values(
+						"Provider",
+						"Provider reported cancellation",
+						cstr(self.last_decline_reason).strip() or None,
+					)
+				)
+			else:
+				updates["status"] = mapped
 		if updates:
 			self.db_set(updates)
 		if mapped != previous:
@@ -342,6 +479,7 @@ class RecurringDonation(Document):
 				# The mandate is confirmed the first time the provider reports it
 				# active, not when the schedule row was reserved.
 				notify(self, SIGNUP)
+		_reconcile_schedule(self, through_date=next_payment)
 		return mapped
 
 	def record_provider_failure(self, *, reason: str | None = None, provider_status: str | None = None):
@@ -360,6 +498,62 @@ def _validated_amount(amount) -> float:
 	from non_profit.non_profit.utils import validate_public_donation_amount
 
 	return validate_public_donation_amount(cstr(amount))
+
+
+def validate_recurring_donation_currency(schedule) -> str:
+	"""Require local accounting terms to use the Recurring Donation Company's currency."""
+	company = cstr(schedule.get("company")).strip()
+	if not company:
+		frappe.throw(_("Company is required for a Recurring Donation."))
+	company_currency = cstr(frappe.get_cached_value("Company", company, "default_currency")).strip()
+	if not company_currency:
+		frappe.throw(_("Company {0} has no default currency.").format(frappe.bold(company)))
+	if cstr(schedule.get("currency")).strip() != company_currency:
+		frappe.throw(
+			_("Recurring Donation currency must match Company {0}'s default currency {1}.").format(
+				frappe.bold(company),
+				frappe.bold(company_currency),
+			)
+		)
+	return company_currency
+
+
+def _provider_installment_donation_values(values: dict | None) -> dict:
+	"""Allow provider apps to decorate installments through their Custom Fields only."""
+	if values is None:
+		return {}
+	if not isinstance(values, dict):
+		frappe.throw(_("Provider installment Donation values must be a mapping."))
+
+	meta = frappe.get_meta("Donation")
+	allowed = {}
+	for fieldname, value in values.items():
+		field = meta.get_field(fieldname) if isinstance(fieldname, str) else None
+		if not field or not getattr(field, "is_custom_field", False) or field.fieldtype in NO_VALUE_FIELDS:
+			frappe.throw(
+				_("Provider installment Donation values may contain only value-bearing Custom Fields.")
+			)
+		allowed[fieldname] = value
+	return allowed
+
+
+def _terminal_closure_values(category: str, reason: str, details: str | None = None) -> dict:
+	return {
+		"status": "Payment Failed" if reason == "Provider final payment failure" else "Cancelled",
+		"closure_category": category,
+		"closure_reason": reason,
+		"closure_details": cstr(details).strip()[:1000] or None,
+		"closed_on": now_datetime(),
+		"closed_by": frappe.session.user,
+	}
+
+
+def _reconcile_schedule(schedule, *, as_of=None, through_date=None) -> None:
+	if not schedule.name or not frappe.db.exists("Recurring Donation", schedule.name):
+		return
+	from non_profit.non_profit.recurring_reconciliation import reconcile_recurring_donation
+
+	reconcile_recurring_donation(schedule.name, as_of=as_of, through_date=through_date)
 
 
 def _has_provider_state(schedule) -> bool:
@@ -403,6 +597,7 @@ def process_recurring_donations():
 		},
 		fields=["name"],
 		order_by="name asc",
+		limit_page_length=100,
 	)
 	for candidate in due:
 		name = candidate.name
@@ -422,6 +617,8 @@ def _process_due_recurring_donation(name: str, today) -> str | None:
 		return None
 	if recurring.status != "Active" or not recurring.next_date or getdate(recurring.next_date) > today:
 		return None
+	if recurring.close_if_next_date_is_past_end(ignore_permissions=True):
+		return recurring.name
 	donation = recurring._get_or_create_current_donation()
 	recurring.advance_next_date()
 	recurring.save(ignore_permissions=True)

@@ -26,6 +26,9 @@ class Donation(Document):
 
 	def validate(self):
 		self._validate_amount()
+		from non_profit.non_profit.tribute import validate_tribute
+
+		validate_tribute(self)
 		if self.meta.has_field("grand_total"):
 			# Mirrors Sales Invoice semantics: ERPNext's generic Payment Entry
 			# reference-details fallback computes Donation outstanding amounts
@@ -41,6 +44,7 @@ class Donation(Document):
 				self.create_donor_for_website_user()
 			else:
 				frappe.throw(_("Please select a Donor"))
+		self._validate_recurring_donation_identity()
 		self._validate_major_gift_donor()
 
 	def on_submit(self):
@@ -51,6 +55,14 @@ class Donation(Document):
 		from non_profit.non_profit.custom_doctype.payment_entry import sync_donation_advance_paid
 
 		sync_donation_advance_paid(self.name)
+
+	def before_update_after_submit(self) -> None:
+		# Frappe's submitted-document save path does not rely on ordinary validate
+		# for the allow_on_submit audit fields. Re-run the capability guard here so
+		# direct PUT/save cannot forge tribute fulfillment evidence.
+		from non_profit.non_profit.tribute import validate_tribute
+
+		validate_tribute(self)
 
 	def _validate_amount(self):
 		# Controller-level invariant: every write path (public forms, portal,
@@ -71,6 +83,21 @@ class Donation(Document):
 		gift_donor = frappe.db.get_value("Major Gift", self.major_gift, "donor")
 		if gift_donor and gift_donor != self.donor:
 			frappe.throw(_("Major Gift {0} belongs to a different donor.").format(self.major_gift))
+
+	def _validate_recurring_donation_identity(self) -> None:
+		if not self.recurring_donation:
+			return
+		schedule = frappe.db.get_value(
+			"Recurring Donation",
+			self.recurring_donation,
+			["donor", "company"],
+			as_dict=True,
+			for_update=True,
+		)
+		if not schedule:
+			frappe.throw(_("Recurring Donation {0} does not exist.").format(self.recurring_donation))
+		if schedule.donor != self.donor or schedule.company != self.company:
+			frappe.throw(_("Donation donor and company must match the linked Recurring Donation."))
 
 	def create_donor_for_website_user(self):
 		from non_profit.non_profit.identity_lock import acquire_public_email_identity_lock
@@ -187,6 +214,13 @@ class Donation(Document):
 		self.check_permission("write")
 		self._mark_thank_you_sent()
 		return True
+
+	@frappe.whitelist(methods=["POST"])
+	def mark_tribute_fulfilled(self, status: str, note: str | None = None) -> dict[str, str]:
+		from non_profit.non_profit.tribute import set_tribute_fulfillment
+
+		donation = set_tribute_fulfillment(self.name, status, note=note)
+		return {"donation": donation.name, "status": donation.tribute_fulfillment_status}
 
 	def _mark_thank_you_sent(self, email_queue: object | None = None) -> None:
 		updates = {}

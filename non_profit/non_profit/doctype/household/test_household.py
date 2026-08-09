@@ -5,7 +5,7 @@ from unittest.mock import call, patch
 
 import frappe
 from frappe.contacts.doctype.contact.contact import Contact
-from frappe.tests import IntegrationTestCase
+from frappe.tests import IntegrationTestCase, UnitTestCase
 from frappe.utils import add_days, nowdate
 
 from non_profit.non_profit.doctype.household.household import (
@@ -16,6 +16,45 @@ from non_profit.non_profit.doctype.member.member import get_or_create_member_for
 from non_profit.non_profit.doctype.membership.test_membership import make_membership, setup_membership
 
 IGNORE_TEST_RECORD_DEPENDENCIES = ["Contact"]
+
+
+class TestHouseholdGivingValues(UnitTestCase):
+	def test_mixed_currency_keeps_counts_and_dates_but_blanks_money(self) -> None:
+		from non_profit.non_profit.household_giving import _giving_values
+
+		values = _giving_values(
+			[
+				frappe._dict(name="DON-1", amount=40, date="2026-01-01", company="A", modified="1"),
+				frappe._dict(name="DON-2", amount=60, date="2026-02-01", company="B", modified="2"),
+			],
+			{"A": "CHF", "B": "EUR"},
+		)
+
+		self.assertEqual(values["gift_count"], 2)
+		self.assertEqual(str(values["first_gift_date"]), "2026-01-01")
+		self.assertEqual(str(values["last_gift_date"]), "2026-02-01")
+		self.assertEqual(values["giving_currency_conflict"], 1)
+		self.assertIsNone(values["giving_currency"])
+		self.assertIsNone(values["total_lifetime_amount"])
+		self.assertIsNone(values["last_gift_amount"])
+		self.assertIsNone(values["largest_gift_amount"])
+
+	def test_single_currency_populates_monetary_rollup(self) -> None:
+		from non_profit.non_profit.household_giving import _giving_values
+
+		values = _giving_values(
+			[
+				frappe._dict(name="DON-1", amount=40, date="2026-01-01", company="A", modified="1"),
+				frappe._dict(name="DON-2", amount=60, date="2026-02-01", company="B", modified="2"),
+			],
+			{"A": "CHF", "B": "CHF"},
+		)
+
+		self.assertEqual(values["giving_currency"], "CHF")
+		self.assertEqual(values["giving_currency_conflict"], 0)
+		self.assertEqual(values["total_lifetime_amount"], 100)
+		self.assertEqual(values["last_gift_amount"], 60)
+		self.assertEqual(values["largest_gift_amount"], 60)
 
 
 class TestHousehold(IntegrationTestCase):
@@ -276,6 +315,44 @@ class TestHousehold(IntegrationTestCase):
 			with self.assertRaises(frappe.PermissionError):
 				add_person_to_household(household.name, contact.name, nowdate())
 
+	def test_giving_rollup_counts_current_people_and_joint_giving_once(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import get_or_create_donor_for_household
+		from non_profit.non_profit.household_giving import household_donor_names
+
+		contact = self._contact("_Test Household Giving Person")
+		person_donor = self._donor("_Test Household Giving Donor", contact.name)
+		household = self._household("_Test Household Giving", [contact.name])
+		joint_donor = get_or_create_donor_for_household(household.name, ignore_permissions=True)
+
+		self._paid_donation(person_donor.name, 40)
+		self._paid_donation(joint_donor.name, 60)
+		household.reload()
+
+		self.assertEqual(household_donor_names(household.name), {person_donor.name, joint_donor.name})
+		self.assertEqual(household.total_lifetime_amount, 100)
+		self.assertEqual(household.gift_count, 2)
+		self.assertEqual(household.largest_gift_amount, 60)
+
+	def test_giving_rollup_updates_for_person_changes_and_donation_cancellation(self) -> None:
+		contact = self._contact("_Test Household Giving Change Person")
+		donor = self._donor("_Test Household Giving Change Donor", contact.name)
+		household = self._household("_Test Household Giving Changes", [contact.name])
+		donation = self._paid_donation(donor.name, 75)
+		household.reload()
+		self.assertEqual(household.total_lifetime_amount, 75)
+
+		household.set("members", [])
+		household.save()
+		household.reload()
+		self.assertEqual(household.total_lifetime_amount, 0)
+
+		household.append("members", {"contact": contact.name, "from_date": nowdate()})
+		household.save()
+		donation.cancel()
+		household.reload()
+		self.assertEqual(household.total_lifetime_amount, 0)
+		self.assertEqual(household.gift_count, 0)
+
 	def _contact(self, label: str):
 		return frappe.get_doc(
 			{
@@ -330,3 +407,22 @@ class TestHousehold(IntegrationTestCase):
 
 	def _household(self, household_name: str, contacts: list[str]):
 		return self._new_household(household_name, contacts).insert(ignore_permissions=True)
+
+	def _paid_donation(self, donor: str, amount: float):
+		company = (
+			frappe.db.get_single_value("Non Profit Settings", "donation_company")
+			or frappe.db.get_single_value("Non Profit Settings", "company")
+			or frappe.db.get_value("Company", {}, "name", order_by="name asc")
+		)
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"donor": donor,
+				"company": company,
+				"date": nowdate(),
+				"amount": amount,
+				"paid": 1,
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+		return donation

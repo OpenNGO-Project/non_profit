@@ -312,6 +312,7 @@ def find_donors_by_email(email: str | None) -> list[str]:
 
 
 def find_donor_customer_candidates(email: str | None) -> tuple[list[str], list[str]]:
+	"""Return every Donor and Customer resolving to one normalized email."""
 	email = _normalize_email(email, validate=True)
 	if not email:
 		return [], []
@@ -332,10 +333,52 @@ def find_donor_customer_candidates(email: str | None) -> tuple[list[str], list[s
 		donors_by_customer.setdefault(row.customer, []).append(row.name)
 	donors = [donor for customer in customers for donor in donors_by_customer.get(customer, [])]
 
+	for canonical_donor in _canonical_contact_donor_names_for_email(email):
+		if canonical_donor not in donors:
+			donors.append(canonical_donor)
+
 	for legacy_donor in _legacy_donor_names_for_email(email):
 		if legacy_donor not in donors:
 			donors.append(legacy_donor)
 	return donors, customers
+
+
+def donor_customer_share_identity(donor_name: str, customer_name: str) -> bool:
+	"""Whether existing links prove that a Donor and Customer are one identity."""
+	donor = frappe.db.get_value("Donor", donor_name, ["customer", "contact"], as_dict=True) or {}
+	if donor.get("customer") == customer_name:
+		return True
+
+	contact = cstr(donor.get("contact")).strip()
+	if not contact:
+		return False
+
+	customer_fields = ["customer_primary_contact"]
+	customer_meta = frappe.get_meta("Customer")
+	if customer_meta.has_field("npo_subject_type"):
+		customer_fields.append("npo_subject_type")
+	if customer_meta.has_field("npo_contact"):
+		customer_fields.append("npo_contact")
+	customer = frappe.db.get_value("Customer", customer_name, customer_fields, as_dict=True) or {}
+	if cstr(customer.get("npo_subject_type")).strip() != "Person":
+		return False
+	if contact in {
+		cstr(customer.get("customer_primary_contact")).strip(),
+		cstr(customer.get("npo_contact")).strip(),
+	}:
+		return True
+
+	return bool(
+		frappe.db.exists(
+			"Dynamic Link",
+			{
+				"parenttype": "Contact",
+				"parent": contact,
+				"link_doctype": "Customer",
+				"link_name": customer_name,
+			},
+		)
+	)
 
 
 def get_donor_email(donor) -> str | None:
@@ -430,6 +473,33 @@ def _customers_for_email(email: str | None) -> list[str]:
 def _customer_for_email(email: str | None) -> str | None:
 	customers = _customers_for_email(email)
 	return customers[0] if customers else None
+
+
+def _canonical_contact_donor_names_for_email(email: str) -> list[str]:
+	contact_meta = frappe.get_meta("Contact")
+	fields = ["name"]
+	if contact_meta.has_field("npo_identity_kind"):
+		fields.append("npo_identity_kind")
+	contact_rows = frappe.get_all(
+		"Contact",
+		filters={"email_id": email},
+		fields=fields,
+		order_by="name asc",
+	)
+	contact_names = [
+		row.name
+		for row in contact_rows
+		if not contact_meta.has_field("npo_identity_kind")
+		or cstr(row.npo_identity_kind).strip() in ("", "Person")
+	]
+	if not contact_names:
+		return []
+	return frappe.get_all(
+		"Donor",
+		filters={"contact": ["in", contact_names]},
+		pluck="name",
+		order_by="modified desc, name asc",
+	)
 
 
 def _normalize_email(email: str | None, *, validate: bool = False) -> str | None:
@@ -619,6 +689,9 @@ def ensure_contact_link(
 				_("Donor {0} does not represent an individual Contact.").format(frappe.bold(link_name))
 			)
 		ensure_canonical_contact_available("Donor", link_name, contact_name)
+		# The canonical-contact check locks the Donor in the shared identity lock
+		# order; capture the former projection from that current row.
+		previous_household = frappe.db.get_value("Donor", link_name, "household")
 		ensure_person_contact(contact_name)
 		frappe.db.set_value(
 			"Donor",
@@ -629,6 +702,10 @@ def ensure_contact_link(
 		from non_profit.non_profit.doctype.household.household import sync_contact_role_households
 
 		current_household = sync_contact_role_households(contact_name)
+		from non_profit.non_profit.household_giving import recompute_household_giving
+
+		for household in sorted({previous_household, current_household} - {None, ""}):
+			recompute_household_giving(household)
 	_ensure_contact_link_row(
 		contact_name,
 		link_doctype,
@@ -729,41 +806,70 @@ def _resolve_donor_type(donor_type: str | None = None) -> str:
 
 
 def _link_donor_address_to_customer(donor_name: str, customer: str) -> None:
-	address_name = frappe.db.get_value(
-		"Dynamic Link",
-		{"parenttype": "Address", "link_doctype": "Donor", "link_name": donor_name},
-		"parent",
-		order_by="idx asc",
+	address_names = sorted(
+		set(
+			frappe.get_all(
+				"Dynamic Link",
+				filters={"parenttype": "Address", "link_doctype": "Donor", "link_name": donor_name},
+				pluck="parent",
+				order_by="parent asc",
+			)
+		)
 	)
-	if not address_name:
+	if not address_names:
 		return
-	if not frappe.db.exists(
-		"Dynamic Link",
-		{
-			"parenttype": "Address",
-			"parent": address_name,
-			"link_doctype": "Customer",
-			"link_name": customer,
-		},
-	):
-		address = frappe.get_doc("Address", address_name)
+
+	existing_primary = frappe.db.get_value("Customer", customer, "customer_primary_address")
+	addresses = [frappe.get_doc("Address", name, for_update=True) for name in address_names]
+	for address in addresses:
+		if any(
+			row.link_doctype == "Customer" and row.link_name == customer for row in address.get("links") or []
+		):
+			continue
 		address.append("links", {"link_doctype": "Customer", "link_name": customer})
 		address.save(ignore_permissions=True)
-	if frappe.get_meta("Customer").has_field("customer_primary_address"):
+
+	if not frappe.get_meta("Customer").has_field("customer_primary_address"):
+		return
+	if existing_primary:
+		if frappe.db.get_value("Customer", customer, "customer_primary_address") != existing_primary:
+			frappe.db.set_value(
+				"Customer",
+				customer,
+				"customer_primary_address",
+				existing_primary,
+				update_modified=False,
+			)
+		return
+
+	active_addresses = [address for address in addresses if not address.get("disabled")]
+	primary_addresses = [address.name for address in active_addresses if address.get("is_primary_address")]
+	selected_primary = None
+	if len(primary_addresses) == 1:
+		selected_primary = primary_addresses[0]
+	elif not primary_addresses and len(active_addresses) == 1:
+		selected_primary = active_addresses[0].name
+	if frappe.db.get_value("Customer", customer, "customer_primary_address") != selected_primary:
 		frappe.db.set_value(
 			"Customer",
 			customer,
 			"customer_primary_address",
-			address_name,
+			selected_primary,
 			update_modified=False,
 		)
 
 
-def _default_customer_group() -> str | None:
-	for customer_group in ("Individual", "All Customer Groups"):
-		if frappe.db.exists("Customer Group", customer_group):
+def _default_customer_group() -> str:
+	configured = frappe.db.get_single_value("Selling Settings", "customer_group")
+	for customer_group in (configured, "Individual"):
+		if customer_group and frappe.db.get_value("Customer Group", customer_group, "is_group") == 0:
 			return customer_group
-	return frappe.db.get_value("Customer Group", {"is_group": 0}, "name", order_by="name asc")
+	if customer_group := frappe.db.get_value("Customer Group", {"is_group": 0}, "name", order_by="name asc"):
+		return customer_group
+	frappe.throw(
+		_("Configure a non-group Default Customer Group in Selling Settings before creating Customers."),
+		frappe.ValidationError,
+	)
 
 
 def _default_territory() -> str | None:

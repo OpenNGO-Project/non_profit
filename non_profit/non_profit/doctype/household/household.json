@@ -10,6 +10,16 @@
   "household_name",
   "preferred_language",
   "members",
+  "giving_summary_section",
+  "giving_currency",
+  "giving_currency_conflict",
+  "total_lifetime_amount",
+  "gift_count",
+  "first_gift_date",
+  "largest_gift_amount",
+  "column_break_giving",
+  "last_gift_date",
+  "last_gift_amount",
   "address_contacts",
   "address_html",
   "column_break_9",
@@ -34,6 +44,72 @@
    "fieldtype": "Table",
    "label": "People",
    "options": "Household Person"
+  },
+  {
+   "collapsible": 1,
+   "description": "Submitted, paid Donations across current Household people and the canonical Household Donor. Each Donation is counted once. Monetary totals are blank when qualifying Donations do not resolve to one Company currency.",
+   "fieldname": "giving_summary_section",
+   "fieldtype": "Section Break",
+   "label": "Giving Summary"
+  },
+  {
+   "fieldname": "giving_currency",
+   "fieldtype": "Link",
+   "label": "Giving Currency",
+   "options": "Currency",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Qualifying Donations use multiple Company currencies or include a Company without a resolved currency. Counts and dates remain valid; monetary totals are intentionally blank.",
+   "fieldname": "giving_currency_conflict",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Giving Currency Review Required",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_lifetime_amount",
+   "fieldtype": "Currency",
+   "label": "Lifetime Giving",
+   "options": "giving_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gift_count",
+   "fieldtype": "Int",
+   "label": "Gift Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "first_gift_date",
+   "fieldtype": "Date",
+   "label": "First Gift Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "largest_gift_amount",
+   "fieldtype": "Currency",
+   "label": "Largest Gift",
+   "options": "giving_currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_giving",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_gift_date",
+   "fieldtype": "Date",
+   "label": "Last Gift Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_gift_amount",
+   "fieldtype": "Currency",
+   "label": "Last Gift Amount",
+   "options": "giving_currency",
+   "read_only": 1
   },
   {
    "depends_on": "eval:!doc.__islocal;",

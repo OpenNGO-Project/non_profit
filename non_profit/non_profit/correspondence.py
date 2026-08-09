@@ -758,12 +758,13 @@ class _CorrespondenceProfileResolver:
 			)
 		related_pairs = self._related_identity_pairs(resolution)
 		source_doctype, source_name = resolution["source"]
+		donor_candidates: list[tuple[Any, str, str, str]] = []
 		donor_names = [source_name] if source_doctype == "Donor" else []
 		for donor_name in sorted(name for doctype, name in related_pairs if doctype == "Donor"):
 			if donor_name not in donor_names:
 				donor_names.append(donor_name)
 		for donor_name in donor_names:
-			candidates.append(
+			donor_candidates.append(
 				(
 					self.source_rows[("Donor", donor_name)].get("preferred_language"),
 					"Donor",
@@ -771,6 +772,7 @@ class _CorrespondenceProfileResolver:
 					"preferred_language",
 				)
 			)
+		customer_candidates: list[tuple[Any, str, str, str]] = []
 		customer_names = []
 		if resolution.get("customer") in self.customers:
 			customer_names.append(resolution["customer"])
@@ -778,7 +780,7 @@ class _CorrespondenceProfileResolver:
 			if customer_name not in customer_names:
 				customer_names.append(customer_name)
 		for customer_name in customer_names:
-			candidates.append(
+			customer_candidates.append(
 				(
 					self.customers[customer_name].get("language"),
 					"Customer",
@@ -786,6 +788,12 @@ class _CorrespondenceProfileResolver:
 					"language",
 				)
 			)
+		if resolution.get("subject_type") == "Organization":
+			candidates.extend(customer_candidates)
+			candidates.extend(donor_candidates)
+		else:
+			candidates.extend(donor_candidates)
+			candidates.extend(customer_candidates)
 		contact_names = []
 		if resolution.get("contact"):
 			contact_names.append(resolution["contact"])

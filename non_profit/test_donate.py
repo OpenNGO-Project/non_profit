@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from hashlib import sha256
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -24,6 +25,33 @@ def public_donate_pages_enabled():
 			frappe.conf.pop(DONATE_PAGES_FLAG, None)
 		else:
 			frappe.conf[DONATE_PAGES_FLAG] = previous
+
+
+@contextmanager
+def frappe_user(user: str):
+	previous_user = frappe.session.user
+	frappe.set_user(user)
+	try:
+		yield
+	finally:
+		frappe.set_user(previous_user)
+
+
+def identity_master_counts() -> dict[str, int]:
+	return {
+		doctype: frappe.db.count(doctype)
+		for doctype in (
+			"Donor Type",
+			"Donor",
+			"Customer",
+			"Contact",
+			"Address",
+			"Dynamic Link",
+			"Comment",
+			"Donation",
+			"Recurring Donation",
+		)
+	}
 
 
 class TestGenericDonatePagesGate(IntegrationTestCase):
@@ -132,6 +160,28 @@ class TestDonateConfirmPage(IntegrationTestCase):
 
 
 class TestDonatePage(IntegrationTestCase):
+	def test_validation_redisplay_rolls_back_partial_submission_writes(self) -> None:
+		donor_type = f"_Test Rolled Back Public Donation {frappe.generate_hash(length=8)}"
+
+		def partially_write_then_fail(_form):
+			frappe.get_doc({"doctype": "Donor Type", "donor_type": donor_type}).insert(
+				ignore_permissions=True
+			)
+			frappe.throw("late validation failure")
+
+		context = frappe._dict()
+		with (
+			public_donate_pages_enabled(),
+			patch("non_profit.www.donate.frappe.request", frappe._dict(method="POST")),
+			patch("non_profit.www.donate._captcha_site_key", return_value="site-key"),
+			patch("non_profit.www.donate._handle_submission", side_effect=partially_write_then_fail),
+			patch("non_profit.www.donate._get_active_campaigns", return_value=[]),
+		):
+			donate.get_context(context)
+
+		self.assertIn("late validation failure", context.error)
+		self.assertFalse(frappe.db.exists("Donor Type", donor_type))
+
 	def test_unconfigured_captcha_disables_public_donation_submit(self) -> None:
 		template = (Path(__file__).parent / "www" / "donate.html").read_text(encoding="utf-8")
 		self.assertIn("CAPTCHA is not configured. Please contact support.", template)
@@ -368,6 +418,283 @@ class TestGuestDonationAmountInvariant(IntegrationTestCase):
 
 
 class TestGuestDonorProtection(IntegrationTestCase):
+	def test_guest_submission_rejects_ambiguous_donor_identity(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import find_donor_customer_candidates
+		from non_profit.www.donate import _handle_submission
+
+		email = f"ambiguous-guest-{frappe.generate_hash(length=8)}@example.com"
+		donor_type = frappe.db.get_value("Donor Type", {}, "name")
+		customer_group = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
+		territory = frappe.db.get_value("Territory", {"is_group": 0}, "name")
+		identity_names = {"Donor": [], "Customer": []}
+		for index in range(2):
+			customer = frappe.get_doc(
+				{
+					"doctype": "Customer",
+					"customer_name": f"Ambiguous Guest {index} {frappe.generate_hash(length=6)}",
+					"customer_type": "Individual",
+					"customer_group": customer_group,
+					"territory": territory,
+					"email_id": email,
+				}
+			).insert(ignore_permissions=True)
+			identity_names["Customer"].append(customer.name)
+			donor = frappe.get_doc(
+				{
+					"doctype": "Donor",
+					"donor_name": f"Ambiguous Guest {index}",
+					"donor_type": donor_type,
+					"customer": customer.name,
+				}
+			).insert(ignore_permissions=True)
+			identity_names["Donor"].append(donor.name)
+		masters_before = {
+			("Donor", name): frappe.db.get_value(
+				"Donor", name, ["donor_name", "customer", "modified"], as_dict=True
+			)
+			for name in identity_names["Donor"]
+		}
+		masters_before.update(
+			{
+				("Customer", name): frappe.db.get_value(
+					"Customer", name, ["customer_name", "email_id", "modified"], as_dict=True
+				)
+				for name in identity_names["Customer"]
+			}
+		)
+
+		form = frappe._dict(
+			donor_name="Ambiguous Guest",
+			email=email,
+			amount="25",
+			frequency="one_off",
+			consent="1",
+		)
+		with (
+			frappe_user("Guest"),
+			patch("non_profit.www.donate._verify_captcha"),
+			patch("non_profit.non_profit.donor_identity.frappe.logger") as app_logger,
+			patch("non_profit.non_profit.donor_identity.frappe.log_error") as error_log,
+			self.assertRaisesRegex(frappe.ValidationError, "could not process your donation"),
+			_without_checkout_provider(),
+		):
+			_handle_submission(form)
+
+		self.assertFalse(frappe.db.exists("Donation", {"email": email}))
+		masters_after = {
+			("Donor", name): frappe.db.get_value(
+				"Donor", name, ["donor_name", "customer", "modified"], as_dict=True
+			)
+			for name in identity_names["Donor"]
+		}
+		masters_after.update(
+			{
+				("Customer", name): frappe.db.get_value(
+					"Customer", name, ["customer_name", "email_id", "modified"], as_dict=True
+				)
+				for name in identity_names["Customer"]
+			}
+		)
+		self.assertEqual(masters_after, masters_before)
+		donor_names, customer_names = find_donor_customer_candidates(email)
+		self.assertEqual(set(donor_names), set(identity_names["Donor"]))
+		self.assertEqual(set(customer_names), set(identity_names["Customer"]))
+		app_logger.assert_called_once_with("non_profit")
+		error_log.assert_not_called()
+		log_message = app_logger.return_value.warning.call_args.args[0]
+		self.assertNotIn(email, log_message)
+		self.assertIn(sha256(email.encode()).hexdigest(), log_message)
+
+	def test_guest_submission_reuses_contact_only_donor(self) -> None:
+		from non_profit.www.donate import _handle_submission
+
+		email = f"contact-only-guest-{frappe.generate_hash(length=8)}@example.com"
+		contact = self._contact("Contact Only Guest", email)
+		donor = self._donor("Contact Only Guest", contact=contact.name)
+		donor_count = frappe.db.count("Donor")
+
+		with (
+			frappe_user("Guest"),
+			patch("non_profit.www.donate._verify_captcha"),
+			_without_checkout_provider(),
+		):
+			donation_name = _handle_submission(self._form("Contact Only Guest", email))
+
+		self.assertEqual(frappe.db.get_value("Donation", donation_name, "donor"), donor.name)
+		self.assertEqual(frappe.db.count("Donor"), donor_count)
+		self.assertEqual(frappe.db.get_value("Donor", donor.name, "contact"), contact.name)
+		self.assertTrue(frappe.db.get_value("Donor", donor.name, "customer"))
+
+	def test_guest_submission_reuses_canonical_contact_when_customer_email_differs(self) -> None:
+		from non_profit.www.donate import _handle_submission
+
+		email = f"canonical-contact-guest-{frappe.generate_hash(length=8)}@example.com"
+		contact = self._contact("Canonical Contact Guest", email)
+		customer = self._customer(
+			"Canonical Contact Guest",
+			f"different-{frappe.generate_hash(length=8)}@example.com",
+		)
+		donor = self._donor("Canonical Contact Guest", contact=contact.name, customer=customer.name)
+		counts_before = {doctype: frappe.db.count(doctype) for doctype in ("Donor", "Customer")}
+
+		with (
+			frappe_user("Guest"),
+			patch("non_profit.www.donate._verify_captcha"),
+			_without_checkout_provider(),
+		):
+			donation_name = _handle_submission(self._form("Canonical Contact Guest", email))
+
+		self.assertEqual(frappe.db.get_value("Donation", donation_name, "donor"), donor.name)
+		self.assertEqual(
+			{doctype: frappe.db.count(doctype) for doctype in counts_before},
+			counts_before,
+		)
+		self.assertEqual(frappe.db.get_value("Donor", donor.name, "customer"), customer.name)
+
+	def test_guest_submission_rejects_duplicate_canonical_contact_donors_without_mutation(self) -> None:
+		from non_profit.www.donate import _handle_submission
+
+		email = f"duplicate-contact-donors-{frappe.generate_hash(length=8)}@example.com"
+		donors = [
+			self._donor(
+				f"Duplicate Contact Guest {index}", contact=self._contact(f"Duplicate {index}", email).name
+			)
+			for index in range(2)
+		]
+		counts_before = identity_master_counts()
+		donor_rows_before = {
+			donor.name: frappe.db.get_value(
+				"Donor", donor.name, ["donor_name", "customer", "contact", "modified"], as_dict=True
+			)
+			for donor in donors
+		}
+
+		with (
+			frappe_user("Guest"),
+			patch("non_profit.www.donate._verify_captcha"),
+			self.assertRaisesRegex(frappe.ValidationError, "could not process your donation"),
+			_without_checkout_provider(),
+		):
+			_handle_submission(self._form("Duplicate Contact Guest", email))
+
+		self.assertEqual(identity_master_counts(), counts_before)
+		self.assertEqual(
+			{
+				donor.name: frappe.db.get_value(
+					"Donor", donor.name, ["donor_name", "customer", "contact", "modified"], as_dict=True
+				)
+				for donor in donors
+			},
+			donor_rows_before,
+		)
+
+	def test_guest_website_rejects_unrelated_same_email_customer_without_mutation(self) -> None:
+		email = f"unrelated-customer-guest-{frappe.generate_hash(length=8)}@example.com"
+		contact = self._contact("Unrelated Customer Guest", email)
+		donor = self._donor("Unrelated Customer Guest", contact=contact.name)
+		customer = self._customer(
+			"Unrelated Customer",
+			email,
+			primary_contact=contact.name,
+			customer_type="Company",
+			subject_type="Organization",
+		)
+		counts_before = identity_master_counts()
+		donor_before = frappe.db.get_value(
+			"Donor", donor.name, ["donor_name", "customer", "contact", "modified"], as_dict=True
+		)
+		customer_before = frappe.db.get_value(
+			"Customer",
+			customer.name,
+			["customer_name", "email_id", "customer_primary_contact", "modified"],
+			as_dict=True,
+		)
+		form = self._form("Unrelated Customer Guest", email)
+		context = frappe._dict()
+		request_savepoint = f"guest_website_identity_{frappe.generate_hash(length=8)}"
+		frappe.db.savepoint(request_savepoint)
+		rollback = frappe.db.rollback
+		original_form_dict = frappe.local.form_dict
+		original_request_ip = frappe.local.request_ip
+		try:
+			with (
+				frappe_user("Guest"),
+				public_donate_pages_enabled(),
+				patch("non_profit.www.donate.frappe.request", frappe._dict(method="POST")),
+				patch("non_profit.www.donate._captcha_site_key", return_value="site-key"),
+				patch("non_profit.www.donate._verify_captcha"),
+				patch("non_profit.www.donate._get_active_campaigns", return_value=[]),
+				patch(
+					"non_profit.www.donate.frappe.db.rollback",
+					side_effect=lambda: rollback(save_point=request_savepoint),
+				) as request_rollback,
+			):
+				frappe.local.form_dict = form
+				frappe.local.request_ip = "192.0.2.10"
+				donate.get_context(context)
+		finally:
+			frappe.local.form_dict = original_form_dict
+			frappe.local.request_ip = original_request_ip
+
+		self.assertIn("could not process your donation", context.error)
+		request_rollback.assert_called_once_with()
+		self.assertEqual(identity_master_counts(), counts_before)
+		self.assertEqual(
+			frappe.db.get_value(
+				"Donor", donor.name, ["donor_name", "customer", "contact", "modified"], as_dict=True
+			),
+			donor_before,
+		)
+		self.assertEqual(
+			frappe.db.get_value(
+				"Customer",
+				customer.name,
+				["customer_name", "email_id", "customer_primary_contact", "modified"],
+				as_dict=True,
+			),
+			customer_before,
+		)
+
+	def test_guest_submission_accepts_proven_donor_customer_identity(self) -> None:
+		from non_profit.www.donate import _handle_submission
+
+		email = f"proven-customer-guest-{frappe.generate_hash(length=8)}@example.com"
+		contact = self._contact("Proven Customer Guest", email)
+		customer = self._customer("Proven Customer Guest", email, primary_contact=contact.name)
+		donor = self._donor("Proven Customer Guest", contact=contact.name)
+
+		with (
+			frappe_user("Guest"),
+			patch("non_profit.www.donate._verify_captcha"),
+			_without_checkout_provider(),
+		):
+			donation_name = _handle_submission(self._form("Proven Customer Guest", email))
+
+		self.assertEqual(frappe.db.get_value("Donation", donation_name, "donor"), donor.name)
+		self.assertEqual(frappe.db.get_value("Donor", donor.name, "customer"), customer.name)
+
+	def test_guest_submission_fails_closed_without_creating_missing_donor_type(self) -> None:
+		from non_profit.www.donate import _handle_submission, _resolve_donation_company
+
+		email = f"missing-donor-type-{frappe.generate_hash(length=8)}@example.com"
+		missing_donor_type = f"Missing Donor Type {frappe.generate_hash(length=8)}"
+		company = _resolve_donation_company()
+		self.assertTrue(company)
+		counts_before = identity_master_counts()
+		settings = frappe._dict(default_donor_type=missing_donor_type, donation_company=company)
+
+		with (
+			frappe_user("Guest"),
+			patch("non_profit.www.donate._verify_captcha"),
+			patch("non_profit.www.donate.frappe.get_single", return_value=settings),
+			self.assertRaisesRegex(frappe.ValidationError, "setup is incomplete"),
+			_without_checkout_provider(),
+		):
+			_handle_submission(self._form("Missing Donor Type Guest", email))
+
+		self.assertEqual(identity_master_counts(), counts_before)
+		self.assertFalse(frappe.db.exists("Donor Type", missing_donor_type))
+
 	def test_guest_resubmission_adds_comment_instead_of_rename(self) -> None:
 		from non_profit.non_profit.doctype.donor.donor import find_donor_by_email
 		from non_profit.www.donate import _handle_submission
@@ -408,3 +735,60 @@ class TestGuestDonorProtection(IntegrationTestCase):
 			pluck="content",
 		)
 		self.assertTrue(any("Defaced Donor" in (content or "") for content in comments))
+
+	def _contact(self, name: str, email: str):
+		first_name, _, last_name = name.partition(" ")
+		return frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": first_name,
+				"last_name": last_name,
+				"npo_identity_kind": "Person",
+				"email_ids": [{"email_id": email, "is_primary": 1}],
+			}
+		).insert(ignore_permissions=True)
+
+	def _customer(
+		self,
+		name: str,
+		email: str,
+		*,
+		primary_contact: str | None = None,
+		customer_type: str = "Individual",
+		subject_type: str | None = None,
+	):
+		subject_type = subject_type or ("Person" if primary_contact else None)
+		return frappe.get_doc(
+			{
+				"doctype": "Customer",
+				"customer_name": name,
+				"customer_type": customer_type,
+				"customer_group": frappe.db.get_value("Customer Group", {"is_group": 0}, "name"),
+				"territory": frappe.db.get_value("Territory", {"is_group": 0}, "name"),
+				"email_id": email,
+				"customer_primary_contact": primary_contact,
+				"npo_subject_type": subject_type,
+				"npo_contact": primary_contact if subject_type == "Person" else None,
+			}
+		).insert(ignore_permissions=True)
+
+	def _donor(self, name: str, *, contact: str | None = None, customer: str | None = None):
+		return frappe.get_doc(
+			{
+				"doctype": "Donor",
+				"donor_name": name,
+				"donor_type": frappe.db.get_value("Donor Type", {}, "name"),
+				"subject_type": "Individual",
+				"contact": contact,
+				"customer": customer,
+			}
+		).insert(ignore_permissions=True)
+
+	def _form(self, donor_name: str, email: str) -> frappe._dict:
+		return frappe._dict(
+			donor_name=donor_name,
+			email=email,
+			amount="25",
+			frequency="one_off",
+			consent="1",
+		)

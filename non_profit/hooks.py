@@ -5,9 +5,13 @@ app_description = "Non Profit"
 app_icon = "octicon octicon-file-directory"
 app_color = "grey"
 app_email = "pandikunta@frappe.io"
-app_license = "MIT"
+app_license = "GNU General Public License (v3)"
 
 required_apps = ["erpnext"]
+
+demo_data_reset_declarations = [
+	"non_profit.non_profit.demo_data_reset.get_reset_declaration",
+]
 
 jinja = {
 	"methods": [
@@ -109,6 +113,7 @@ scheduler_events = {
 		"non_profit.non_profit.doctype.membership.membership.set_expired_status",
 		"non_profit.non_profit.doctype.recurring_donation.recurring_donation.process_recurring_donations",
 		"non_profit.non_profit.major_gifts.reconcile_fundraising_rollups",
+		"non_profit.non_profit.recurring_reconciliation.reconcile_recurring_donations",
 	],
 }
 

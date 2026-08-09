@@ -1,0 +1,227 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-08-09 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "recurring_donation",
+  "installment_kind",
+  "status",
+  "expected_section",
+  "expected_date",
+  "expected_amount",
+  "currency",
+  "is_retired",
+  "retired_on",
+  "actual_section",
+  "donation",
+  "actual_date",
+  "actual_amount",
+  "amount_variance",
+  "reversal_section",
+  "reversal_source",
+  "reversal_kind",
+  "reversal_reference",
+  "reversal_date",
+  "reversal_amount",
+  "reversal_recorded_on",
+  "reconciled_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "recurring_donation",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Recurring Donation",
+   "options": "Recurring Donation",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "installment_kind",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Installment Kind",
+   "options": "Expected\nUnexpected",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Expected\nSettled\nMissed\nVariance\nUnexpected\nReversed\nCancelled",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "expected_section",
+   "fieldtype": "Section Break",
+   "label": "Expected"
+  },
+  {
+   "fieldname": "expected_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Expected Date",
+   "read_only": 1,
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "expected_amount",
+   "fieldtype": "Currency",
+   "label": "Expected Amount",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Retained audit evidence for a cadence date that is no longer part of the current schedule.",
+   "fieldname": "is_retired",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Retired Expectation",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.is_retired",
+   "fieldname": "retired_on",
+   "fieldtype": "Datetime",
+   "label": "Retired On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "actual_section",
+   "fieldtype": "Section Break",
+   "label": "Actual Settlement"
+  },
+  {
+   "fieldname": "donation",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Donation",
+   "options": "Donation",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "actual_date",
+   "fieldtype": "Date",
+   "label": "Actual Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "actual_amount",
+   "fieldtype": "Currency",
+   "label": "Actual Amount",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount_variance",
+   "fieldtype": "Currency",
+   "label": "Amount Variance",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.reversal_kind",
+   "fieldname": "reversal_section",
+   "fieldtype": "Section Break",
+   "label": "Approved Reversal Evidence"
+  },
+  {
+   "default": "",
+   "fieldname": "reversal_source",
+   "fieldtype": "Select",
+   "label": "Reversal Source",
+   "options": "\nAccounting\nProvider",
+   "read_only": 1
+  },
+  {
+   "default": "",
+   "fieldname": "reversal_kind",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Reversal Kind",
+   "options": "\nPayment Entry Cancellation\nFull Refund\nChargeback",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reversal_reference",
+   "fieldtype": "Data",
+   "label": "Reversal Reference",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reversal_date",
+   "fieldtype": "Date",
+   "label": "Reversal Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reversal_amount",
+   "fieldtype": "Currency",
+   "label": "Reversal Amount",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reversal_recorded_on",
+   "fieldtype": "Datetime",
+   "label": "Reversal Recorded On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciled_on",
+   "fieldtype": "Datetime",
+   "label": "Reconciled On",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Non Profit",
+ "name": "Recurring Donation Installment",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Non Profit Manager"
+  }
+ ],
+ "search_fields": "recurring_donation,donation",
+ "sort_field": "expected_date",
+ "sort_order": "DESC",
+ "title_field": "recurring_donation",
+ "track_changes": 1
+}

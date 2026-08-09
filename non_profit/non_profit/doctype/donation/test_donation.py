@@ -18,6 +18,7 @@ from non_profit.non_profit.doctype.donor.donor import (
 	get_donor_email,
 	get_or_create_customer_for_donor,
 )
+from non_profit.non_profit.recurring_reconciliation import reconcile_recurring_donation
 
 
 class TestDonation(unittest.TestCase):
@@ -80,6 +81,157 @@ class TestDonation(unittest.TestCase):
 		donor.reload()
 		self.assertEqual(frappe.utils.flt(donor.total_lifetime_amount), 250)
 		self.assertEqual(donor.gift_count, 1)
+
+	def test_tribute_gift_requires_honouree_and_delivery_route(self):
+		donor = create_unique_donor()
+		values = {
+			"doctype": "Donation",
+			"company": frappe.get_cached_value("Non Profit Settings", None, "company"),
+			"donor": donor.name,
+			"date": get_active_fiscal_year_date(),
+			"amount": 50,
+			"tribute_type": "In Memory",
+			"tribute_honouree": "Alex Example",
+			"tribute_notification_requested": 1,
+			"tribute_notification_name": "Family Example",
+		}
+		with self.assertRaisesRegex(frappe.ValidationError, "notification contact, email, or postal"):
+			frappe.get_doc(values).insert(ignore_permissions=True)
+
+		values["tribute_notification_email"] = "family@example.org"
+		donation = frappe.get_doc(values).insert(ignore_permissions=True)
+		self.assertEqual(donation.tribute_fulfillment_status, "Pending")
+
+	def test_recurring_donation_identity_must_match_donation(self):
+		donor = create_unique_donor()
+		other_donor = create_unique_donor()
+		company = frappe.get_cached_value("Non Profit Settings", None, "company")
+		schedule = frappe.get_doc(
+			{
+				"doctype": "Recurring Donation",
+				"donor": donor.name,
+				"company": company,
+				"amount": 25,
+				"frequency": "Monthly",
+				"start_date": get_active_fiscal_year_date(),
+				"next_date": get_active_fiscal_year_date(),
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "must match"):
+			frappe.get_doc(
+				{
+					"doctype": "Donation",
+					"company": company,
+					"donor": other_donor.name,
+					"date": get_active_fiscal_year_date(),
+					"amount": 25,
+					"recurring_donation": schedule.name,
+				}
+			).insert(ignore_permissions=True)
+
+	def test_tribute_fulfillment_is_explicit_and_audited(self):
+		donor = create_unique_donor()
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"company": frappe.get_cached_value("Non Profit Settings", None, "company"),
+				"donor": donor.name,
+				"date": get_active_fiscal_year_date(),
+				"amount": 50,
+				"paid": 1,
+				"tribute_type": "In Honour",
+				"tribute_honouree": "Alex Example",
+				"tribute_notification_requested": 1,
+				"tribute_notification_name": "Pat Example",
+				"tribute_notification_email": "pat@example.org",
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+
+		result = donation.mark_tribute_fulfilled("Fulfilled")
+		donation.reload()
+		self.assertEqual(result["status"], "Fulfilled")
+		self.assertEqual(donation.tribute_fulfilled_by, frappe.session.user)
+		self.assertTrue(donation.tribute_fulfilled_on)
+
+	def test_tribute_terminal_audit_cannot_be_forged_on_insert(self):
+		donor = create_unique_donor()
+		with self.assertRaisesRegex(frappe.ValidationError, "fulfillment action"):
+			frappe.get_doc(
+				{
+					"doctype": "Donation",
+					"company": frappe.get_cached_value("Non Profit Settings", None, "company"),
+					"donor": donor.name,
+					"date": get_active_fiscal_year_date(),
+					"amount": 50,
+					"tribute_type": "In Honour",
+					"tribute_honouree": "Alex Example",
+					"tribute_notification_requested": 1,
+					"tribute_notification_name": "Pat Example",
+					"tribute_notification_email": "pat@example.org",
+					"tribute_fulfillment_status": "Fulfilled",
+					"tribute_fulfilled_on": frappe.utils.now_datetime(),
+					"tribute_fulfilled_by": "Administrator",
+				}
+			).insert(ignore_permissions=True)
+
+	def test_submitted_tribute_fulfillment_audit_cannot_be_forged_by_save(self):
+		donor = create_unique_donor()
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"company": frappe.get_cached_value("Non Profit Settings", None, "company"),
+				"donor": donor.name,
+				"date": get_active_fiscal_year_date(),
+				"amount": 50,
+				"paid": 1,
+				"tribute_type": "In Honour",
+				"tribute_honouree": "Alex Example",
+				"tribute_notification_requested": 1,
+				"tribute_notification_name": "Pat Example",
+				"tribute_notification_email": "pat@example.org",
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+		donation.tribute_fulfillment_status = "Fulfilled"
+		donation.tribute_fulfilled_on = frappe.utils.now_datetime()
+		donation.tribute_fulfilled_by = "Administrator"
+		donation.tribute_fulfillment_note = "Forged through direct save"
+
+		with self.assertRaisesRegex(frappe.ValidationError, "fulfillment action"):
+			donation.save(ignore_permissions=True)
+
+	def test_tribute_fulfillment_requires_read_access_to_linked_contact(self):
+		from frappe.contacts.doctype.contact.contact import Contact
+
+		donor = create_unique_donor()
+		contact = frappe.get_doc({"doctype": "Contact", "first_name": "_Test Tribute Recipient"}).insert(
+			ignore_permissions=True
+		)
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"company": frappe.get_cached_value("Non Profit Settings", None, "company"),
+				"donor": donor.name,
+				"date": get_active_fiscal_year_date(),
+				"amount": 50,
+				"paid": 1,
+				"tribute_type": "In Memory",
+				"tribute_honouree": "Alex Example",
+				"tribute_notification_requested": 1,
+				"tribute_notification_name": "Family Example",
+				"tribute_notification_contact": contact.name,
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+
+		with (
+			patch.object(Contact, "check_permission", side_effect=frappe.PermissionError),
+			self.assertRaises(frappe.PermissionError),
+		):
+			donation.mark_tribute_fulfilled("Fulfilled")
 
 	def test_payment_entry_clearance_marks_donation_reconciled(self):
 		donation, payment_entry = create_donation_with_payment_entry()
@@ -680,6 +832,173 @@ class TestDonationPaymentEntryHooks(IntegrationTestCase):
 		donation.reload()
 		self.assertEqual(frappe.utils.flt(donation.advance_paid), 0)
 		self.assertEqual(frappe.utils.flt(donation.grand_total), 100)
+
+	def test_payment_entry_cancel_preserves_and_reverses_recurring_actual_snapshot(self):
+		donation = create_submitted_donation(100)
+		schedule = frappe.get_doc(
+			{
+				"doctype": "Recurring Donation",
+				"donor": donation.donor,
+				"company": donation.company,
+				"amount": donation.amount,
+				"frequency": "Monthly",
+				"start_date": donation.date,
+				"next_date": donation.date,
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value(
+			"Donation",
+			donation.name,
+			"recurring_donation",
+			schedule.name,
+			update_modified=False,
+		)
+
+		payment_entry = insert_donation_payment_entry(donation)
+		payment_entry.submit()
+		before_cancel = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name, "donation": donation.name},
+			["actual_date", "actual_amount"],
+			as_dict=True,
+		)
+		payment_entry.cancel()
+
+		donation.reload()
+		installment = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name, "donation": donation.name},
+			[
+				"status",
+				"actual_date",
+				"actual_amount",
+				"reversal_source",
+				"reversal_kind",
+				"reversal_reference",
+				"reversal_amount",
+			],
+			as_dict=True,
+		)
+		self.assertEqual(donation.paid, 0)
+		self.assertEqual(installment.status, "Reversed")
+		self.assertEqual(installment.actual_date, before_cancel.actual_date)
+		self.assertEqual(installment.actual_amount, before_cancel.actual_amount)
+		self.assertEqual(installment.reversal_source, "Accounting")
+		self.assertEqual(installment.reversal_kind, "Payment Entry Cancellation")
+		self.assertEqual(installment.reversal_reference, payment_entry.name)
+		self.assertEqual(installment.reversal_amount, before_cancel.actual_amount)
+
+	def test_split_payment_cancellations_record_reversal_only_after_the_full_amount_is_cancelled(self):
+		donation = create_submitted_donation(100)
+		schedule = frappe.get_doc(
+			{
+				"doctype": "Recurring Donation",
+				"donor": donation.donor,
+				"company": donation.company,
+				"amount": donation.amount,
+				"frequency": "Monthly",
+				"start_date": donation.date,
+				"next_date": donation.date,
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value(
+			"Donation", donation.name, "recurring_donation", schedule.name, update_modified=False
+		)
+		first_payment = insert_donation_payment_entry(donation, party_amount=40)
+		first_payment.submit()
+		second_payment = get_donation_payment_entry("Donation", donation.name)
+		prepare_donation_payment_entry(second_payment)
+		second_payment.insert()
+		second_payment.submit()
+
+		second_payment.cancel()
+		self.assertFalse(
+			frappe.db.get_value(
+				"Recurring Donation Installment",
+				{"recurring_donation": schedule.name, "donation": donation.name},
+				"reversal_kind",
+			)
+		)
+		first_payment.cancel()
+		installment = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name, "donation": donation.name},
+			["status", "reversal_kind", "reversal_reference", "reversal_amount"],
+			as_dict=True,
+		)
+		self.assertEqual(installment.status, "Reversed")
+		self.assertEqual(installment.reversal_kind, "Payment Entry Cancellation")
+		self.assertEqual(installment.reversal_reference, first_payment.name)
+		self.assertEqual(installment.reversal_amount, 100)
+
+	def test_partial_payment_cancellation_does_not_forge_a_full_recurring_reversal(self):
+		donation = create_submitted_donation(100)
+		schedule = frappe.get_doc(
+			{
+				"doctype": "Recurring Donation",
+				"donor": donation.donor,
+				"company": donation.company,
+				"amount": donation.amount,
+				"frequency": "Monthly",
+				"start_date": donation.date,
+				"next_date": donation.date,
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value(
+			"Donation", donation.name, "recurring_donation", schedule.name, update_modified=False
+		)
+		frappe.db.set_value("Donation", donation.name, "paid", 1, update_modified=False)
+		reconcile_recurring_donation(schedule.name)
+		payment_entry = insert_donation_payment_entry(donation, party_amount=40)
+		payment_entry.submit()
+		frappe.db.set_value("Donation", donation.name, "paid", 1, update_modified=False)
+		payment_entry.cancel()
+
+		self.assertFalse(
+			frappe.db.get_value(
+				"Recurring Donation Installment",
+				{"recurring_donation": schedule.name, "donation": donation.name},
+				"reversal_kind",
+			)
+		)
+
+	def test_sequential_partial_payment_attempts_do_not_combine_into_a_full_reversal(self):
+		donation = create_submitted_donation(100)
+		schedule = frappe.get_doc(
+			{
+				"doctype": "Recurring Donation",
+				"donor": donation.donor,
+				"company": donation.company,
+				"amount": donation.amount,
+				"frequency": "Monthly",
+				"start_date": donation.date,
+				"next_date": donation.date,
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value(
+			"Donation", donation.name, "recurring_donation", schedule.name, update_modified=False
+		)
+
+		first_payment = insert_donation_payment_entry(donation, party_amount=40)
+		first_payment.submit()
+		first_payment.cancel()
+		second_payment = insert_donation_payment_entry(donation, party_amount=60)
+		second_payment.submit()
+		second_payment.cancel()
+
+		self.assertEqual(first_payment.docstatus, 2)
+		self.assertEqual(second_payment.docstatus, 2)
+		self.assertFalse(
+			frappe.db.get_value(
+				"Recurring Donation Installment",
+				{"recurring_donation": schedule.name, "donation": donation.name},
+				"reversal_kind",
+			)
+		)
 
 	def test_second_allocation_beyond_outstanding_is_rejected(self):
 		donation = create_submitted_donation(100)

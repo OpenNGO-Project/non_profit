@@ -14,6 +14,7 @@ from non_profit.non_profit.recipient_selection import (
 	PROVIDER_KEY,
 	_assert_source_row_limit,
 	_candidate_email,
+	_complete_neutral_salutation,
 	_donor_canonical_subject,
 	_filter_visible_canonical_rows,
 	_member_canonical_subject,
@@ -90,6 +91,32 @@ class TestNPORecipientSelectionValidation(UnitTestCase):
 		self.assertEqual(provider["key"], "npo_recipient_selection")
 		self.assertIn("list_sources", provider)
 		self.assertIn("get_members", provider)
+
+	def test_neutral_salutations_are_identity_kind_and_blank_safe(self) -> None:
+		organization_greetings = {
+			"de": "Sehr geehrte Damen und Herren,",
+			"fr": "Madame, Monsieur,",
+			"it": "Gentili Signore e Signori,",
+			"en": "Dear Sir or Madam,",
+		}
+		for language, greeting in organization_greetings.items():
+			self.assertEqual(
+				_complete_neutral_salutation("Example Organization", language, kind="organization"),
+				greeting,
+			)
+		self.assertEqual(
+			_complete_neutral_salutation("Example Organization", "unsupported", kind="organization"),
+			organization_greetings["de"],
+		)
+		self.assertEqual(
+			_complete_neutral_salutation("Ada Example", "en", kind="person"), "Dear Ada Example,"
+		)
+		self.assertEqual(_complete_neutral_salutation("", "en", kind="person"), "Dear")
+		self.assertEqual(_complete_neutral_salutation("", "fr", kind="household"), "Bonjour")
+		self.assertEqual(
+			_complete_neutral_salutation("Ada Example", "unsupported", kind="person"),
+			"Guten Tag Ada Example",
+		)
 
 	def test_source_rows_respect_row_level_visibility(self) -> None:
 		selection = self._selection()
@@ -421,6 +448,40 @@ class TestNPORecipientSelection(IntegrationTestCase):
 		# The opted-out candidate stays in the payload with an empty email so the
 		# newsletter import can report it as skipped-without-email.
 		self.assertEqual(len([row for row in members if not row["email"]]), 1)
+
+	def test_organization_selection_uses_final_legal_entity_salutation(self) -> None:
+		email = f"organization-selection-{self.suffix}@example.com"
+		customer = frappe.get_doc(
+			{
+				"doctype": "Customer",
+				"customer_name": f"Selection Organization {self.suffix}",
+				"customer_type": "Company",
+				"customer_group": frappe.db.get_value("Customer Group", {"is_group": 0}, "name"),
+				"territory": frappe.db.get_value("Territory", {"is_group": 0}, "name"),
+				"email_id": email,
+				"language": "en",
+				"npo_subject_type": "Organization",
+			}
+		).insert(ignore_permissions=True)
+		donor_type = self._donor_type()
+		frappe.get_doc(
+			{
+				"doctype": "Donor",
+				"donor_name": customer.customer_name,
+				"donor_type": donor_type,
+				"subject_type": "Organization",
+				"customer": customer.name,
+			}
+		).insert(ignore_permissions=True)
+		selection = self._insert_selection(include_donors=1, donor_type=donor_type)
+
+		members = newsletter_selection_members(selection.name)
+
+		self.assertEqual(len(members), 1)
+		self.assertEqual(members[0]["email"], email)
+		self.assertEqual(members[0]["language"], "en")
+		self.assertEqual(members[0]["salutation"], "Dear Sir or Madam,")
+		self.assertNotIn(customer.customer_name, members[0]["salutation"])
 
 	def test_newsletter_members_refuse_a_selection_without_the_newsletter_flag(self) -> None:
 		tag = f"refused-selection-{self.suffix}"

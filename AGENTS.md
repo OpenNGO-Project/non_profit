@@ -17,11 +17,30 @@
   migrate onto hooks over time, not a pattern to extend. ERPNext remains a
   required app, so its doctypes may be used freely.
 - Keep `HOW_TO.md` and `DOCUMENTATION.md` current when hooks, doctypes, public helpers, setup, scheduled jobs, or operational behavior change.
+- Keep coordinated demo reset support app-neutral. Register only
+  `demo_data_reset_declarations`, expose metadata from
+  `non_profit.non_profit.demo_data_reset`, and do not import or name a private
+  reset consumer. The declaration owns the complete marker-resettable Non Profit
+  graph, captures exact Recurring Donation Installments, and clears only the two
+  captured `next_action_task` reciprocal links declared in
+  `cleanup_managed_links`. Cleanup must lock and revalidate the current owner/link
+  before mutation; reassignment after capture fails closed.
 - All custom DocTypes must have Python controllers.
 - All new `@frappe.whitelist()` functions need type hints.
 - Public guest donations require GoodVantage CAPTCHA and fail closed when Good
   Connector or its CAPTCHA configuration is unavailable. Do not restore the
   former optional/exception-swallowing bypass.
+- The generic `/donate` handler must call
+  `resolve_donor_customer_identity(..., ambiguous_email_policy="reject")` and
+  must never restore first-match email lookup. Candidate lookup includes the
+  canonical `Donor.contact -> Contact.email_id` path. Multiple Donors/Customers,
+  or one Donor plus one Customer without an existing Donor-Customer link or an
+  explicitly Person-classified Customer sharing the canonical Contact, fail
+  neutrally before master/Donation mutation. Missing Donor Type setup also fails
+  without provisioning configuration from the guest request.
+  Ambiguity diagnostics use the app logger with no raw submitted email; do not
+  use Error Log because its request metadata includes form values. Guest input
+  may add a review Comment but must never rename an existing Donor.
 - Desk form and list operations must use Frappe's Actions menu APIs
   (`frm.page.add_action_item`, `listview.page.add_action_item`, or
   `listview.page.add_actions_menu_item`) instead of visible inner-toolbar
@@ -64,6 +83,12 @@
   emails use identity type `Individual`; leases renew while the transaction is
   open, are revalidated before commit, and release on commit or rollback. Keep
   renewal bounded and fail the transaction if ownership is lost.
+- Donor-to-Customer continuity propagates every Donor-linked Address Dynamic
+  Link, preserves an existing Customer primary Address, and selects a new
+  primary only from a unique enabled primary or sole enabled Address. Never
+  collapse ambiguity by child-row order or select a disabled Address. Customer
+  creation must use a non-group Customer Group; `All Customer Groups` is not a
+  valid fallback.
 - `Contact.preferred_language` is owned by module `Non Profit` on a standalone
   install. When Good Connector is installed, non_profit setup must preserve its
   module `Good Connector` claim; Good Connector uninstall hands ownership back
@@ -156,6 +181,11 @@ procedures), and the code. Record new or changed requirements in
   case-insensitively. A candidate it cannot reach still yields a row with an
   empty `email` so good_newsletter can report it as `skipped_no_email`; do not
   "clean up" those rows out of the payload.
+- Keep newsletter salutations identity-kind safe and aligned with the shared
+  greeting contract: organizations use their canonical Customer language ahead
+  of a related Donor default and fixed legal-entity greetings, English
+  people/Households use `Dear`, unsupported or blank language falls back to
+  German, and a blank addressee has no dangling punctuation.
 - User-facing selection consumers call correspondence resolution with
   `respect_permissions=True`; permission-invisible related identity and Address
   rows must not influence names, language, email, or postal readiness.
@@ -205,6 +235,51 @@ procedures), and the code. Record new or changed requirements in
   parent row, reuses one canonical or legacy blank-subject-type Household Donor,
   and fails on multiple candidates; do not create a Household Customer or
   attribute joint giving to the primary Household person.
+- Household giving roll-ups are owned here and use the deduplicated union of
+  current person Donors plus the Household-subject Donor, on the submitted/paid
+  Donation basis. They lock the Household and bounded identity rows, not every
+  historical Donation; all qualifying-state writers run the same serialized
+  recompute. Counts/dates span every qualifying gift, but monetary fields
+  are populated only when every Donation Company resolves to one currency; mixed
+  or unresolved currency leaves money blank and raises the review flag. Keep
+  payment/cancellation and Household-row refresh paths in sync.
+- `Recurring Donation Installment` is reconciliation evidence only. Never use it
+  to call a provider or initiate a charge. Obsolete cadence expectations are
+  retired, never deleted, and the first actual snapshot plus approved full
+  accounting/provider reversal evidence are immutable and remain auditable.
+  Reconciliation runs against the current processing date, not a historical
+  reversal date, and its horizon includes both `provider_next_payment` and a
+  future local `next_date` before terminal/end-date caps. Natural end-date closure
+  leaves the final generated installment active so it can settle or become missed.
+  Reversal Selects retain explicit blank defaults. Migration cleanup may clear
+  only the exact former Accounting / Payment Entry Cancellation defaults when
+  reference, date, amount, and recorded-on evidence are all absent; partial and
+  complete evidence must remain untouched. Currency zero is blank reversal
+  amount, not evidence and not an immutable value; a real reversal requires a
+  positive amount plus every other field, after which all reversal evidence is
+  immutable.
+  Direct insert/update/delete is capability-guarded; only deletion of the owning
+  Recurring Donation may cascade through the guarded framework lifecycle.
+  Full-reversal paths lock the schedule before the Donation. Accounting reversal
+  additionally requires one persisted installment whose immutable actual snapshot
+  proves that the Donation was fully settled, no submitted allocation, and
+  cancelled allocations covering the complete Donation. Cancelling one leg of a
+  concurrently full split settlement records reversal only when the final leg is
+  cancelled; separate partial settle/cancel attempts never combine into evidence
+  for a full settlement that did not occur. Only exact reversal replays are idempotent, and conflicting
+  kind/reference/amount/date evidence fails closed.
+  Terminal recurring states require immutable structured closure audit, while
+  the first terminal transition stamps date and actor server-side,
+  provider failure metadata remains separate. Closure Select fields must retain
+  explicit blank defaults; migration cleanup may clear only the exact former
+  first-option pair on non-terminal schedules and must never alter terminal rows.
+  Provider cancellation must reconcile locally before external dispatch so a
+  preflight failure cannot cancel remotely while local evidence is invalid.
+- Tribute notification input is stored on Donation. Guest adapters may provide
+  snapshots but must not create/mutate recipient Contact or Address masters, and
+  fulfillment is an explicit staff action rather than a payment side effect.
+  The action requires Donation write plus read access to linked recipient masters;
+  insert/import callers cannot forge terminal fulfillment audit.
 - The 16.3.0 `Household Member` -> `Household Person` replacement is protected
   by ordered pre/post model-sync patches. Never remove, move after model sync,
   or weaken their fail-closed identity/date checks; an ambiguous production row
@@ -230,6 +305,8 @@ these doctypes have a `title_field` (auto standard filter) but no or partial
 - `Donor`: `search_fields: donor_name`.
 - `Member`: `search_fields: member_name,email_id`.
 - `Major Gift`: `search_fields: donor_name`.
+- `Recurring Donation Installment`: `title_field: recurring_donation`,
+  `search_fields: recurring_donation,donation`.
 - `Grant Application`: `search_fields: applicant_name,email`.
 - `Volunteer`: `search_fields: volunteer_name`.
 - Already complete: Donation, Donation Campaign, Recurring Donation, Sponsor,

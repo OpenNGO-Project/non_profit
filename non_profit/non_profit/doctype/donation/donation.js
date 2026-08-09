@@ -24,6 +24,36 @@ frappe.ui.form.on("Donation", {
 				});
 			});
 		}
+		if (
+			frm.doc.docstatus === 1 &&
+			frm.doc.paid &&
+			frm.doc.tribute_notification_requested &&
+			frm.doc.tribute_fulfillment_status === "Pending"
+		) {
+			frm.page.add_action_item(__("Record Tribute Fulfillment"), function () {
+				frappe.prompt(
+					[
+						{
+							fieldname: "status",
+							fieldtype: "Select",
+							label: __("Status"),
+							options: "Fulfilled\nUnable",
+							reqd: 1,
+						},
+						{
+							fieldname: "note",
+							fieldtype: "Small Text",
+							label: __("Fulfillment Note"),
+							mandatory_depends_on: 'eval:doc.status === "Unable"',
+						},
+					],
+					(values) => {
+						frm.call("mark_tribute_fulfilled", values).then(() => frm.reload_doc());
+					},
+					__("Record Tribute Fulfillment")
+				);
+			});
+		}
 	},
 
 	make_payment_entry: function (frm) {

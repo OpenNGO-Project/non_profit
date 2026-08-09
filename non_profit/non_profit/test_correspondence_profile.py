@@ -22,6 +22,9 @@ class TestCorrespondenceProfile(IntegrationTestCase):
 
 	def test_contact_and_household_language_metadata(self) -> None:
 		make_custom_fields()
+		expected_contact_module = (
+			"Good Connector" if "good_connector" in frappe.get_installed_apps() else "Non Profit"
+		)
 
 		contact_field = frappe.get_meta("Contact").get_field("preferred_language")
 		self.assertEqual(contact_field.fieldtype, "Link")
@@ -33,7 +36,7 @@ class TestCorrespondenceProfile(IntegrationTestCase):
 				{"dt": "Contact", "fieldname": "preferred_language"},
 				"module",
 			),
-			"Non Profit",
+			expected_contact_module,
 		)
 
 		household_field = frappe.get_meta("Household").get_field("preferred_language")

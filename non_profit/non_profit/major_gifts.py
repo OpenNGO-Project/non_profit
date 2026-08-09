@@ -32,6 +32,14 @@ def on_donation_change(doc, method: str | None = None) -> None:
 		recompute_donor_giving(doc.donor)
 	if doc.get("major_gift"):
 		recompute_major_gift_closed(doc.major_gift)
+	if doc.get("donor"):
+		from non_profit.non_profit.household_giving import recompute_households_for_donor
+
+		recompute_households_for_donor(doc.donor)
+	if doc.get("recurring_donation"):
+		from non_profit.non_profit.recurring_reconciliation import reconcile_recurring_donation
+
+		reconcile_recurring_donation(doc.recurring_donation)
 
 
 def recompute_donor_giving(donor: str) -> None:
@@ -250,6 +258,9 @@ def reconcile_fundraising_rollups() -> None:
 	"""
 	recompute_all_donor_giving()
 	recompute_all_major_gift_closed()
+	from non_profit.non_profit.household_giving import recompute_all_household_giving
+
+	recompute_all_household_giving()
 
 
 # --- Workflow ------------------------------------------------------------

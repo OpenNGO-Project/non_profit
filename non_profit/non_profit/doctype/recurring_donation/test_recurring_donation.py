@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase, UnitTestCase
+from frappe.utils import add_days, add_months, getdate, nowdate
 
 from non_profit.non_profit.doctype.recurring_donation.recurring_donation import (
 	PROVIDER_STATUS_MAP,
@@ -12,7 +13,15 @@ from non_profit.non_profit.doctype.recurring_donation.recurring_donation import 
 	find_by_provider_subscription,
 	process_recurring_donations,
 )
-from non_profit.patches import retire_paused_recurring_donations
+from non_profit.non_profit.recurring_reconciliation import (
+	reconcile_recurring_donation,
+	record_recurring_installment_reversal,
+)
+from non_profit.patches import (
+	clear_incomplete_recurring_installment_reversal_defaults,
+	clear_non_terminal_recurring_donation_closure_defaults,
+	retire_paused_recurring_donations,
+)
 
 
 class TestRecurringDonation(UnitTestCase):
@@ -63,6 +72,7 @@ class TestRecurringDonation(UnitTestCase):
 	def test_worker_advances_observed_installment_once(self) -> None:
 		candidate = frappe._dict(name="REC-TEST")
 		recurring = Mock(status="Active", next_date="2026-07-01", is_provider_managed=False)
+		recurring.close_if_next_date_is_past_end.return_value = False
 		with (
 			patch.object(frappe, "get_all", return_value=[candidate]),
 			patch(
@@ -85,6 +95,7 @@ class TestRecurringDonation(UnitTestCase):
 	def test_manual_flow_acts_on_complete_locking_read(self) -> None:
 		stale = RecurringDonation({"doctype": "Recurring Donation", "name": "REC-TEST"})
 		current = Mock(is_provider_managed=False)
+		current.close_if_next_date_is_past_end.return_value = False
 		current._get_or_create_current_donation.return_value = Mock(name="DON-CURRENT")
 		current._get_or_create_current_donation.return_value.name = "DON-CURRENT"
 		with patch(
@@ -103,6 +114,46 @@ class TestRecurringDonation(UnitTestCase):
 			frappe.allowed_http_methods_for_whitelisted_func[RecurringDonation.create_next_donation],
 			["POST"],
 		)
+
+	def test_manual_flow_closes_past_end_before_creating(self) -> None:
+		stale = RecurringDonation({"doctype": "Recurring Donation", "name": "REC-TEST"})
+		current = Mock(is_provider_managed=False, status="Cancelled")
+		current.close_if_next_date_is_past_end.return_value = True
+		with patch(
+			"non_profit.non_profit.doctype.recurring_donation.recurring_donation._lock_recurring_donation",
+			return_value=current,
+		):
+			self.assertEqual(stale.create_next_donation(), "Cancelled")
+
+		current._get_or_create_current_donation.assert_not_called()
+		current.advance_next_date.assert_not_called()
+
+	def test_worker_closes_past_end_before_creating(self) -> None:
+		candidate = frappe._dict(name="REC-TEST")
+		recurring = Mock(
+			name="REC-TEST",
+			status="Active",
+			next_date="2026-07-01",
+			is_provider_managed=False,
+		)
+		recurring.close_if_next_date_is_past_end.return_value = True
+		with (
+			patch.object(frappe, "get_all", return_value=[candidate]),
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation.nowdate",
+				return_value="2026-07-23",
+			),
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._lock_recurring_donation",
+				return_value=recurring,
+			),
+			patch.object(frappe.db, "commit") as commit,
+		):
+			process_recurring_donations()
+
+		recurring.close_if_next_date_is_past_end.assert_called_once_with(ignore_permissions=True)
+		recurring._get_or_create_current_donation.assert_not_called()
+		commit.assert_called_once_with()
 
 
 class TestRecurringDonationConcurrency(IntegrationTestCase):
@@ -171,17 +222,31 @@ class TestRecurringDonationConcurrency(IntegrationTestCase):
 			self.assertEqual(recurring.next_date, frappe.utils.add_months(due_date, 1))
 		finally:
 			frappe.db.rollback()
-			for donation_name in frappe.get_all(
+			donation_names = frappe.get_all(
 				"Donation",
 				filters={"recurring_donation": recurring.name},
 				pluck="name",
-			):
+			)
+			for donation_name in donation_names:
 				donation = frappe.get_doc("Donation", donation_name)
 				if donation.docstatus == 1:
 					donation.cancel()
-				frappe.delete_doc("Donation", donation_name, ignore_permissions=True)
 			if frappe.db.exists("Recurring Donation", recurring.name):
-				frappe.delete_doc("Recurring Donation", recurring.name, ignore_permissions=True)
+				frappe.delete_doc(
+					"Recurring Donation",
+					recurring.name,
+					force=True,
+					ignore_permissions=True,
+				)
+			for donation_name in donation_names:
+				frappe.db.set_value(
+					"Donation",
+					donation_name,
+					"recurring_donation",
+					None,
+					update_modified=False,
+				)
+				frappe.delete_doc("Donation", donation_name, ignore_permissions=True)
 			if frappe.db.exists("Donor", donor.name):
 				frappe.delete_doc("Donor", donor.name, ignore_permissions=True)
 			if frappe.db.exists("Donor Type", donor_type):
@@ -311,6 +376,56 @@ class TestProviderBackedSchedules(UnitTestCase):
 
 
 class TestProviderStatusMapping(UnitTestCase):
+	def test_terminal_closure_audit_is_immutable(self):
+		schedule = RecurringDonation(
+			{
+				"doctype": "Recurring Donation",
+				"name": "REC-1",
+				"status": "Cancelled",
+				"closure_category": "Donor",
+				"closure_reason": "Donor requested cancellation",
+				"closure_details": "changed",
+				"closed_on": "2026-08-09 10:00:00",
+				"closed_by": "Administrator",
+			}
+		)
+		before = RecurringDonation(schedule.as_dict())
+		before.closure_details = "original"
+		with (
+			patch.object(schedule, "get_doc_before_save", return_value=before),
+			patch.object(
+				schedule,
+				"has_value_changed",
+				side_effect=lambda fieldname: fieldname == "closure_details",
+			),
+			self.assertRaisesRegex(frappe.ValidationError, "cannot be changed"),
+		):
+			schedule._validate_terminal_closure()
+
+	def test_first_terminal_transition_overwrites_caller_supplied_audit_identity(self):
+		schedule = RecurringDonation(
+			{
+				"doctype": "Recurring Donation",
+				"status": "Cancelled",
+				"closure_category": "Donor",
+				"closure_reason": "Donor requested cancellation",
+				"closed_on": "2000-01-01 00:00:00",
+				"closed_by": "forged@example.org",
+			}
+		)
+		with (
+			patch.object(schedule, "get_doc_before_save", return_value=None),
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation.now_datetime",
+				return_value="2026-08-09 12:00:00",
+			),
+			patch.object(frappe, "session", frappe._dict(user="actual@example.org")),
+		):
+			schedule._validate_terminal_closure()
+
+		self.assertEqual(schedule.closed_on, "2026-08-09 12:00:00")
+		self.assertEqual(schedule.closed_by, "actual@example.org")
+
 	def test_every_provider_state_maps_somewhere(self):
 		self.assertEqual(
 			PROVIDER_STATUS_MAP,
@@ -349,6 +464,29 @@ class TestProviderStatusMapping(UnitTestCase):
 		self.assertEqual(str(updates["next_date"]), "2026-09-01")
 		self.assertEqual(str(updates["provider_next_payment"]), "2026-09-01")
 
+	def test_final_provider_failure_records_structured_closure(self):
+		schedule = RecurringDonation(
+			{
+				"doctype": "Recurring Donation",
+				"name": "REC-1",
+				"status": "Active",
+				"last_decline_reason": "card expired",
+			}
+		)
+		with (
+			patch.object(RecurringDonation, "db_set") as db_set,
+			patch("non_profit.non_profit.doctype.recurring_donation.recurring_donation.notify"),
+		):
+			schedule.apply_provider_status("failed")
+
+		updates = db_set.call_args.args[0]
+		self.assertEqual(updates["status"], "Payment Failed")
+		self.assertEqual(updates["closure_category"], "Provider")
+		self.assertEqual(updates["closure_reason"], "Provider final payment failure")
+		self.assertEqual(updates["closure_details"], "card expired")
+		self.assertTrue(updates["closed_on"])
+		self.assertTrue(updates["closed_by"])
+
 	def test_unknown_provider_status_changes_nothing(self):
 		schedule = RecurringDonation({"doctype": "Recurring Donation", "name": "REC-1", "status": "Active"})
 		with patch.object(RecurringDonation, "db_set") as db_set:
@@ -368,6 +506,17 @@ class TestProviderStatusMapping(UnitTestCase):
 					self.assertIsNone(schedule.apply_provider_status("active", next_payment="2026-09-01"))
 				db_set.assert_not_called()
 				log_error.assert_called_once()
+
+	def test_duplicate_terminal_status_does_not_mutate_next_payment(self):
+		schedule = RecurringDonation(
+			{"doctype": "Recurring Donation", "name": "REC-1", "status": "Cancelled"}
+		)
+		with patch.object(RecurringDonation, "db_set") as db_set:
+			self.assertEqual(
+				schedule.apply_provider_status("cancelled", next_payment="2026-09-01"),
+				"Cancelled",
+			)
+		db_set.assert_not_called()
 
 	def test_retry_success_may_return_to_active(self):
 		schedule = RecurringDonation(
@@ -395,6 +544,10 @@ class TestProviderInstallmentRecording(UnitTestCase):
 		"""Provider webhooks retry for days; each real payment arrives many times."""
 		schedule = self._schedule()
 		with (
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._lock_recurring_donation",
+				return_value=schedule,
+			),
 			patch.object(frappe.db, "get_value", return_value="DON-1") as get_value,
 			patch.object(frappe, "get_doc", return_value="existing") as get_doc,
 			patch.object(RecurringDonation, "create_donation") as create,
@@ -414,6 +567,10 @@ class TestProviderInstallmentRecording(UnitTestCase):
 		schedule = self._schedule()
 		cancelled = Mock(name="cancelled donation", docstatus=2)
 		with (
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._lock_recurring_donation",
+				return_value=schedule,
+			),
 			patch.object(frappe.db, "get_value", return_value="DON-CANCELLED"),
 			patch.object(frappe, "get_doc", return_value=cancelled),
 			patch.object(RecurringDonation, "create_donation") as create,
@@ -426,6 +583,10 @@ class TestProviderInstallmentRecording(UnitTestCase):
 	def test_a_new_charge_creates_a_paid_donation_carrying_the_transaction_id(self):
 		schedule = self._schedule()
 		with (
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._lock_recurring_donation",
+				return_value=schedule,
+			),
 			patch.object(frappe.db, "get_value", return_value=None),
 			patch.object(RecurringDonation, "create_donation", return_value="DON-NEW") as create,
 			patch.object(RecurringDonation, "db_set") as db_set,
@@ -457,6 +618,44 @@ class TestProviderInstallmentRecording(UnitTestCase):
 		"""Without it there is no idempotency key, so replays would duplicate money."""
 		with self.assertRaises(frappe.ValidationError):
 			self._schedule().record_provider_installment(transaction_id="  ")
+
+	def test_non_provider_schedule_cannot_record_provider_installment(self):
+		schedule = RecurringDonation({"doctype": "Recurring Donation", "name": "REC-LOCAL", "amount": 50})
+		with (
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._lock_recurring_donation",
+				return_value=schedule,
+			),
+			self.assertRaisesRegex(frappe.ValidationError, "provider-managed"),
+		):
+			schedule.record_provider_installment(transaction_id="txn-local")
+
+	def test_provider_installment_cannot_override_standard_donation_fields(self):
+		schedule = self._schedule()
+		with (
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._lock_recurring_donation",
+				return_value=schedule,
+			),
+			self.assertRaisesRegex(frappe.ValidationError, "Custom Fields"),
+		):
+			schedule.record_provider_installment(
+				transaction_id="txn-forged",
+				donation_values={"donor": "OTHER-DONOR"},
+			)
+
+	def test_provider_installment_accepts_value_bearing_custom_field_decorations(self):
+		from non_profit.non_profit.doctype.recurring_donation.recurring_donation import (
+			_provider_installment_donation_values,
+		)
+
+		field = frappe._dict(is_custom_field=1, fieldtype="Data")
+		meta = frappe._dict(get_field=lambda fieldname: field if fieldname == "custom_marker" else None)
+		with patch.object(frappe, "get_meta", return_value=meta):
+			self.assertEqual(
+				_provider_installment_donation_values({"custom_marker": "provider evidence"}),
+				{"custom_marker": "provider evidence"},
+			)
 
 
 class TestProviderOperationDispatch(UnitTestCase):
@@ -504,6 +703,21 @@ class TestProviderOperationDispatch(UnitTestCase):
 			self.assertEqual(schedule.cancel_schedule(), "Cancelled")
 		get_hooks.assert_not_called()
 
+	def test_cancelling_any_terminal_schedule_is_a_no_op(self):
+		schedule = self._schedule(status="Payment Failed")
+		with (
+			patch.object(RecurringDonation, "check_permission"),
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._lock_recurring_donation",
+				return_value=schedule,
+			),
+			patch.object(frappe, "get_hooks", return_value=[]) as get_hooks,
+			patch.object(schedule, "db_set") as db_set,
+		):
+			self.assertEqual(schedule.cancel_schedule(), "Payment Failed")
+		get_hooks.assert_not_called()
+		db_set.assert_not_called()
+
 	def test_amount_change_is_refused_once_the_schedule_stopped_collecting(self):
 		schedule = self._schedule(status="Cancelled")
 		with (
@@ -515,6 +729,26 @@ class TestProviderOperationDispatch(UnitTestCase):
 			self.assertRaises(frappe.ValidationError),
 		):
 			schedule.change_amount(80)
+
+	def test_provider_cancel_preflights_reconciliation_before_external_dispatch(self):
+		schedule = self._schedule()
+		with (
+			patch.object(RecurringDonation, "check_permission"),
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._lock_recurring_donation",
+				return_value=schedule,
+			),
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._reconcile_schedule",
+				side_effect=frappe.ValidationError("unsafe local state"),
+			),
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._dispatch_provider"
+			) as dispatch,
+			self.assertRaisesRegex(frappe.ValidationError, "unsafe local state"),
+		):
+			schedule.cancel_schedule()
+		dispatch.assert_not_called()
 
 	def test_provider_operations_are_post_only(self):
 		for method in (
@@ -541,10 +775,16 @@ class TestProviderOperationDispatch(UnitTestCase):
 			),
 			patch.object(schedule, "db_set") as db_set,
 			patch.object(schedule, "add_comment") as add_comment,
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._reconcile_schedule"
+			) as reconcile,
 		):
 			self.assertEqual(schedule.retire_abandoned_pending_mandate(), "Cancelled")
 
-		db_set.assert_called_once_with("status", "Cancelled")
+		updates = db_set.call_args.args[0]
+		self.assertEqual(updates["status"], "Cancelled")
+		self.assertEqual(updates["closure_reason"], "Abandoned mandate retired")
+		reconcile.assert_called_once_with(schedule)
 		add_comment.assert_called_once()
 
 	def test_abandoned_pending_mandate_stays_open_without_provider_proof(self):
@@ -664,6 +904,639 @@ class TestScheduleCurrencyDefault(UnitTestCase):
 			schedule.validate()
 		self.assertEqual(schedule.currency, "CHF")
 
+	def test_currency_must_equal_company_default(self):
+		schedule = RecurringDonation(
+			{
+				"doctype": "Recurring Donation",
+				"name": "REC-1",
+				"company": "_Test NPO",
+				"currency": "EUR",
+			}
+		)
+		with (
+			patch.object(frappe, "get_cached_value", return_value="CHF"),
+			self.assertRaisesRegex(frappe.ValidationError, "must match Company"),
+		):
+			schedule.validate()
+
+	def test_installment_backfill_reports_legacy_currency_mismatch_before_writing(self):
+		from non_profit.patches import backfill_recurring_donation_installments as backfill
+
+		with (
+			patch.object(
+				backfill.frappe,
+				"get_all",
+				side_effect=[
+					[frappe._dict(name="GoodNPO", default_currency="CHF")],
+					[frappe._dict(name="REC-EUR", company="GoodNPO", currency="EUR")],
+					[],
+				],
+			),
+			self.assertRaisesRegex(frappe.ValidationError, "REC-EUR.*EUR / CHF"),
+		):
+			backfill._assert_company_currency_compatibility()
+
+
+class TestRecurringDonationReconciliation(IntegrationTestCase):
+	def test_closure_selects_have_explicit_blank_defaults(self) -> None:
+		meta = frappe.get_meta("Recurring Donation")
+		schedule = frappe.new_doc("Recurring Donation")
+
+		for fieldname in ("closure_category", "closure_reason"):
+			with self.subTest(fieldname=fieldname):
+				field = meta.get_field(fieldname)
+				self.assertEqual(field.default, "")
+				self.assertEqual(field.options.split("\n", 1)[0], "")
+				self.assertEqual(schedule.get(fieldname), "")
+
+	def test_default_contamination_patch_preserves_terminal_evidence(self) -> None:
+		with open(frappe.get_app_path("non_profit", "patches.txt")) as patches_file:
+			post_model_patches = patches_file.read().split("[post_model_sync]", 1)[1]
+		self.assertIn(
+			"non_profit.patches.clear_non_terminal_recurring_donation_closure_defaults",
+			post_model_patches,
+		)
+
+		contaminated = self._schedule(start_date=nowdate(), amount=25)
+		other_non_terminal = self._schedule(start_date=nowdate(), amount=25)
+		terminal = self._schedule(start_date=nowdate(), amount=25)
+		frappe.db.set_value(
+			"Recurring Donation",
+			contaminated.name,
+			{
+				"closure_category": "Donor",
+				"closure_reason": "Donor requested cancellation",
+			},
+			update_modified=False,
+		)
+		frappe.db.set_value(
+			"Recurring Donation",
+			other_non_terminal.name,
+			{
+				"closure_category": "Administrative",
+				"closure_reason": "Administrative closure",
+			},
+			update_modified=False,
+		)
+		terminal_evidence = {
+			"status": "Cancelled",
+			"closure_category": "Donor",
+			"closure_reason": "Donor requested cancellation",
+			"closure_details": "Verified donor request",
+			"closed_on": frappe.utils.get_datetime("2026-08-09 10:00:00"),
+			"closed_by": "Administrator",
+		}
+		frappe.db.set_value(
+			"Recurring Donation",
+			terminal.name,
+			terminal_evidence,
+			update_modified=False,
+		)
+
+		clear_non_terminal_recurring_donation_closure_defaults.execute()
+		clear_non_terminal_recurring_donation_closure_defaults.execute()
+
+		self.assertEqual(
+			frappe.db.get_value(
+				"Recurring Donation",
+				contaminated.name,
+				["closure_category", "closure_reason"],
+			),
+			(None, None),
+		)
+		self.assertEqual(
+			frappe.db.get_value(
+				"Recurring Donation",
+				other_non_terminal.name,
+				["closure_category", "closure_reason"],
+			),
+			("Administrative", "Administrative closure"),
+		)
+		self.assertEqual(
+			frappe.db.get_value(
+				"Recurring Donation",
+				terminal.name,
+				list(terminal_evidence),
+				as_dict=True,
+			),
+			terminal_evidence,
+		)
+
+	def test_installment_reversal_selects_have_explicit_blank_defaults(self) -> None:
+		meta = frappe.get_meta("Recurring Donation Installment")
+		installment = frappe.new_doc("Recurring Donation Installment")
+
+		for fieldname in ("reversal_source", "reversal_kind"):
+			with self.subTest(fieldname=fieldname):
+				field = meta.get_field(fieldname)
+				self.assertEqual(field.default, "")
+				self.assertEqual(field.options.split("\n", 1)[0], "")
+				self.assertEqual(installment.get(fieldname), "")
+
+	def test_reversal_default_cleanup_preserves_partial_and_complete_evidence(self) -> None:
+		from non_profit.non_profit.recurring_reconciliation import (
+			record_recurring_installment_reversal,
+		)
+
+		with open(frappe.get_app_path("non_profit", "patches.txt")) as patches_file:
+			post_model_patches = patches_file.read().split("[post_model_sync]", 1)[1]
+		self.assertIn(
+			"non_profit.patches.clear_incomplete_recurring_installment_reversal_defaults",
+			post_model_patches,
+		)
+
+		contaminated_schedule = self._schedule(start_date=nowdate(), amount=25)
+		partial_schedule = self._schedule(start_date=nowdate(), amount=25)
+		complete_schedule = self._schedule(start_date=nowdate(), amount=25)
+		contaminated = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": contaminated_schedule.name},
+			"name",
+		)
+		partial = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": partial_schedule.name},
+			"name",
+		)
+		frappe.db.set_value(
+			"Recurring Donation Installment",
+			contaminated,
+			{
+				"reversal_source": "Accounting",
+				"reversal_kind": "Payment Entry Cancellation",
+			},
+			update_modified=False,
+		)
+		frappe.db.set_value(
+			"Recurring Donation Installment",
+			partial,
+			{
+				"reversal_source": "Accounting",
+				"reversal_kind": "Payment Entry Cancellation",
+				"reversal_reference": "REVIEW-PARTIAL-EVIDENCE",
+			},
+			update_modified=False,
+		)
+
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"donor": complete_schedule.donor,
+				"company": complete_schedule.company,
+				"date": nowdate(),
+				"amount": 25,
+				"paid": 1,
+				"recurring_donation": complete_schedule.name,
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+		reversal = record_recurring_installment_reversal(
+			donation.name,
+			reversal_kind="Payment Entry Cancellation",
+			reversal_reference="PE-COMPLETE-EVIDENCE",
+			reversal_date=nowdate(),
+			reversal_amount=25,
+		)
+		complete_before = frappe.db.get_value(
+			"Recurring Donation Installment",
+			reversal["installment"],
+			[
+				"status",
+				"reversal_source",
+				"reversal_kind",
+				"reversal_reference",
+				"reversal_date",
+				"reversal_amount",
+				"reversal_recorded_on",
+			],
+			as_dict=True,
+		)
+		self.assertEqual(reversal["status"], "Reversed")
+		self.assertEqual(complete_before.status, "Reversed")
+		self.assertEqual(complete_before.reversal_source, "Accounting")
+		self.assertEqual(complete_before.reversal_kind, "Payment Entry Cancellation")
+		self.assertEqual(complete_before.reversal_reference, "PE-COMPLETE-EVIDENCE")
+		self.assertEqual(complete_before.reversal_date, getdate(nowdate()))
+		self.assertEqual(complete_before.reversal_amount, 25)
+		self.assertTrue(complete_before.reversal_recorded_on)
+
+		clear_incomplete_recurring_installment_reversal_defaults.execute()
+		clear_incomplete_recurring_installment_reversal_defaults.execute()
+
+		self.assertEqual(
+			frappe.db.get_value(
+				"Recurring Donation Installment",
+				contaminated,
+				["reversal_source", "reversal_kind"],
+			),
+			(None, None),
+		)
+		self.assertEqual(
+			frappe.db.get_value(
+				"Recurring Donation Installment",
+				partial,
+				["reversal_source", "reversal_kind", "reversal_reference"],
+			),
+			("Accounting", "Payment Entry Cancellation", "REVIEW-PARTIAL-EVIDENCE"),
+		)
+		self.assertEqual(
+			frappe.db.get_value(
+				"Recurring Donation Installment",
+				reversal["installment"],
+				list(complete_before),
+				as_dict=True,
+			),
+			complete_before,
+		)
+
+	def test_paid_amount_variance_links_the_actual_donation(self) -> None:
+		schedule = self._schedule(start_date=nowdate(), amount=50)
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"donor": schedule.donor,
+				"company": schedule.company,
+				"date": nowdate(),
+				"amount": 40,
+				"paid": 1,
+				"recurring_donation": schedule.name,
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+
+		installment = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name, "installment_kind": "Expected"},
+			["status", "donation", "expected_amount", "actual_amount", "amount_variance"],
+			as_dict=True,
+		)
+		self.assertEqual(installment.status, "Variance")
+		self.assertEqual(installment.donation, donation.name)
+		self.assertEqual(installment.expected_amount, 50)
+		self.assertEqual(installment.actual_amount, 40)
+		self.assertEqual(installment.amount_variance, -10)
+
+	def test_past_unsettled_expectation_is_missed(self) -> None:
+		schedule = self._schedule(start_date=add_months(nowdate(), -1), amount=25)
+		missed = frappe.get_all(
+			"Recurring Donation Installment",
+			filters={"recurring_donation": schedule.name, "status": "Missed"},
+			pluck="name",
+		)
+		self.assertEqual(len(missed), 1)
+
+	def test_daily_reconciliation_keeps_the_future_next_installment_active(self) -> None:
+		schedule = self._schedule(start_date=nowdate(), amount=25)
+		future_date = add_months(nowdate(), 1)
+		frappe.db.set_value(
+			"Recurring Donation", schedule.name, "next_date", future_date, update_modified=False
+		)
+		reconcile_recurring_donation(schedule.name, through_date=future_date)
+		reconcile_recurring_donation(schedule.name)
+
+		self.assertEqual(
+			frappe.db.get_value(
+				"Recurring Donation Installment",
+				{"recurring_donation": schedule.name, "expected_date": future_date},
+				"is_retired",
+			),
+			0,
+		)
+
+	def test_historical_reversal_does_not_move_the_reconciliation_clock_back(self) -> None:
+		start_date = add_months(nowdate(), -2)
+		schedule = self._schedule(start_date=start_date, amount=25)
+		reconcile_recurring_donation(schedule.name, through_date=nowdate())
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"donor": schedule.donor,
+				"company": schedule.company,
+				"date": start_date,
+				"amount": 25,
+				"paid": 1,
+				"recurring_donation": schedule.name,
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+
+		record_recurring_installment_reversal(
+			donation.name,
+			reversal_kind="Full Refund",
+			reversal_reference="HISTORICAL-REFUND",
+			reversal_date=start_date,
+			reversal_amount=25,
+		)
+
+		current_rows = frappe.get_all(
+			"Recurring Donation Installment",
+			filters={
+				"recurring_donation": schedule.name,
+				"expected_date": [">", start_date],
+			},
+			fields=["status", "is_retired"],
+			order_by="expected_date asc",
+		)
+		self.assertTrue(current_rows)
+		self.assertTrue(all(not row.is_retired for row in current_rows))
+		self.assertTrue(all(row.status == "Missed" for row in current_rows[:-1]))
+
+	def test_natural_end_keeps_the_final_generated_installment_active(self) -> None:
+		schedule = self._schedule(start_date=nowdate(), amount=25)
+		schedule.end_date = nowdate()
+		schedule.save(ignore_permissions=True)
+
+		donation_name = schedule.create_next_donation()
+		schedule.reload()
+		self.assertEqual(schedule.closure_reason, "End date reached")
+		self.assertEqual(
+			frappe.db.get_value(
+				"Recurring Donation Installment",
+				{"recurring_donation": schedule.name, "donation": donation_name},
+				"status",
+			),
+			"Expected",
+		)
+
+	def test_cancelled_unpaid_donation_is_not_reversed_actual_evidence(self) -> None:
+		schedule = self._schedule(start_date=nowdate(), amount=25)
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"donor": schedule.donor,
+				"company": schedule.company,
+				"date": nowdate(),
+				"amount": 25,
+				"paid": 0,
+				"recurring_donation": schedule.name,
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+		donation.cancel()
+
+		installments = frappe.get_all(
+			"Recurring Donation Installment",
+			filters={"recurring_donation": schedule.name},
+			fields=["installment_kind", "status", "actual_amount"],
+		)
+		self.assertFalse(any(row.status == "Reversed" for row in installments))
+		self.assertFalse(any(row.installment_kind == "Unexpected" for row in installments))
+		self.assertFalse(any(row.actual_amount for row in installments))
+
+	def test_late_payment_matches_latest_unfilled_due_expectation(self) -> None:
+		start_date = add_months(nowdate(), -2)
+		schedule = self._schedule(start_date=start_date, amount=25)
+		paid_on = add_days(add_months(start_date, 1), 10)
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"donor": schedule.donor,
+				"company": schedule.company,
+				"date": paid_on,
+				"amount": 25,
+				"paid": 1,
+				"recurring_donation": schedule.name,
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+
+		expected_date = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name, "donation": donation.name},
+			"expected_date",
+		)
+		self.assertEqual(expected_date, getdate(add_months(start_date, 1)))
+
+	def test_donation_cancellation_does_not_forge_reversal_evidence(self) -> None:
+		schedule = self._schedule(start_date=nowdate(), amount=25)
+		donations = []
+		for _index in range(2):
+			donation = frappe.get_doc(
+				{
+					"doctype": "Donation",
+					"donor": schedule.donor,
+					"company": schedule.company,
+					"date": nowdate(),
+					"amount": 25,
+					"paid": 1,
+					"recurring_donation": schedule.name,
+				}
+			).insert(ignore_permissions=True)
+			donation.submit()
+			donations.append(donation)
+
+		unexpected = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name, "donation": donations[1].name},
+			["installment_kind", "status"],
+			as_dict=True,
+		)
+		self.assertEqual(unexpected.installment_kind, "Unexpected")
+		self.assertEqual(unexpected.status, "Unexpected")
+
+		donations[1].cancel()
+		installment = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name, "donation": donations[1].name},
+			["status", "actual_amount", "reversal_kind", "reversal_reference"],
+			as_dict=True,
+		)
+		self.assertEqual(installment.status, "Unexpected")
+		self.assertEqual(installment.actual_amount, 25)
+		self.assertFalse(installment.reversal_kind)
+		self.assertFalse(installment.reversal_reference)
+
+	def test_conflicting_reversal_is_not_accepted_as_an_idempotent_replay(self) -> None:
+		schedule = self._schedule(start_date=nowdate(), amount=25)
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"donor": schedule.donor,
+				"company": schedule.company,
+				"date": nowdate(),
+				"amount": 25,
+				"paid": 1,
+				"recurring_donation": schedule.name,
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+		record_recurring_installment_reversal(
+			donation.name,
+			reversal_kind="Full Refund",
+			reversal_reference="REFUND-EVENT-1",
+			reversal_date=nowdate(),
+			reversal_amount=25,
+		)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "conflicts with existing"):
+			record_recurring_installment_reversal(
+				donation.name,
+				reversal_kind="Chargeback",
+				reversal_reference="CHARGEBACK-EVENT-2",
+				reversal_date=nowdate(),
+				reversal_amount=25,
+			)
+
+	def test_original_actual_snapshot_cannot_be_rewritten(self) -> None:
+		from non_profit.non_profit.doctype.recurring_donation_installment.recurring_donation_installment import (
+			allow_reconciliation_write,
+		)
+
+		schedule = self._schedule(start_date=nowdate(), amount=25)
+		donation = frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"donor": schedule.donor,
+				"company": schedule.company,
+				"date": nowdate(),
+				"amount": 25,
+				"paid": 1,
+				"recurring_donation": schedule.name,
+			}
+		).insert(ignore_permissions=True)
+		donation.submit()
+		installment_name = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name, "donation": donation.name},
+			"name",
+		)
+		installment = frappe.get_doc("Recurring Donation Installment", installment_name)
+		installment.actual_amount = 30
+		allow_reconciliation_write(installment)
+
+		with self.assertRaisesRegex(frappe.ValidationError, "accounting evidence cannot be changed"):
+			installment.save(ignore_permissions=True)
+
+	def test_final_failure_marks_closure_day_expectation_missed(self) -> None:
+		schedule = self._schedule(start_date=nowdate(), amount=25)
+		with patch("non_profit.non_profit.doctype.recurring_donation.recurring_donation.notify"):
+			schedule.apply_provider_status("failed")
+
+		self.assertEqual(
+			frappe.db.get_value(
+				"Recurring Donation Installment",
+				{"recurring_donation": schedule.name, "expected_date": nowdate()},
+				"status",
+			),
+			"Missed",
+		)
+
+	def test_cancellation_marks_expectations_cancelled_from_effective_date(self) -> None:
+		schedule = self._schedule(start_date=nowdate(), amount=25)
+		with patch("non_profit.non_profit.doctype.recurring_donation.recurring_donation.notify"):
+			schedule.cancel_schedule()
+
+		self.assertEqual(
+			frappe.db.get_value(
+				"Recurring Donation Installment",
+				{"recurring_donation": schedule.name, "expected_date": nowdate()},
+				"status",
+			),
+			"Cancelled",
+		)
+
+	def test_cadence_change_retires_and_reactivates_obsolete_expectations(self) -> None:
+		start_date = add_months(nowdate(), -2)
+		schedule = self._schedule(start_date=start_date, amount=25)
+
+		schedule.frequency = "Quarterly"
+		schedule.save(ignore_permissions=True)
+		self.assertEqual(
+			frappe.db.count(
+				"Recurring Donation Installment",
+				{"recurring_donation": schedule.name, "installment_kind": "Expected", "is_retired": 1},
+			),
+			2,
+		)
+		schedule.reload()
+		self.assertEqual(schedule.expected_installment_count, 1)
+
+		schedule.frequency = "Monthly"
+		schedule.save(ignore_permissions=True)
+		self.assertEqual(
+			frappe.db.count(
+				"Recurring Donation Installment",
+				{"recurring_donation": schedule.name, "installment_kind": "Expected", "is_retired": 1},
+			),
+			0,
+		)
+
+	def test_installment_cannot_be_written_outside_reconciliation(self) -> None:
+		schedule = self._schedule(start_date=nowdate(), amount=25)
+		with self.assertRaises(frappe.PermissionError):
+			frappe.get_doc(
+				{
+					"doctype": "Recurring Donation Installment",
+					"recurring_donation": schedule.name,
+					"installment_kind": "Expected",
+					"status": "Expected",
+					"expected_date": nowdate(),
+					"expected_amount": 25,
+					"currency": schedule.currency,
+				}
+			).insert(ignore_permissions=True)
+
+	def test_installment_cannot_be_deleted_outside_parent_cascade(self) -> None:
+		schedule = self._schedule(start_date=nowdate(), amount=25)
+		installment = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name},
+			"name",
+		)
+
+		with self.assertRaises(frappe.PermissionError):
+			frappe.delete_doc("Recurring Donation Installment", installment, ignore_permissions=True)
+
+	def test_deleting_schedule_cascades_guarded_installment_rows(self) -> None:
+		schedule = self._schedule(start_date=nowdate(), amount=25)
+		installment = frappe.db.get_value(
+			"Recurring Donation Installment",
+			{"recurring_donation": schedule.name},
+			"name",
+		)
+
+		frappe.delete_doc("Recurring Donation", schedule.name, ignore_permissions=True)
+
+		self.assertFalse(frappe.db.exists("Recurring Donation Installment", installment))
+
+	def _schedule(self, *, start_date, amount):
+		donor_type = frappe.db.get_value("Donor Type", {}, "name")
+		if not donor_type:
+			donor_type = (
+				frappe.get_doc(
+					{
+						"doctype": "Donor Type",
+						"donor_type": f"_Test Recurring {frappe.generate_hash(length=8)}",
+					}
+				)
+				.insert(ignore_permissions=True)
+				.name
+			)
+		donor = frappe.get_doc(
+			{
+				"doctype": "Donor",
+				"donor_name": f"_Test Recurring {frappe.generate_hash(length=8)}",
+				"donor_type": donor_type,
+			}
+		).insert(ignore_permissions=True)
+		company = (
+			frappe.db.get_single_value("Non Profit Settings", "donation_company")
+			or frappe.db.get_single_value("Non Profit Settings", "company")
+			or frappe.db.get_value("Company", {}, "name", order_by="name asc")
+		)
+		return frappe.get_doc(
+			{
+				"doctype": "Recurring Donation",
+				"donor": donor.name,
+				"company": company,
+				"amount": amount,
+				"frequency": "Monthly",
+				"start_date": start_date,
+				"next_date": start_date,
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True)
+
 
 class TestInstallmentsQualifyForTaxReceipts(UnitTestCase):
 	"""A provider installment must be an ordinary Donation in every downstream sense.
@@ -708,6 +1581,10 @@ class TestInstallmentsQualifyForTaxReceipts(UnitTestCase):
 			}
 		)
 		with (
+			patch(
+				"non_profit.non_profit.doctype.recurring_donation.recurring_donation._lock_recurring_donation",
+				return_value=schedule,
+			),
 			patch.object(frappe.db, "get_value", return_value=None),
 			patch.object(RecurringDonation, "create_donation", return_value="DON-NEW") as create,
 			patch.object(RecurringDonation, "db_set"),

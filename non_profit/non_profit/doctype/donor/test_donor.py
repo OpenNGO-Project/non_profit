@@ -70,6 +70,98 @@ class TestDonor(IntegrationTestCase):
 		self.assertEqual(donor.contact, contact)
 		self.assertEqual(frappe.db.get_value("Contact", contact, "npo_identity_kind"), "Person")
 
+	def test_customer_link_propagates_all_donor_addresses_and_uses_unique_primary(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import _link_donor_address_to_customer
+
+		donor = self._donor("Address Propagation")
+		customer = self._customer("Address Propagation Customer")
+		primary = self._address("Primary", donor.name, is_primary=1)
+		secondary = self._address("Secondary", donor.name)
+
+		_link_donor_address_to_customer(donor.name, customer.name)
+
+		for address in (primary, secondary):
+			self.assertTrue(
+				frappe.db.exists(
+					"Dynamic Link",
+					{
+						"parenttype": "Address",
+						"parent": address.name,
+						"link_doctype": "Customer",
+						"link_name": customer.name,
+					},
+				)
+			)
+		self.assertEqual(
+			frappe.db.get_value("Customer", customer.name, "customer_primary_address"),
+			primary.name,
+		)
+
+	def test_customer_link_does_not_choose_first_ambiguous_donor_address(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import _link_donor_address_to_customer
+
+		donor = self._donor("Ambiguous Address")
+		customer = self._customer("Ambiguous Address Customer")
+		addresses = [self._address(label, donor.name) for label in ("First", "Second")]
+		for address in addresses:
+			frappe.db.set_value("Address", address.name, "is_primary_address", 0, update_modified=False)
+
+		_link_donor_address_to_customer(donor.name, customer.name)
+
+		self.assertFalse(frappe.db.get_value("Customer", customer.name, "customer_primary_address"))
+		for address in addresses:
+			self.assertTrue(
+				frappe.db.exists(
+					"Dynamic Link",
+					{
+						"parenttype": "Address",
+						"parent": address.name,
+						"link_doctype": "Customer",
+						"link_name": customer.name,
+					},
+				)
+			)
+
+	def test_customer_link_preserves_existing_customer_primary_address(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import _link_donor_address_to_customer
+
+		donor = self._donor("Preserved Address")
+		customer = self._customer("Preserved Address Customer")
+		existing = self._address("Existing", customer.name, link_doctype="Customer")
+		frappe.db.set_value(
+			"Customer",
+			customer.name,
+			"customer_primary_address",
+			existing.name,
+			update_modified=False,
+		)
+		self._address("Donor", donor.name, is_primary=1)
+
+		_link_donor_address_to_customer(donor.name, customer.name)
+
+		self.assertEqual(
+			frappe.db.get_value("Customer", customer.name, "customer_primary_address"),
+			existing.name,
+		)
+
+	def test_default_customer_group_never_returns_group_root(self) -> None:
+		from non_profit.non_profit.doctype.donor import donor as donor_module
+
+		with (
+			patch.object(donor_module.frappe.db, "get_single_value", return_value="All Customer Groups"),
+			patch.object(
+				donor_module.frappe.db,
+				"exists",
+				side_effect=lambda doctype, name: (
+					doctype == "Customer Group" and name == "All Customer Groups"
+				),
+			),
+		):
+			customer_group = donor_module._default_customer_group()
+
+		self.assertNotEqual(customer_group, "All Customer Groups")
+		self.assertFalse(frappe.db.get_value("Customer Group", customer_group, "is_group"))
+
 	def test_donor_reuses_member_customer_by_email(self) -> None:
 		from non_profit.non_profit.doctype.donor.donor import (
 			get_or_create_customer_for_donor,
@@ -516,6 +608,68 @@ class TestDonor(IntegrationTestCase):
 		self.assertEqual(frappe.db.get_value("Contact", contact.name, "npo_identity_kind"), "Person")
 		self.assertEqual(get_donor_email(donor), email)
 
+	def test_linking_historical_donor_recomputes_old_and_current_households(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import ensure_contact_link
+
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Historical Household Donor",
+			}
+		).insert(ignore_permissions=True)
+		old_household = frappe.get_doc(
+			{
+				"doctype": "Household",
+				"household_name": f"Old Household {frappe.generate_hash(length=8)}",
+			}
+		).insert(ignore_permissions=True)
+		current_household = frappe.get_doc(
+			{
+				"doctype": "Household",
+				"household_name": f"Current Household {frappe.generate_hash(length=8)}",
+				"members": [{"contact": contact.name, "from_date": frappe.utils.nowdate()}],
+			}
+		).insert(ignore_permissions=True)
+		donor = self._donor("Historical Household Giving")
+		frappe.db.set_value("Donor", donor.name, "household", old_household.name, update_modified=False)
+		frappe.db.set_value(
+			"Household",
+			old_household.name,
+			{"total_lifetime_amount": 75, "gift_count": 1},
+			update_modified=False,
+		)
+		company = frappe.db.get_value("Company", {}, "name", order_by="name asc")
+		frappe.get_doc(
+			{
+				"doctype": "Donation",
+				"donor": donor.name,
+				"company": company,
+				"date": frappe.utils.nowdate(),
+				"amount": 75,
+				"paid": 1,
+			}
+		).insert(ignore_permissions=True).submit()
+
+		ensure_contact_link(contact.name, "Donor", donor.name)
+
+		self.assertEqual(frappe.db.get_value("Donor", donor.name, "household"), current_household.name)
+		old_values = frappe.db.get_value(
+			"Household",
+			old_household.name,
+			["total_lifetime_amount", "gift_count"],
+			as_dict=True,
+		)
+		current_values = frappe.db.get_value(
+			"Household",
+			current_household.name,
+			["total_lifetime_amount", "gift_count"],
+			as_dict=True,
+		)
+		self.assertEqual(old_values.total_lifetime_amount, 0)
+		self.assertEqual(old_values.gift_count, 0)
+		self.assertEqual(current_values.total_lifetime_amount, 75)
+		self.assertEqual(current_values.gift_count, 1)
+
 	def test_individual_donor_email_prefers_canonical_contact(self) -> None:
 		from non_profit.non_profit.doctype.donor.donor import get_donor_email
 
@@ -588,6 +742,30 @@ class TestDonor(IntegrationTestCase):
 		self.assertEqual(get_donor_email(donor), email)
 		self.assertEqual(find_donor_by_email(email), donor.name)
 
+	def test_generic_endpoint_contact_is_not_a_canonical_email_candidate(self) -> None:
+		from non_profit.non_profit.doctype.donor.donor import find_donors_by_email
+
+		email = f"generic-endpoint-donor-{frappe.generate_hash(length=8)}@example.org"
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "Shared Mailbox",
+				"npo_identity_kind": "Generic Endpoint",
+				"email_ids": [{"email_id": email, "is_primary": 1}],
+			}
+		).insert(ignore_permissions=True)
+		donor = frappe.get_doc(
+			{
+				"doctype": "Donor",
+				"donor_name": "Historical Shared Mailbox Donor",
+				"donor_type": self._donor_type(),
+			}
+		).insert(ignore_permissions=True)
+		# Simulate historical data from before canonical Contact classification was enforced.
+		frappe.db.set_value("Donor", donor.name, "contact", contact.name, update_modified=False)
+
+		self.assertNotIn(donor.name, find_donors_by_email(email))
+
 	def test_donor_customer_backfill_patch_runs_after_model_sync(self) -> None:
 		from frappe.modules.patch_handler import PatchType, get_patches_from_app
 
@@ -625,6 +803,37 @@ class TestDonor(IntegrationTestCase):
 		name = f"Donor Type {frappe.generate_hash(length=8)}"
 		frappe.get_doc({"doctype": "Donor Type", "donor_type": name}).insert(ignore_permissions=True)
 		return name
+
+	def _donor(self, donor_name: str):
+		return frappe.get_doc(
+			{
+				"doctype": "Donor",
+				"donor_name": donor_name,
+				"donor_type": self._donor_type(),
+			}
+		).insert(ignore_permissions=True)
+
+	def _address(
+		self,
+		address_title: str,
+		link_name: str,
+		*,
+		link_doctype: str = "Donor",
+		is_primary: int = 0,
+	):
+		return frappe.get_doc(
+			{
+				"doctype": "Address",
+				"address_title": f"{address_title} {frappe.generate_hash(length=8)}",
+				"address_type": "Billing",
+				"address_line1": "Test Street 1",
+				"pincode": "8000",
+				"city": "Zurich",
+				"country": "Switzerland",
+				"is_primary_address": is_primary,
+				"links": [{"link_doctype": link_doctype, "link_name": link_name}],
+			}
+		).insert(ignore_permissions=True)
 
 	def _membership_type(self) -> str:
 		name = f"Membership Type {frappe.generate_hash(length=8)}"

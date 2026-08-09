@@ -135,6 +135,15 @@ dialog. Candidates with no reachable email are reported as skipped instead of
 silently disappearing. Contact opt-outs are excluded and duplicate email
 addresses are collapsed case-insensitively.
 
+Newsletter greetings depend on the canonical identity. People and Households
+use the resolved name (`Guten Tag`, `Bonjour`, `Buongiorno`, or English `Dear`).
+Organizations use fixed legal-entity wording such as **Sehr geehrte Damen und
+Herren,** or **Dear Sir or Madam,** and are never greeted by organization name.
+For an Organization, the canonical Customer language takes precedence over a
+related Donor's default language.
+Blank or unsupported language falls back to German. A missing person addressee
+produces only the greeting, without a dangling comma.
+
 The count and **Last Evaluated On** are refreshed when the selection is saved.
 Source data may change later; save the selection again before comparing its
 stored count, and let the consuming campaign create its own current snapshot.
@@ -193,7 +202,13 @@ Use **Donor.customer** to connect fundraising contacts to ERPNext Customer data.
 Customer linkage is handled by creation, import, and repair helper flows rather
 than a separate Donor form action. The helper reuses a Customer already linked
 to a Member with the same email before creating a new Customer, then links
-Contact and Address rows to both Donor and Customer. For an individual Donor,
+Contact and every Donor Address row to both Donor and Customer. It preserves an
+existing Customer primary Address. When none is set, only a unique active
+primary Donor Address or the sole active Donor Address is selected; with several
+unresolved Addresses the Customer primary stays blank so postal readiness can
+report the ambiguity. Disabled Addresses are never selected as primary. New
+Customers require a non-group Default Customer Group; the root **All Customer
+Groups** is not valid. For an individual Donor,
 the hidden canonical Contact field is persisted as well.
 When creating a Donor from Desk, use the Contact/Customer dialog to select a
 Contact, a Customer, or both. Contact-only Donors stay linked to the Contact
@@ -222,6 +237,19 @@ through
 than copying email lookup and Customer creation. Use
 `ambiguous_email_policy="reject"` for guest-facing flows so duplicate Donor or
 Customer identities are sent to staff review instead of being merged arbitrarily.
+The generic `/donate` handler follows this rule and never takes the first email
+match. Matching includes the canonical Contact email of an individual Donor. It
+returns a neutral error before changing Donor/Customer/Donation data when more
+than one Donor or Customer matches, or when one Donor and one Customer share the
+email but have no existing Donor-Customer link or explicitly Person-classified
+shared canonical Contact proving they are one identity. A Company Customer's
+primary contact does not make that company the person's identity.
+Resolve those records in Desk and ask the donor to retry. Missing Donor Type
+setup also fails closed; the public request never creates configuration. A
+different name submitted for one existing Donor is added to its timeline for
+review; the public request never renames the Donor. Generic ambiguity logs use
+the `non_profit` application logger and an email hash rather than Error Log,
+whose automatic request metadata would retain the raw submitted address.
 Use the Frappe **Language** selector for Donor preferred language. The saved
 value is still the language code, for example `de` or `en`, but operators get the
 standard enabled-language lookup. `Donation Tax Receipt.language` is a plain
@@ -229,6 +257,23 @@ Select of the languages the app supports for correspondence (`de`, `fr`, `it`,
 `en`), defaulting to `de`.
 
 `Donation.thank_you_sent` is a standard field for **Verdankungen**. It is set automatically when `Donation.send_thank_you()` queues an email and can also be used by presentation apps for manual acknowledgement queues. `thank_you_sent_on`, `thank_you_email_queue`, and `thank_you_sent_by` keep the audit trail.
+
+### Tribute gifts
+
+Select **In Honour** or **In Memory** on Donation and enter the honouree. When
+the donor asks you to notify someone, tick **Notification Requested** and record
+the recipient plus a Contact, email, or postal address. Public forms store email
+and postal text as snapshots on the Donation; they never create or edit a
+recipient Contact/Address master.
+
+Paying a Donation does not send a tribute notification. After staff deliver it
+through the approved channel, use **Actions → Record Tribute Fulfillment** and
+choose **Fulfilled**. Choose **Unable** with a required note when delivery cannot
+be completed. The action is available only for submitted paid Donations with a
+pending request and records the acting user and time. You also need read access
+to any linked recipient Contact or Address; use guest-safe snapshots when the
+recipient must not become shared master data. Import/Desk edits cannot prefill a
+terminal fulfillment audit. The action does not send email.
 
 A **Verdankung** (thank-you for one donation) and a **Spendenbescheinigung**
 (annual tax receipt) are different documents. Verdankungen live on the Donation;
@@ -614,6 +659,18 @@ with the same **Subject Household** and blank **Subject Type** is reused; if mor
 than one canonical/legacy candidate exists, resolve the duplicate records before
 retrying.
 
+The Household form's **Giving Summary** totals submitted, paid Donations from
+all **current** Household People plus the joint Household Donor. It is not a
+historical-membership report: ending a person's Household row removes that
+person's gifts from the current Household roll-up, while gifts attributed to the
+canonical Household Donor remain. Donation cancellation and payment changes
+refresh the figures; the daily reconciliation repairs out-of-band drift.
+**Gift Count** and first/last dates remain available when qualifying Donations
+span currencies. Money fields are shown only when every Donation Company resolves
+to one common currency. If **Giving Currency Review Required** is checked, the
+money fields are intentionally blank; review the Donation Companies/currencies
+instead of adding those amounts manually.
+
 ## Recurring Donations
 
 Use **Recurring Donation** for a schedule, not as proof of payment. A due active
@@ -622,10 +679,45 @@ Date**, and becomes Cancelled once the next date passes **End Date**. Accounting
 or a payment provider must settle each generated Donation separately. The job
 serializes each schedule and reuses an already-created installment for the same
 schedule/date, so retries or overlapping workers do not create duplicates.
+When the due date equals **End Date**, that final Donation is created before the
+schedule closes and its expectation remains active so it can settle, vary, or
+become missed.
+
+Open the linked **Recurring Donation Installment** rows to audit expected versus
+actual giving. **Expected** means no paid Donation has settled that date yet;
+past expectations become **Missed**. **Settled** is an equal paid Donation,
+**Variance** is a different paid amount, **Unexpected** is an extra paid Donation,
+and **Reversed** keeps an immutable full Payment Entry cancellation, provider
+full-refund, or chargeback reference. Cancelling a Donation document by itself
+does not prove a payment reversal. Accounting reversal also requires the
+installment's existing immutable actual snapshot to prove that the complete
+Donation was previously settled. For a concurrently full split settlement,
+every submitted allocation must be gone and cancelled allocations must cover the
+complete Donation; the final cancellation becomes the trigger reference. One
+partial cancellation stays unreversed, and separate partial settle/cancel attempts
+never combine into a full reversal. Conflicting replay evidence
+is rejected rather than replacing or borrowing an earlier reversal. The summary on Recurring Donation
+shows due expected amount, actual settled amount, and variance. Reconciliation
+does not contact Payrexx or any other provider and cannot create a charge.
+If schedule cadence or dates change, obsolete expected rows remain as **Retired
+Expectation** audit evidence and no longer affect active expected/missed totals.
+Do not delete them. A later change that makes the same date expected again
+reactivates the row; linked payment and reversal evidence remains visible.
+Daily reconciliation keeps a future local **Next Date** or provider next-payment
+date in scope. A historical reversal date remains audit evidence; it does not
+move the current reconciliation clock backward.
+Installment rows cannot be edited or deleted directly. If an unused schedule is
+legitimately deletable, deleting that Recurring Donation performs the guarded
+installment cleanup; terminal operational schedules should normally be retained.
+The 16.17 migration clears the exact former automatic reversal defaults
+**Accounting** / **Payment Entry Cancellation** only when reference, date,
+amount, and recorded-on evidence are all absent. It preserves partial review
+evidence and complete reversal evidence and is safe to retry.
 
 **Actions → Create Next Donation Now** creates an installment immediately and
 also advances the schedule. It is available only while no payment provider owns
-the schedule.
+the schedule. If **Next Date** is already after **End Date**, the locked schedule
+closes without creating a Donation; the daily job follows the same rule.
 
 The public `/donate` page offers one-off and monthly. When a payment
 integration is installed it owns the whole path: the donor is redirected to a
@@ -652,6 +744,9 @@ retirement remains available only through explicit provider verification.
   the one already taken.
 - **Actions → Cancel Schedule** stops future charges immediately. There is no
   grace period, and a cancelled schedule cannot be resumed — create a new one.
+  Local installment reconciliation runs before the provider is contacted. A
+  preflight error means no external cancellation was dispatched; repair the
+  reported local evidence before retrying.
 - **Actions → Retire Abandoned Checkout** appears for an incomplete **Pending
   Mandate**. It asks the registered provider to prove that no payment or mandate
   can still exist and changes the row only after positive proof. If verification
@@ -663,8 +758,32 @@ retirement remains available only through explicit provider verification.
 - **Ending** means the donor cancelled but the remaining charges still follow,
   so installments keep arriving until the term ends.
 
+The expected installment on a final-failure closure date is **Missed**. A true
+cancellation instead marks expectations **Cancelled** from its effective date.
+Natural end-date closure is different: the final generated expectation remains
+active for its normal settlement outcome.
+
 **Payment Failed** and **Cancelled** are terminal. A delayed active/retrying
 event cannot reopen them; create a new schedule when the donor starts again.
+Terminal rows also show **Closure Category**, **Closure Reason**, optional
+details, **Closed On**, and **Closed By**. Provider failures retain their
+failure count, timestamp, and decline reason separately. Old terminal rows are
+backfilled as Historical when the system cannot prove a more specific reason;
+do not recategorize them as donor-requested without evidence. Closure audit is
+immutable after entry, and repeating a cancellation/failure event is a no-op.
+On the first terminal transition, **Closed On** and **Closed By** are always
+stamped from server time and the acting session; submitted values are ignored.
+Provider-verified abandoned checkout retirement reconciles those expectations
+immediately.
+
+The 16.17 migration also clears the exact former automatic defaults **Donor** /
+**Donor requested cancellation** from non-terminal schedules. It is safe to
+retry and never changes terminal schedules, where that pair can be legitimate
+evidence.
+
+Recurring Donation currency must equal the selected Company's default currency.
+Migration stops and reports legacy mismatches instead of assigning a new currency
+label to historical installment amounts; correct those schedules before retrying.
 
 If an amount change or cancellation reports an error after the provider already
 answered successfully, do not issue a different operation. Retry the exact same
@@ -740,6 +859,22 @@ The daily fundraising reconciliation repairs Donor giving summaries and Major
 Gift closed amounts from submitted, paid Donations. It processes all records in
 grouped batches and writes only changed summaries; the fields and latest-gift
 policy shown to operators are unchanged.
+
+## Reset Consumer Integration
+
+Non Profit 16.17.0 registers
+`non_profit.non_profit.demo_data_reset.get_reset_declaration` under the generic
+`demo_data_reset_declarations` hook. A reset consumer can therefore order and
+remove only its captured marked Donation, receipt, Major Gift, recurring,
+sponsor, membership, member, donor, campaign, and volunteer rows. Recurring
+Donation Installments are derived evidence: the provider captures their exact
+names before reset, locks and revalidates their schedule owner, deletes only
+those names through the reconciliation guard,
+and verifies only that frozen set afterward. No site-wide installment cleanup is
+performed. The provider also clears the reciprocal `next_action_task` Link on a
+captured Donor or Major Gift only after locking the parent and confirming that
+the currently linked Task is captured in the same
+reset epoch; an external parent or Task remains untouched and can block reset.
 
 ## Smoke Checks
 

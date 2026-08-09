@@ -28,6 +28,9 @@ class Household(Document):
 
 	def on_update(self):
 		self.sync_role_household_links()
+		from non_profit.non_profit.household_giving import recompute_household_giving
+
+		recompute_household_giving(self.name)
 
 	def on_trash(self):
 		contacts = _contact_names(self.members)

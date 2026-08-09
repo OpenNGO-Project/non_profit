@@ -12,6 +12,12 @@
 - What it prevents: Manual commits inside request handlers or DocType hooks that can leave partial writes and bypass Frappe's transaction lifecycle.
 - Why this override is safe: `process_recurring_donations` is a daily scheduler batch job. It commits each recurring-donation fan-out independently so one failing donor schedule can be rolled back and logged without undoing earlier generated Donations from the same batch run.
 
+## `frappe-manual-commit` in `non_profit/non_profit/recurring_reconciliation.py`
+
+- Rule: `frappe-manual-commit`
+- What it prevents: Manual commits inside request handlers or DocType hooks that can leave partial writes and bypass Frappe's transaction lifecycle.
+- Why this override is safe: `reconcile_recurring_donations` is the daily scheduler batch boundary, not the reconciliation service used by requests and hooks. It commits each locked schedule independently so a later malformed schedule cannot roll back already repaired audit ledgers and so row locks are released between schedules.
+
 ## `frappe-manual-commit` in `non_profit/scripts/donation_slip_smoke.py`
 
 - Rule: `frappe-manual-commit`

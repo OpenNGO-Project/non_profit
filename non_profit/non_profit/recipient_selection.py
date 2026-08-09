@@ -672,7 +672,9 @@ def _candidate_email_data(
 		"contact": contact_name or "",
 		"first_name": cstr(contact.get("first_name")).strip(),
 		"last_name": cstr(contact.get("last_name")).strip(),
-		"salutation": _complete_neutral_salutation(addressee, language),
+		"salutation": _complete_neutral_salutation(
+			addressee, language, kind=_addressee_kind(profile.get("subject_type"))
+		),
 		"language": language,
 	}
 
@@ -745,16 +747,53 @@ def _newsletter_language(value: Any) -> str:
 	return language if language in SUPPORTED_NEWSLETTER_LANGUAGES else ""
 
 
-def _complete_neutral_salutation(addressee: str, language: str) -> str:
-	language = language or "de"
-	greeting = {
-		"de": "Guten Tag",
-		"en": "Hello",
-		"fr": "Bonjour",
-		"it": "Buongiorno",
-	}[language]
-	punctuation = "," if language in {"en", "fr", "it"} else ""
-	return f"{greeting} {cstr(addressee).strip()}{punctuation}".strip()
+# Local implementation of the neutral greeting contract. Public tests pin the
+# supported languages, identity kinds, fallback, and punctuation behavior.
+_NEUTRAL_GREETINGS = {
+	"de": ("Guten Tag", ""),
+	"fr": ("Bonjour", ","),
+	"it": ("Buongiorno", ","),
+	"en": ("Dear", ","),
+}
+
+# A legal entity is never greeted by name; the addressee is dropped entirely.
+_ORGANIZATION_GREETINGS = {
+	"de": "Sehr geehrte Damen und Herren,",
+	"fr": "Madame, Monsieur,",
+	"it": "Gentili Signore e Signori,",
+	"en": "Dear Sir or Madam,",
+}
+
+_SALUTATION_FALLBACK_LANGUAGE = "de"
+
+
+def _complete_neutral_salutation(addressee: str, language: str, *, kind: str) -> str:
+	"""Greeting for an addressee with no separable name parts.
+
+	``kind`` "household"/"person" are greeted by name; "organization" is not,
+	because addressing a company by its own name reads as addressing a person.
+	Required, with no default, so a new caller cannot silently greet a company
+	by its own name — the defect this argument exists to prevent.
+	"""
+	# `.get()` rather than `[...]`: an unsupported language must fall back, not
+	# raise mid-campaign. Newsletter languages are already normalized, but this
+	# helper is also reachable with a raw stored value.
+	language = language or _SALUTATION_FALLBACK_LANGUAGE
+	if kind == "organization":
+		return _ORGANIZATION_GREETINGS.get(language, _ORGANIZATION_GREETINGS[_SALUTATION_FALLBACK_LANGUAGE])
+	greeting, punctuation = _NEUTRAL_GREETINGS.get(
+		language, _NEUTRAL_GREETINGS[_SALUTATION_FALLBACK_LANGUAGE]
+	)
+	text = cstr(addressee).strip()
+	# Without a name there is nothing to punctuate: "Dear ," was the old output.
+	if not text:
+		return greeting
+	return " ".join(f"{greeting} {text}{punctuation}".split()).replace(" ,", ",")
+
+
+def _addressee_kind(subject_type: Any) -> str:
+	"""Map a correspondence subject type onto a salutation addressee kind."""
+	return "organization" if cstr(subject_type).strip() == "Organization" else "person"
 
 
 def _postal_ready(profile: dict[str, Any]) -> bool:
