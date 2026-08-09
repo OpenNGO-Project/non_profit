@@ -102,7 +102,14 @@ def get_or_create_donor_for_customer(
 	if not ignore_permissions:
 		_check_identity_doc_permission("Customer", customer, "write")
 
-	existing_donor = frappe.db.exists("Donor", {"customer": customer})
+	# Serialize concurrent create-or-return on the Customer row, then read the
+	# Donor with a locking (current) read: two parallel settlements for one
+	# Customer otherwise both pass the exists check and insert twin Donors
+	# (the Good Direct Mail EBICS settlement caller runs in parallel workers).
+	# Under snapshot isolation a stale locking read raises a retryable error,
+	# which callers already treat as retry-the-whole-transaction.
+	frappe.db.get_value("Customer", customer, "name", for_update=True)
+	existing_donor = frappe.db.get_value("Donor", {"customer": customer}, "name", for_update=True)
 	if existing_donor:
 		donor = frappe.get_doc("Donor", existing_donor)
 		repair_subject_type = (

@@ -1,6 +1,8 @@
 # Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from unittest.mock import patch
 
 import frappe
@@ -861,3 +863,90 @@ class TestDonor(IntegrationTestCase):
 		return frappe.db.get_single_value("Selling Settings", "territory") or frappe.db.get_value(
 			"Territory", {}, "name", order_by="lft asc"
 		)
+
+
+class TestDonorForCustomerConcurrency(IntegrationTestCase):
+	def test_two_workers_create_one_donor_for_one_customer(self) -> None:
+		if frappe.db.db_type != "mariadb":
+			self.skipTest("The row-lock regression targets MariaDB/InnoDB")
+
+		token = frappe.generate_hash(length=8)
+		customer = frappe.get_doc(
+			{
+				"doctype": "Customer",
+				"customer_name": f"Donor Race Customer {token}",
+				"customer_type": "Individual",
+				"customer_group": "Individual",
+				"territory": "Switzerland",
+			}
+		)
+		customer.flags.ignore_mandatory = True
+		customer.insert(ignore_permissions=True)
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit
+
+		from non_profit.non_profit.doctype.donor import donor as donor_module
+
+		# Both workers must provably sit between the existence check and the
+		# insert: _customer_display_name runs exactly there, so a barrier
+		# inside it forces the widest race window. With the Customer row lock
+		# in place the second worker cannot reach it until the first commits,
+		# so the inner barrier times out — which is the fix working.
+		mid_barrier = Barrier(2)
+		original_display_name = donor_module._customer_display_name
+
+		def synchronized_display_name(customer_name):
+			try:
+				mid_barrier.wait(timeout=5)
+			except Exception:
+				pass
+			return original_display_name(customer_name)
+
+		try:
+			barrier = Barrier(2)
+			donor_module._customer_display_name = synchronized_display_name
+			try:
+				with ThreadPoolExecutor(max_workers=2) as executor:
+					results = list(
+						executor.map(
+							_run_concurrent_donor_for_customer,
+							[frappe.local.site, frappe.local.site],
+							[customer.name, customer.name],
+							[barrier, barrier],
+						)
+					)
+			finally:
+				donor_module._customer_display_name = original_display_name
+
+			# Both workers must converge on one Donor. A retryable
+			# snapshot-isolation conflict is an acceptable second outcome —
+			# the caller retries and converges — but never a twin insert.
+			donors = frappe.get_all("Donor", filters={"customer": customer.name}, pluck="name")
+			self.assertEqual(len(donors), 1, f"twin Donors created: {donors} results={results}")
+			self.assertLessEqual({result for result in results if result != "retryable"}, set(donors))
+		finally:
+			frappe.db.rollback()
+			for donor_name in frappe.get_all("Donor", filters={"customer": customer.name}, pluck="name"):
+				frappe.delete_doc("Donor", donor_name, force=True, ignore_permissions=True)
+			if frappe.db.exists("Customer", customer.name):
+				frappe.delete_doc("Customer", customer.name, force=True, ignore_permissions=True)
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit
+
+
+def _run_concurrent_donor_for_customer(site: str, customer_name: str, barrier: Barrier) -> str:
+	from non_profit.non_profit.doctype.donor.donor import get_or_create_donor_for_customer
+
+	frappe.init(site=site)
+	frappe.connect()
+	frappe.set_user("Administrator")
+	frappe.flags.in_test = True
+	try:
+		barrier.wait(timeout=30)
+		try:
+			donor = get_or_create_donor_for_customer(customer_name, ignore_permissions=True)
+		except frappe.QueryDeadlockError, frappe.QueryTimeoutError:
+			frappe.db.rollback()
+			return "retryable"
+		frappe.db.commit()  # nosemgrep: frappe-manual-commit
+		return donor.name
+	finally:
+		frappe.destroy()
