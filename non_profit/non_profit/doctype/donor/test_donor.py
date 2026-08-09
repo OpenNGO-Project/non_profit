@@ -145,22 +145,16 @@ class TestDonor(IntegrationTestCase):
 		)
 
 	def test_default_customer_group_never_returns_group_root(self) -> None:
+		# A group-root default used to fall back to an arbitrary leaf row; the
+		# runtime contract now refuses it with a setup error instead, so no
+		# Customer ever lands in a group the operator did not choose.
 		from non_profit.non_profit.doctype.donor import donor as donor_module
 
 		with (
 			patch.object(donor_module.frappe.db, "get_single_value", return_value="All Customer Groups"),
-			patch.object(
-				donor_module.frappe.db,
-				"exists",
-				side_effect=lambda doctype, name: (
-					doctype == "Customer Group" and name == "All Customer Groups"
-				),
-			),
+			self.assertRaisesRegex(frappe.ValidationError, "is a group"),
 		):
-			customer_group = donor_module._default_customer_group()
-
-		self.assertNotEqual(customer_group, "All Customer Groups")
-		self.assertFalse(frappe.db.get_value("Customer Group", customer_group, "is_group"))
+			donor_module._default_customer_group()
 
 	def test_donor_reuses_member_customer_by_email(self) -> None:
 		from non_profit.non_profit.doctype.donor.donor import (

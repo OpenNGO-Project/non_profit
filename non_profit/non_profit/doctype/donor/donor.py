@@ -859,21 +859,37 @@ def _link_donor_address_to_customer(donor_name: str, customer: str) -> None:
 		)
 
 
+# Local behavioral twin of good_connector.party_defaults: this public
+# repository cannot import private apps, and the private-side parity test pins
+# both engines to the same contract. Runtime Customer creation uses the
+# configured Selling Settings leaf defaults and fails with a clear setup error
+# otherwise — never an arbitrary first database row.
 def _default_customer_group() -> str:
-	configured = frappe.db.get_single_value("Selling Settings", "customer_group")
-	for customer_group in (configured, "Individual"):
-		if customer_group and frappe.db.get_value("Customer Group", customer_group, "is_group") == 0:
-			return customer_group
-	if customer_group := frappe.db.get_value("Customer Group", {"is_group": 0}, "name", order_by="name asc"):
-		return customer_group
-	frappe.throw(
-		_("Configure a non-group Default Customer Group in Selling Settings before creating Customers."),
-		frappe.ValidationError,
-	)
+	return _configured_selling_leaf("Customer Group", "customer_group")
 
 
-def _default_territory() -> str | None:
-	for territory in ("Switzerland", "All Territories"):
-		if frappe.db.exists("Territory", territory):
-			return territory
-	return frappe.db.get_value("Territory", {}, "name", order_by="lft asc")
+def _default_territory() -> str:
+	return _configured_selling_leaf("Territory", "territory")
+
+
+def _configured_selling_leaf(doctype: str, fieldname: str) -> str:
+	configured = (frappe.db.get_single_value("Selling Settings", fieldname) or "").strip()
+	if not configured:
+		frappe.throw(
+			_("Configure a Default {0} in Selling Settings before creating Customers.").format(_(doctype)),
+			frappe.ValidationError,
+		)
+	is_group = frappe.db.get_value(doctype, configured, "is_group")
+	if is_group is None:
+		frappe.throw(
+			_("The Selling Settings Default {0} {1} does not exist.").format(_(doctype), configured),
+			frappe.ValidationError,
+		)
+	if is_group:
+		frappe.throw(
+			_("The Selling Settings Default {0} {1} is a group; configure a leaf record.").format(
+				_(doctype), configured
+			),
+			frappe.ValidationError,
+		)
+	return configured
