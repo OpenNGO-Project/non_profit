@@ -245,7 +245,20 @@ def before_tests():
 		)
 		setup_non_profit()
 
+	ensure_test_selling_defaults()
 	ensure_fundraising_fixtures()
+
+
+def ensure_test_selling_defaults() -> None:
+	"""Fill only missing ERPNext party defaults on an isolated test site."""
+	if not frappe.flags.in_test:
+		return
+	for doctype, fieldname in (("Customer Group", "customer_group"), ("Territory", "territory")):
+		if frappe.db.get_single_value("Selling Settings", fieldname):
+			continue
+		leaf = frappe.db.get_value(doctype, {"is_group": 0}, "name", order_by="lft asc")
+		if leaf:
+			frappe.db.set_single_value("Selling Settings", fieldname, leaf)
 
 
 def skip_hrms_test_record_bootstrap():
