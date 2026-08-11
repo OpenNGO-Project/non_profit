@@ -42,9 +42,11 @@ class TestDonationEbicsProvider(UnitTestCase):
 			patch(
 				"non_profit.non_profit.integration_hooks.first_provider",
 				return_value=None,
-			),
+			) as first_provider,
 		):
 			backfill_donation_qr_references()
+		# The seam was consulted and, with no provider, nothing ran after it.
+		first_provider.assert_called_once()
 
 	def test_registration_dispatches_registered_provider(self):
 		donation = Mock()
@@ -75,8 +77,11 @@ class TestDonationEbicsProvider(UnitTestCase):
 		with (
 			patch("non_profit.non_profit.fundraising_setup.frappe.get_hooks", return_value=[]),
 			patch("non_profit.non_profit.integration_hooks.frappe.get_hooks", return_value=[]),
+			patch("non_profit.non_profit.fundraising_setup.frappe.get_attr") as get_attr,
 		):
 			ensure_good_connector_bank_integration()
+		# No hooks registered -> no setup callable may run.
+		get_attr.assert_not_called()
 
 	def test_duplicate_qrr_identities_are_not_filtered_by_amount(self):
 		bank_transaction = frappe._dict(
