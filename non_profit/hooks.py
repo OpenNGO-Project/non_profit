@@ -28,8 +28,10 @@ doctype_js = {
 # used by NPO Recipient Selection and optional source forms.
 app_include_js = ["/assets/non_profit/js/channel_launch.js"]
 
+before_install = "non_profit.setup.before_install"
 after_install = "non_profit.setup.setup_non_profit"
 after_app_install = "non_profit.setup.after_app_install"
+before_migrate = "non_profit.setup.before_migrate"
 after_migrate = "non_profit.setup.after_migrate"
 before_uninstall = "non_profit.setup.before_uninstall"
 

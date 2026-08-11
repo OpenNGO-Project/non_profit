@@ -36,6 +36,24 @@
 - What it prevents: Manual commits in application request and document lifecycle code.
 - Why this override is safe: The two commits occur only in a MariaDB integration test that opens independent database connections. The first publishes fixtures so both workers can exercise the allocation race; the second persists cross-connection cleanup. Production code does not use these commits.
 
+## `frappe-manual-commit` in `non_profit/setup.py`
+
+- Rule: `frappe-manual-commit`
+- What it prevents: Commit-producing schema work inside install/migrate lifecycle hooks.
+- Why this override is safe: `ensure_public_identity_database_indexes` is registered as an `after_commit` callback by both setup paths and is never called inside `after_install` or `after_migrate`. It creates a dedicated database object with its own empty callback managers and commits only that connection, so the shared install/migrate `frappe.db` callback queue cannot be recursively drained or reordered.
+
+## `frappe-sql-format-injection` in `non_profit/setup.py`
+
+- Rule: `frappe-sql-format-injection`
+- What it prevents: SQL identifiers built with string interpolation can become SQL injection when an interpolated value is user-controlled.
+- Why this override is safe: The index callback interpolates only the three hardcoded DocType, field, and index-name tuples in `PUBLIC_IDENTITY_INDEXES` plus Frappe's trusted PostgreSQL schema name. No request, hook argument, or operator value reaches the DDL identifiers.
+
+## `frappe-manual-commit` in Donor identity current-read tests
+
+- Rule: `frappe-manual-commit`
+- What it prevents: Manual commits in normal application transaction paths.
+- Why this override is safe: These commits occur only in isolated integration-test connections. They publish a fixture or concurrent field update so the main connection can exercise MariaDB stale-snapshot behavior. Cleanup runs on a separate connection with bounded deadlock retries, commits exact fixture deletion, and verifies every captured Donor, Customer, Contact, Contact Email, and Contact Dynamic Link artifact is gone. Production identity services do not commit.
+
 ## `frappe-ssti` in `non_profit/non_profit/doctype/membership/membership.py`
 
 - Rule: `frappe-ssti`

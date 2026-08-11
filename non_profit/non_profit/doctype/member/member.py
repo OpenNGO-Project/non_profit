@@ -452,13 +452,10 @@ def _link_contact_to_customer(
 
 
 def _contact_email(contact_doc) -> str | None:
-	if contact_doc.get("email_id"):
-		return contact_doc.email_id
-	emails = sorted(
-		contact_doc.get("email_ids") or [],
-		key=lambda row: (0 if row.get("is_primary") else 1, row.get("idx") or 0),
-	)
-	return emails[0].email_id if emails else None
+	# D44: canonical tie-break (primary, then newest) via the public twin.
+	from non_profit.non_profit.utils import preferred_contact_email
+
+	return preferred_contact_email(contact_doc.get("email_id"), contact_doc.get("email_ids") or [])
 
 
 def _contact_display_name(contact_doc) -> str:

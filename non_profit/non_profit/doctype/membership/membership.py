@@ -15,6 +15,7 @@ from frappe.utils import (
 )
 
 from non_profit.non_profit.mailer import send_referenced_email
+from non_profit.non_profit.utils import email_template_body
 
 
 class Membership(Document):
@@ -189,7 +190,7 @@ class Membership(Document):
 		# Settings — staff-authored content, the standard Frappe pattern.
 		email_args = {
 			"recipients": [email],
-			"message": frappe.render_template(email_template.get("response"), context),  # nosemgrep
+			"message": frappe.render_template(email_template_body(email_template), context),  # nosemgrep
 			"subject": frappe.render_template(email_template.get("subject"), context),  # nosemgrep
 			"attachments": attachments,
 			"reference_doctype": self.doctype,

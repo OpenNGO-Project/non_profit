@@ -12,11 +12,15 @@ from non_profit.non_profit.doctype.donor.donor import (
 	find_donor_customer_candidates,
 	get_or_create_customer_for_donor,
 )
-from non_profit.non_profit.identity_lock import acquire_public_email_identity_lock
+from non_profit.non_profit.identity_lock import acquire_public_email_identity_lock, current_identity_read
 
 ValuesProvider = Callable[[dict], dict | None]
 ExistingDonorHandler = Callable[[object], None]
 DonorInserter = Callable[[dict], object]
+
+
+class IdentityCandidateDriftError(frappe.QueryDeadlockError, frappe.ValidationError):
+	"""Retryable identity drift that remains safe at public request boundaries."""
 
 
 def resolve_donor_customer_identity(
@@ -36,33 +40,25 @@ def resolve_donor_customer_identity(
 	acquire_public_email_identity_lock(email)
 	if ambiguous_email_policy not in ("latest", "reject"):
 		raise ValueError(f"Unsupported ambiguous email policy: {ambiguous_email_policy}")
-	donor_names, customer_names = find_donor_customer_candidates(email)
-	donor_customer_conflict = bool(
-		ambiguous_email_policy == "reject"
-		and len(donor_names) == 1
-		and len(customer_names) == 1
-		and not donor_customer_share_identity(donor_names[0], customer_names[0])
-	)
-	if ambiguous_email_policy == "reject" and (
-		len(donor_names) > 1 or len(customer_names) > 1 or donor_customer_conflict
-	):
-		# The reject policy is used on public (guest) donation paths. Do not
-		# reveal that this email maps to multiple CRM identities -- that leaks
-		# enumeration state to an unauthenticated caller. Error Log automatically
-		# captures request form data, so use the app logger with hashed metadata.
-		frappe.logger("non_profit").warning(
-			"Ambiguous public donor identity: "
-			f"email_sha256={sha256(email.encode()).hexdigest()} "
-			f"donor_count={len(donor_names)} customer_count={len(customer_names)} "
-			f"donor_customer_conflict={donor_customer_conflict}"
-		)
-		frappe.throw(
-			_("We could not process your donation. Please contact us so we can help."),
-			frappe.ValidationError,
-		)
+	with current_identity_read():
+		donor_names, customer_names = find_donor_customer_candidates(email)
+		snapshot_customer = frappe.db.get_value("Donor", donor_names[0], "customer") if donor_names else None
+		current_candidates = find_donor_customer_candidates(email, for_update=True)
+		if current_candidates != (donor_names, customer_names):
+			raise IdentityCandidateDriftError(
+				_("The donor identity changed while processing this request. Please retry.")
+			)
+		if ambiguous_email_policy == "reject":
+			_reject_ambiguous_identity(email, donor_names, customer_names)
+
+		if donor_names:
+			donor = frappe.get_doc("Donor", donor_names[0], for_update=True)
+			if cstr(donor.get("customer")).strip() != cstr(snapshot_customer).strip():
+				raise IdentityCandidateDriftError(
+					_("The donor identity changed while processing this request. Please retry.")
+				)
 
 	if donor_names:
-		donor = frappe.get_doc("Donor", donor_names[0])
 		if existing_donor_handler:
 			existing_donor_handler(donor)
 	else:
@@ -91,3 +87,41 @@ def resolve_donor_customer_identity(
 		customer_values_provider=customer_values_provider,
 	)
 	return donor, customer
+
+
+def get_unambiguous_donor_by_email(email: str) -> object | None:
+	"""Return one existing Donor without selecting among ambiguous identities."""
+	email = cstr(email).strip().lower()
+	validate_email_address(email, throw=True)
+	acquire_public_email_identity_lock(email)
+	with current_identity_read():
+		donor_names, customer_names = find_donor_customer_candidates(email)
+		current_candidates = find_donor_customer_candidates(email, for_update=True)
+		if current_candidates != (donor_names, customer_names):
+			raise IdentityCandidateDriftError(
+				_("The donor identity changed while processing this request. Please retry.")
+			)
+		_reject_ambiguous_identity(email, donor_names, customer_names)
+		return frappe.get_doc("Donor", donor_names[0], for_update=True) if donor_names else None
+
+
+def _reject_ambiguous_identity(email: str, donor_names: list[str], customer_names: list[str]) -> None:
+	donor_customer_conflict = bool(
+		len(donor_names) == 1
+		and len(customer_names) == 1
+		and not donor_customer_share_identity(donor_names[0], customer_names[0], for_update=True)
+	)
+	if len(donor_names) <= 1 and len(customer_names) <= 1 and not donor_customer_conflict:
+		return
+
+	# Do not reveal identity multiplicity or write request metadata to Error Log.
+	frappe.logger("non_profit").warning(
+		"Ambiguous public donor identity: "
+		f"email_sha256={sha256(email.encode()).hexdigest()} "
+		f"donor_count={len(donor_names)} customer_count={len(customer_names)} "
+		f"donor_customer_conflict={donor_customer_conflict}"
+	)
+	frappe.throw(
+		_("We could not process your donation. Please contact us so we can help."),
+		frappe.ValidationError,
+	)

@@ -234,7 +234,8 @@
    "fieldname": "customer",
    "fieldtype": "Link",
    "label": "Customer",
-   "options": "Customer"
+   "options": "Customer",
+   "search_index": 1
   },
   {
    "fetch_from": "customer.customer_name",

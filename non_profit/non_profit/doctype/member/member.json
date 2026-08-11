@@ -106,7 +106,8 @@
    "fieldtype": "Data",
    "hidden": 1,
    "label": "Email Address",
-   "options": "Email"
+   "options": "Email",
+   "search_index": 1
   }
  ],
  "image_field": "image",

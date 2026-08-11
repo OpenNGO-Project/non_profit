@@ -294,3 +294,41 @@ def use_short_test_host_name():
 	if not frappe.flags.in_test:
 		return
 	frappe.local.conf.host_name = "http://development16.localhost"
+
+
+def email_template_body(template) -> str:
+	"""Canonical Email Template body selection: ``response_html`` when
+	``use_html`` is set, else ``response``. Public twin of
+	``good_connector.email_utils.email_template_body`` (pinned by the
+	connector's parity suite); an HTML-stored template must never render
+	empty and a stale plain-text body must never win over the HTML body.
+	"""
+	from frappe.utils import cint
+
+	if cint(template.get("use_html")):
+		return template.get("response_html") or ""
+	return template.get("response") or ""
+
+
+def preferred_contact_email(direct_email, email_rows) -> str | None:
+	"""Canonical Contact-email tie-break: ``email_id`` wins, else child rows
+	by primary flag, then NEWEST (`creation`), then name.
+
+	Public twin of ``good_connector.recipient.preferred_contact_email``
+	(pinned by the connector's correspondence parity suite): one Contact must
+	resolve to the same address in every app that mails it.
+	"""
+	from frappe.utils import cint, cstr
+
+	if email := cstr(direct_email).strip():
+		return email
+	candidates = [row for row in email_rows if cstr(row.get("email_id")).strip()]
+	candidates.sort(
+		key=lambda row: (
+			cint(row.get("is_primary")),
+			cstr(row.get("creation")),
+			cstr(row.get("name")),
+		),
+		reverse=True,
+	)
+	return cstr(candidates[0].get("email_id")).strip() if candidates else None

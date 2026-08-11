@@ -10,11 +10,10 @@ from frappe.model.document import Document
 from frappe.utils import cint, flt, get_link_to_form, getdate, now_datetime
 
 from non_profit.non_profit.doctype.donor.donor import (
-	find_donor_by_email,
 	get_donor_email,
-	get_or_create_customer_for_donor,
 )
 from non_profit.non_profit.mailer import send_referenced_email
+from non_profit.non_profit.utils import email_template_body
 
 
 class Donation(Document):
@@ -100,23 +99,19 @@ class Donation(Document):
 			frappe.throw(_("Donation donor and company must match the linked Recurring Donation."))
 
 	def create_donor_for_website_user(self):
-		from non_profit.non_profit.identity_lock import acquire_public_email_identity_lock
+		from non_profit.non_profit.donor_identity import resolve_donor_customer_identity
 
-		acquire_public_email_identity_lock(frappe.session.user)
-		donor_name = find_donor_by_email(frappe.session.user)
-
-		if not donor_name:
-			user = frappe.get_doc("User", frappe.session.user)
-			donor = frappe.get_doc(
-				doctype="Donor",
-				donor_type=self.get("donor_type"),
-				donor_name=user.get_fullname(),
-			).insert(ignore_permissions=True)
-			get_or_create_customer_for_donor(donor, email=frappe.session.user)
-			donor_name = donor.name
+		email = frappe.session.user
+		donor, _customer = resolve_donor_customer_identity(
+			donor_name=frappe.db.get_value("User", email, "full_name") or email,
+			email=email,
+			donor_type=self.get("donor_type")
+			or frappe.db.get_single_value("Non Profit Settings", "default_donor_type"),
+			ambiguous_email_policy="reject",
+		)
 
 		if self.get("__islocal"):
-			self.donor = donor_name
+			self.donor = donor.name
 
 	def on_payment_authorized(
 		self,
@@ -191,7 +186,7 @@ class Donation(Document):
 		# Trusted source: an Email Template document chosen in Non Profit
 		# Settings — staff-authored content, the standard Frappe pattern.
 		subject = frappe.render_template(template.subject, context)  # nosemgrep
-		body = template.response or template.response_html or ""
+		body = email_template_body(template)
 		message = frappe.render_template(body, context)  # nosemgrep
 		# Queue the email; the scheduler sends it. Avoid now=True since that
 		# runs SMTP synchronously on commit and can break the payment flow.

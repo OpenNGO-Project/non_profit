@@ -1,5 +1,7 @@
 # Non Profit - Documentation
 
+Architecture decisions: [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md).
+
 ## Purpose
 
 `non_profit` is a reusable NPO domain app. It is a hard fork of Frappe's Non
@@ -963,11 +965,49 @@ Donor or Customer resolves to an email, or when a sole Donor and sole Customer
 have no existing Donor-Customer link or explicitly Person-classified shared
 canonical Contact proving one identity, staff must resolve the records instead
 of a guest request choosing or linking them arbitrarily.
-The generic `/donate` page is one such consumer and explicitly passes
-`ambiguous_email_policy="reject"`; the legacy first-match lookup is not allowed
-on this guest path. A missing Donor Type is a setup error rather than a reason to
-create configuration from public input. Its existing-Donor callback may record
-a submitted name mismatch but does not rename the master.
+The generic `/donate` page and the `Donation` Website User fallback explicitly
+pass `ambiguous_email_policy="reject"`; the deprecated gateway compatibility
+lookup uses `get_unambiguous_donor_by_email()`. None may select the first Donor
+when Donor/Customer evidence is ambiguous. A missing Donor Type is a setup error
+rather than a reason to create configuration from public input. The `/donate`
+existing-Donor callback may record a submitted name mismatch but does not rename
+the master.
+The normalized-email Redis lock is held until commit or rollback. Under MariaDB
+repeatable-read, candidate discovery runs inside
+`identity_lock.current_identity_read()`. While the identity lock is owned it
+temporarily disables MariaDB's `innodb_snapshot_isolation` record-change check;
+it does not replace the transaction's existing repeatable-read view. The mode
+covers only candidate discovery, locking comparison, and the selected-Donor
+load, then is restored before caller handlers or identity writes execute. Safety
+comes from comparing those snapshot candidates with deterministic current
+locking reads and aborting on any difference. Any selected Donor is loaded with
+`for_update=True` so unchanged candidate names cannot return stale master fields.
+Its snapshot and current `customer` links are also compared before current-read
+mode ends. Link drift retries the complete transaction before a normal
+repeatable-read Customer existence check can replace a newly committed link.
+If the candidate sets drift, `IdentityCandidateDriftError` is both
+a `QueryDeadlockError` and `ValidationError`: workers retain their whole-
+transaction retry signal, while public handlers can roll back and redisplay one
+neutral message without a form-retaining 500 Error Log. Member and Donor
+declare indexes in DocType metadata. The `before_install` and `before_migrate`
+hooks create the standard `Customer.email_id` Property Setter when absent. A
+compatible operator- or foreign-owned setter remains untouched; a conflicting
+disable stops setup with an actionable error rather than being taken over. An
+unassigned setter is never treated as proof of ownership: compatible behavior
+is preserved, while a conflicting disable stops setup without mutation. Only a
+new setter or one already assigned to module `Non Profit` is app-owned.
+On a fresh install, completed setup registers an after-commit callback because
+the app-only sync does not revisit ERPNext's Customer DocType. Migrate registers
+the same callback only after every setup step succeeds. It verifies all three
+target tables, uses table-specific index names where a backend did not create an
+equivalent single-column index, and therefore avoids duplicate and
+PostgreSQL/SQLite schema-wide name collisions. Table and column inspection, DDL,
+and the final commit all run through a dedicated database object with empty
+callback managers, so they cannot re-enter, recurse through, or reorder the
+shared install/migrate transaction. No index DDL or commit runs inside the
+install/migrate hooks themselves.
+`Contact.email_id` and `Donor.contact` are already indexed by their owning
+schemas.
 The older `find_donor_by_email()` and `get_or_create_customer_for_donor()`
 dotted paths remain supported.
 
@@ -1451,3 +1491,8 @@ mutating the shared test site's schema. Workflow Visualizer is not listed in
 candidate contract and uninstalled behavior are covered by non_profit's unit
 tests, while connector-backed QRR registration tests run in authorized
 integration environments where the coordinated Good Connector API is installed.
+
+## Wave A duplication fixes (2026-08-11, 16.18.3)
+
+- Donation thank-you and Membership acknowledgement emails select the template body via `non_profit.utils.email_template_body` (`response_html` if `use_html` else `response`, D16): an HTML-stored template no longer renders empty and a stale plain-text body no longer wins. Pinned as a public twin by good_connector's correspondence parity suite.
+- `utils.split_person_name` is the one public split convention (first token = given name); good_npo delegates its fallback to it (D1).

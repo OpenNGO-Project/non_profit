@@ -7,10 +7,10 @@ from frappe import _
 from frappe.utils import flt, get_link_to_form, getdate
 
 from non_profit.non_profit.doctype.donor.donor import (
-	find_donor_by_email,
 	get_donor_email,
 	get_or_create_customer_for_donor,
 )
+from non_profit.non_profit.donor_identity import get_unambiguous_donor_by_email
 
 SENSITIVE_DONOR_NOTE_KEYS = ("pan", "tax_id", "tax id", "tax-number", "tax_number")
 
@@ -44,8 +44,7 @@ def create_gateway_donation(donor, payment):
 
 
 def get_gateway_donor(email):
-	donor = find_donor_by_email(email)
-	return frappe.get_doc("Donor", donor) if donor else None
+	return get_unambiguous_donor_by_email(email)
 
 
 def create_gateway_donor(payment: dict) -> str:

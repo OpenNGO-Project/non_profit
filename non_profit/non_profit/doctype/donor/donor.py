@@ -318,19 +318,25 @@ def find_donors_by_email(email: str | None) -> list[str]:
 	return donors
 
 
-def find_donor_customer_candidates(email: str | None) -> tuple[list[str], list[str]]:
+def find_donor_customer_candidates(
+	email: str | None,
+	*,
+	for_update: bool = False,
+) -> tuple[list[str], list[str]]:
 	"""Return every Donor and Customer resolving to one normalized email."""
 	email = _normalize_email(email, validate=True)
 	if not email:
 		return [], []
 
-	customers = _customers_for_email(email)
+	customers = _customers_for_email(email, for_update=for_update)
 	donor_rows = (
-		frappe.get_all(
+		frappe.db.get_values(
 			"Donor",
 			filters={"customer": ["in", customers]},
-			fields=["name", "customer"],
-			order_by="modified desc",
+			fieldname=["name", "customer"],
+			order_by="modified desc, name asc",
+			as_dict=True,
+			for_update=for_update,
 		)
 		if customers
 		else []
@@ -340,19 +346,33 @@ def find_donor_customer_candidates(email: str | None) -> tuple[list[str], list[s
 		donors_by_customer.setdefault(row.customer, []).append(row.name)
 	donors = [donor for customer in customers for donor in donors_by_customer.get(customer, [])]
 
-	for canonical_donor in _canonical_contact_donor_names_for_email(email):
+	for canonical_donor in _canonical_contact_donor_names_for_email(email, for_update=for_update):
 		if canonical_donor not in donors:
 			donors.append(canonical_donor)
 
-	for legacy_donor in _legacy_donor_names_for_email(email):
+	for legacy_donor in _legacy_donor_names_for_email(email, for_update=for_update):
 		if legacy_donor not in donors:
 			donors.append(legacy_donor)
 	return donors, customers
 
 
-def donor_customer_share_identity(donor_name: str, customer_name: str) -> bool:
+def donor_customer_share_identity(
+	donor_name: str,
+	customer_name: str,
+	*,
+	for_update: bool = False,
+) -> bool:
 	"""Whether existing links prove that a Donor and Customer are one identity."""
-	donor = frappe.db.get_value("Donor", donor_name, ["customer", "contact"], as_dict=True) or {}
+	donor = (
+		frappe.db.get_value(
+			"Donor",
+			donor_name,
+			["customer", "contact"],
+			as_dict=True,
+			for_update=for_update,
+		)
+		or {}
+	)
 	if donor.get("customer") == customer_name:
 		return True
 
@@ -366,7 +386,16 @@ def donor_customer_share_identity(donor_name: str, customer_name: str) -> bool:
 		customer_fields.append("npo_subject_type")
 	if customer_meta.has_field("npo_contact"):
 		customer_fields.append("npo_contact")
-	customer = frappe.db.get_value("Customer", customer_name, customer_fields, as_dict=True) or {}
+	customer = (
+		frappe.db.get_value(
+			"Customer",
+			customer_name,
+			customer_fields,
+			as_dict=True,
+			for_update=for_update,
+		)
+		or {}
+	)
 	if cstr(customer.get("npo_subject_type")).strip() != "Person":
 		return False
 	if contact in {
@@ -376,7 +405,7 @@ def donor_customer_share_identity(donor_name: str, customer_name: str) -> bool:
 		return True
 
 	return bool(
-		frappe.db.exists(
+		frappe.db.get_value(
 			"Dynamic Link",
 			{
 				"parenttype": "Contact",
@@ -384,6 +413,8 @@ def donor_customer_share_identity(donor_name: str, customer_name: str) -> bool:
 				"link_doctype": "Customer",
 				"link_name": customer_name,
 			},
+			"name",
+			for_update=for_update,
 		)
 	)
 
@@ -441,7 +472,7 @@ def backfill_donor_customers(limit: int | None = None) -> dict[str, int]:
 	return {"processed": len(donors), "linked": created_or_linked, "failed": failed}
 
 
-def _customers_for_email(email: str | None) -> list[str]:
+def _customers_for_email(email: str | None, *, for_update: bool = False) -> list[str]:
 	email = _normalize_email(email)
 	if not email:
 		return []
@@ -449,27 +480,40 @@ def _customers_for_email(email: str | None) -> list[str]:
 	customers = []
 	seen = set()
 	if frappe.db.exists("DocType", "Member") and frappe.get_meta("Member").has_field("customer"):
-		members = frappe.get_all(
+		members = frappe.db.get_values(
 			"Member",
 			filters={"email_id": email},
-			fields=["customer"],
-			order_by="modified desc",
+			fieldname=["customer"],
+			order_by="modified desc, name asc",
+			as_dict=True,
+			for_update=for_update,
+		)
+		member_customers = [member.customer for member in members if member.customer]
+		existing_member_customers = set(
+			frappe.db.get_values(
+				"Customer",
+				filters={"name": ["in", member_customers]},
+				fieldname="name",
+				pluck=True,
+				order_by="name asc",
+				for_update=for_update,
+			)
+			if member_customers
+			else []
 		)
 		for member in members:
-			if (
-				member.customer
-				and member.customer not in seen
-				and frappe.db.exists("Customer", member.customer)
-			):
+			if member.customer in existing_member_customers and member.customer not in seen:
 				customers.append(member.customer)
 				seen.add(member.customer)
 
 	if frappe.db.exists("DocType", "Customer") and frappe.get_meta("Customer").has_field("email_id"):
-		for row in frappe.get_all(
+		for row in frappe.db.get_values(
 			"Customer",
 			filters={"email_id": email},
-			fields=["name"],
-			order_by="modified desc",
+			fieldname=["name"],
+			order_by="modified desc, name asc",
+			as_dict=True,
+			for_update=for_update,
 		):
 			if row.name not in seen:
 				customers.append(row.name)
@@ -482,16 +526,18 @@ def _customer_for_email(email: str | None) -> str | None:
 	return customers[0] if customers else None
 
 
-def _canonical_contact_donor_names_for_email(email: str) -> list[str]:
+def _canonical_contact_donor_names_for_email(email: str, *, for_update: bool = False) -> list[str]:
 	contact_meta = frappe.get_meta("Contact")
 	fields = ["name"]
 	if contact_meta.has_field("npo_identity_kind"):
 		fields.append("npo_identity_kind")
-	contact_rows = frappe.get_all(
+	contact_rows = frappe.db.get_values(
 		"Contact",
 		filters={"email_id": email},
-		fields=fields,
+		fieldname=fields,
 		order_by="name asc",
+		as_dict=True,
+		for_update=for_update,
 	)
 	contact_names = [
 		row.name
@@ -501,11 +547,13 @@ def _canonical_contact_donor_names_for_email(email: str) -> list[str]:
 	]
 	if not contact_names:
 		return []
-	return frappe.get_all(
+	return frappe.db.get_values(
 		"Donor",
 		filters={"contact": ["in", contact_names]},
-		pluck="name",
+		fieldname="name",
+		pluck=True,
 		order_by="modified desc, name asc",
+		for_update=for_update,
 	)
 
 
@@ -533,14 +581,16 @@ def _legacy_donor_email(donor) -> str | None:
 	return _normalize_email(value)
 
 
-def _legacy_donor_names_for_email(email: str) -> list[str]:
+def _legacy_donor_names_for_email(email: str, *, for_update: bool = False) -> list[str]:
 	if not frappe.db.has_column("Donor", "email"):
 		return []
-	return frappe.get_all(
+	return frappe.db.get_values(
 		"Donor",
 		filters={"email": email},
-		pluck="name",
-		order_by="modified desc",
+		fieldname="name",
+		pluck=True,
+		order_by="modified desc, name asc",
+		for_update=for_update,
 	)
 
 
@@ -752,15 +802,14 @@ def _ensure_contact_link_row(
 
 
 def get_contact_email(contact) -> str | None:
+	# D44: canonical tie-break via the public twin; donor identity keeps its
+	# normalization on top.
+	from non_profit.non_profit.utils import preferred_contact_email
+
 	if isinstance(contact, str):
 		contact = frappe.get_doc("Contact", contact)
-	if contact.get("email_id"):
-		return _normalize_email(contact.email_id)
-	emails = sorted(
-		contact.get("email_ids") or [],
-		key=lambda row: (0 if row.get("is_primary") else 1, row.get("idx") or 0),
-	)
-	return _normalize_email(emails[0].email_id) if emails else None
+	email = preferred_contact_email(contact.get("email_id"), contact.get("email_ids") or [])
+	return _normalize_email(email) if email else None
 
 
 def get_contact_display_name(contact_doc) -> str:

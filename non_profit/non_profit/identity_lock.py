@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from hashlib import sha256
 from threading import Event, Lock, Thread
 from time import monotonic
@@ -175,6 +177,58 @@ def acquire_identity_lock(
 		except Exception:
 			frappe.log_error(title="Non Profit identity lock release failed")
 		raise
+
+
+@contextmanager
+def current_identity_read() -> Iterator[None]:
+	"""Read current committed identity rows while the Redis lock is owned."""
+	registry = getattr(frappe.local, "non_profit_identity_lock_registry", None)
+	if registry is None or not registry.locks:
+		frappe.throw(_("Identity serialization is required before a current identity read."))
+	if (
+		frappe.db.db_type != "mariadb"
+		or getattr(frappe.local, "non_profit_snapshot_isolation_supported", None) is False
+	):
+		yield
+		return
+
+	state = getattr(frappe.local, "non_profit_current_read_mode", None)
+	if state is not None:
+		state.depth += 1
+		try:
+			yield
+		finally:
+			state.depth -= 1
+		return
+
+	try:
+		enabled = cstr(frappe.db.sql("SELECT @@SESSION.innodb_snapshot_isolation")[0][0]).upper() in (
+			"1",
+			"ON",
+		)
+	except Exception as error:
+		if error.args and error.args[0] == 1193:
+			frappe.local.non_profit_snapshot_isolation_supported = False
+			yield
+			return
+		raise
+
+	if enabled:
+		frappe.db.sql("SET SESSION innodb_snapshot_isolation = OFF")
+	state = frappe._dict(depth=1, restore=enabled)
+	frappe.local.non_profit_current_read_mode = state
+	try:
+		yield
+	finally:
+		state.depth -= 1
+		if state.depth == 0:
+			delattr(frappe.local, "non_profit_current_read_mode")
+			if state.restore:
+				try:
+					frappe.db.sql("SET SESSION innodb_snapshot_isolation = ON")
+				except Exception:
+					frappe.db.close()
+					raise
 
 
 def _identity_lock_registry() -> _IdentityLockRegistry:

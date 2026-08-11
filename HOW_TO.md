@@ -252,6 +252,18 @@ different name submitted for one existing Donor is added to its timeline for
 review; the public request never renames the Donor. Generic ambiguity logs use
 the `non_profit` application logger and an email hash rather than Error Log,
 whose automatic request metadata would retain the raw submitted address.
+The same fail-closed rule applies when a Website User creates a Donation without
+selecting a Donor and when a deployment still calls the deprecated gateway
+compatibility lookup. Resolve duplicate Donor/Customer identities before retrying
+either path.
+These paths compare the transaction's candidate snapshot with current locking
+reads while holding the hashed identity lock. A snapshot established earlier in
+the request therefore cannot silently hide a newly committed identity. If the
+sets differ, the request returns a neutral retry message and rolls back; ask the
+donor to submit again rather than trying to recover the original transaction.
+The same retry occurs if the selected Donor kept the same email candidate but
+its Customer link changed after the request snapshot. This preserves the newer
+staff/system link instead of replacing it from stale Customer visibility.
 Use the Frappe **Language** selector for Donor preferred language. The saved
 value is still the language code, for example `de` or `en`, but operators get the
 standard enabled-language lookup. `Donation Tax Receipt.language` is a plain

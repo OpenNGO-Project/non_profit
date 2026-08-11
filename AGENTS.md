@@ -1,5 +1,11 @@
 # AGENTS.md - non_profit
 
+Architecture decisions live in
+[ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md). Keep that register
+current when boundaries, dependencies, ownership, public contracts,
+security/consistency models, or migration strategy change. Append a decision and
+supersede old records rather than rewriting accepted history.
+
 `non_profit` is the shared fundraising and membership substrate. Read the bench-root `AGENTS.md` first.
 
 ## Rules
@@ -30,6 +36,9 @@
 - Public guest donations require GoodVantage CAPTCHA and fail closed when Good
   Connector or its CAPTCHA configuration is unavailable. Do not restore the
   former optional/exception-swallowing bypass.
+- Website User Donation fallback and deprecated gateway donor lookup must use
+  the same ambiguity-rejecting Donor/Customer identity contract as `/donate`;
+  never restore first-candidate email selection on a secondary intake path.
 - The generic `/donate` handler must call
   `resolve_donor_customer_identity(..., ambiguous_email_policy="reject")` and
   must never restore first-match email lookup. Candidate lookup includes the
@@ -82,7 +91,26 @@
   hashed `non-profit-identity` Redis lock namespace. Normalized individual
   emails use identity type `Individual`; leases renew while the transaction is
   open, are revalidated before commit, and release on commit or rollback. Keep
-  renewal bounded and fail the transaction if ownership is lost.
+  renewal bounded and fail the transaction if ownership is lost. After the lock
+  is acquired, ambiguity-sensitive Donor/Customer discovery must run in the
+  short-lived current-read mode so an earlier MariaDB repeatable-read snapshot
+  cannot hide a concurrently committed identity. Lock and compare the current
+  candidate set; drift raises the neutral `IdentityCandidateDriftError`, which
+  is both validation-safe at public boundaries and retryable for workers, so the
+  caller reloads the complete transaction instead of using mixed snapshots.
+  Current-lock the selected Donor document before returning or mutating it, and
+  compare its current `customer` link with the snapshot before caller handlers
+  or identity writes. Link drift retries the complete transaction so a stale
+  Customer existence read can never replace a newly committed link.
+  Keep the `Member.email_id`, `Customer.email_id`, and `Donor.customer` lookup
+  indexes declared through DocType / Property Setter metadata so a later model
+  sync cannot drop them. Non Profit owns a newly created Customer Property
+  Setter or one explicitly assigned to module `Non Profit`; blank module is not
+  ownership. Preserve a compatible operator/foreign/unassigned setter and fail
+  setup rather than taking over a conflicting disable. Fresh install and migrate
+  register portable, equivalent-column-aware index DDL only after successful
+  setup commits. That callback uses a dedicated database connection whose
+  commit cannot run callbacks from the install/migrate transaction.
 - Donor-to-Customer continuity propagates every Donor-linked Address Dynamic
   Link, preserves an existing Customer primary Address, and selects a new
   primary only from a unique enabled primary or sole enabled Address. Never
@@ -138,10 +166,11 @@
 
 ## Documentation Contract
 
-This repo keeps four synchronized artifacts: `REQUIREMENTS.md` (what the app
-must do), `DOCUMENTATION.md` (how it works), `HOW_TO.md` (operator
-procedures), and the code. Record new or changed requirements in
-`REQUIREMENTS.md` and keep all four in sync with every change.
+This repo keeps five synchronized artifacts: `REQUIREMENTS.md` (what the app
+must do), `ARCHITECTURE_DECISIONS.md` (why durable boundaries and contracts
+exist), `DOCUMENTATION.md` (how it works), `HOW_TO.md` (operator procedures),
+and the code. Record new or changed requirements in `REQUIREMENTS.md` and keep
+all five in sync with every change.
 
 ## Recipient Selection Contract
 
