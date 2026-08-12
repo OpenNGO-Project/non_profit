@@ -1,3 +1,5 @@
+from typing import Any
+
 import frappe
 from frappe import _
 from frappe.utils import cstr, flt
@@ -332,3 +334,20 @@ def preferred_contact_email(direct_email, email_rows) -> str | None:
 		reverse=True,
 	)
 	return cstr(candidates[0].get("email_id")).strip() if candidates else None
+
+
+def customer_display_name(customer_name: Any, name_additional: Any = None, fallback: Any = None) -> str:
+	"""Return the canonical customer name plus optional additional name."""
+	parts = [cstr(customer_name).strip(), cstr(name_additional).strip()]
+	display_name = " - ".join(part for part in parts if part)
+	return display_name or cstr(fallback).strip()
+
+
+def contact_display_name(contact_row: Any, fallback: Any = None) -> str:
+	"""Return full name, first/last name, then an explicit or row fallback."""
+	full_name = cstr(contact_row.get("full_name")).strip()
+	if full_name:
+		return full_name
+	name_parts = [contact_row.get("first_name"), contact_row.get("last_name")]
+	joined = " ".join(part for part in (cstr(p).strip() for p in name_parts) if part)
+	return joined or cstr(fallback if fallback is not None else contact_row.get("name")).strip()

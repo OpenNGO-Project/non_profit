@@ -342,10 +342,6 @@ class TestMembership(IntegrationTestCase):
 		frappe.db.rollback()
 
 
-def set_config(key, value):
-	frappe.db.set_value("Non Profit Settings", None, key, value)
-
-
 def make_membership(member, payload=None):
 	payload = payload or {}
 	company = frappe.db.get_single_value("Non Profit Settings", "company")

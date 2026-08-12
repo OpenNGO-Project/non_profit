@@ -537,7 +537,9 @@ legacy invoice print. Verify those templates before enabling the action.
 
 Operators may edit **Member Name** directly. When it is left blank and a
 Customer is linked, the Member form fills it from that Customer; if the Customer
-has a `name_additional` field, it is appended to the display name.
+has a `name_additional` field, it is appended as `Customer Name - Additional
+Name`. Contact-backed Member and Donor labels prefer the Contact's Full Name,
+then First Name plus Last Name, then its record ID when all name fields are blank.
 
 To create a complete member identity from Desk:
 

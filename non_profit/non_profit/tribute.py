@@ -11,7 +11,6 @@ import frappe
 from frappe import _
 from frappe.utils import cint, cstr, now_datetime, validate_email_address
 
-TRIBUTE_TYPES = ("In Honour", "In Memory")
 FULFILLMENT_STATUSES = ("Not Requested", "Pending", "Fulfilled", "Unable")
 TERMINAL_FULFILLMENT_STATUSES = ("Fulfilled", "Unable")
 FULFILLMENT_FIELDS = (

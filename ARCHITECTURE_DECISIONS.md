@@ -65,4 +65,5 @@ migrate, not a pattern for new private imports.
 ## References
 
 - [Technical documentation](DOCUMENTATION.md)
-- [Recurring donations plan](https://github.com/Benema3000/frappe_docker/blob/main/development/RECURRING_DONATIONS_PLAN_2026-08-07.md)
+- [BENCH-ADR-0004 postal ownership allocation](https://github.com/Benema3000/frappe_docker/blob/main/development/ARCHITECTURE_DECISIONS.md#bench-adr-0004-centralize-postal-dispatch-and-separate-carrier-mechanisms)
+- [Historical recurring donations plan](https://github.com/Benema3000/frappe_docker/blob/main/development/RECURRING_DONATIONS_PLAN_2026-08-07.md)

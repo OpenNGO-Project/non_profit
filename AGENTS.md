@@ -23,6 +23,10 @@ supersede old records rather than rewriting accepted history.
   migrate onto hooks over time, not a pattern to extend. ERPNext remains a
   required app, so its doctypes may be used freely.
 - Keep `HOW_TO.md` and `DOCUMENTATION.md` current when hooks, doctypes, public helpers, setup, scheduled jobs, or operational behavior change.
+- Public display-name consumers use `non_profit.non_profit.utils.customer_display_name`
+  and `contact_display_name`. Customer names join nonblank canonical/additional
+  parts with ` - `; Contact names prefer `full_name`, then normalized first/last
+  parts, then an explicit fallback or docname.
 - Keep coordinated demo reset support app-neutral. Register only
   `demo_data_reset_declarations`, expose metadata from
   `non_profit.non_profit.demo_data_reset`, and do not import or name a private

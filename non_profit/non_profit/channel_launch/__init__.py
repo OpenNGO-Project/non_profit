@@ -126,25 +126,6 @@ def create_channel_campaigns(
 	return {"campaigns": created}
 
 
-def audience_channel_creator(
-	key: str,
-	label: str,
-	launch_fields_path: str,
-	create_campaign_path: str,
-	is_available_path: str | None = None,
-) -> dict:
-	"""Build one channel-creator descriptor for a consuming app."""
-	descriptor = {
-		"key": key,
-		"label": label,
-		"launch_fields": launch_fields_path,
-		"create_campaign": create_campaign_path,
-	}
-	if is_available_path:
-		descriptor["is_available"] = is_available_path
-	return descriptor
-
-
 def source_fingerprint(descriptor: dict[str, Any]) -> str:
 	"""Fingerprint the launch-time source definition/member state."""
 	provider = descriptor["source_provider"]

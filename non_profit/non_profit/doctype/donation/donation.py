@@ -351,18 +351,6 @@ def get_additional_notes(donor, donor_details):
 	return legacy_payments.get_additional_gateway_notes(donor, donor_details)
 
 
-def _is_sensitive_note_key(key: object) -> bool:
-	from non_profit.non_profit.legacy_payments import is_sensitive_gateway_note_key
-
-	return is_sensitive_gateway_note_key(key)
-
-
-def _safe_note_text(notes: str) -> str:
-	from non_profit.non_profit.legacy_payments import safe_gateway_note_text
-
-	return safe_gateway_note_text(notes)
-
-
 def create_mode_of_payment(method):
 	from non_profit.non_profit import legacy_payments
 

@@ -7,7 +7,7 @@ Architecture decisions: [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md).
 `non_profit` is a reusable NPO domain app. It is a hard fork of Frappe's Non
 Profit app with Swiss fundraising additions and membership changes consumed by
 downstream site, presentation, analytics, and dispatch apps through neutral
-DocTypes, services, and hooks.
+DocTypes, services, and hooks. Current package version: `16.19.0`.
 
 ## Consumer Contract
 
@@ -17,6 +17,16 @@ imports a private consumer. ERPNext remains the only required app.
 
 Shared membership behavior is a downstream compatibility contract. Consumers
 must be updated in the same change whenever that contract changes.
+
+Two public formatting helpers keep identity labels consistent across controllers
+and downstream consumers:
+
+- `non_profit.non_profit.utils.customer_display_name(customer_name,
+  name_additional=None, fallback=None)` strips each part, joins nonblank customer
+  and additional names with ` - `, and uses `fallback` only when both are blank.
+- `non_profit.non_profit.utils.contact_display_name(contact_row, fallback=None)`
+  prefers stripped `full_name`, then joined first/last names, then the explicit
+  fallback or the Contact docname.
 
 The historical `PARTY_MODEL_REFACTOR_PLAN.md` (self-declared non-authoritative,
 zero inbound references) was archived out of the repo in 16.7.0 to
@@ -1491,6 +1501,11 @@ mutating the shared test site's schema. Workflow Visualizer is not listed in
 candidate contract and uninstalled behavior are covered by non_profit's unit
 tests, while connector-backed QRR registration tests run in authorized
 integration environments where the coordinated Good Connector API is installed.
+
+## Release 16.19.0 (2026-08-11)
+
+- Promotes the canonical Customer and Contact display-name rules to tested
+  public helpers used by Member and Donor identity surfaces.
 
 ## Wave A duplication fixes (2026-08-11, 16.18.3)
 

@@ -813,11 +813,10 @@ def get_contact_email(contact) -> str | None:
 
 
 def get_contact_display_name(contact_doc) -> str:
-	full_name = cstr(contact_doc.get("full_name")).strip()
-	if full_name:
-		return full_name
-	name_parts = [contact_doc.get("first_name"), contact_doc.get("last_name")]
-	return " ".join(part for part in name_parts if cstr(part).strip()).strip() or contact_doc.name
+	# D53: shared chain in non_profit.utils.
+	from non_profit.non_profit.utils import contact_display_name
+
+	return contact_display_name(contact_doc)
 
 
 def _donor_linked_to_contact(contact: str) -> str | None:
@@ -850,9 +849,12 @@ def _contact_linked_to(link_doctype: str, link_name: str) -> str | None:
 
 def _customer_display_name(customer: str) -> str:
 	customer_doc = frappe.get_doc("Customer", customer)
-	name = customer_doc.customer_name or customer
-	additional = cstr(customer_doc.get("name_additional")).strip()
-	return f"{name} - {additional}" if additional else name
+	# D53: shared join in non_profit.utils.
+	from non_profit.non_profit.utils import customer_display_name
+
+	return customer_display_name(
+		customer_doc.customer_name, customer_doc.get("name_additional"), fallback=customer
+	)
 
 
 def _resolve_donor_type(donor_type: str | None = None) -> str:
