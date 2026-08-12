@@ -155,7 +155,7 @@ def acquire_identity_lock(
 		return
 
 	digest = sha256(f"{normalized_type}\n{normalized_value}".encode()).hexdigest()
-	lock_key = frappe.cache.make_key(f"non-profit-identity:{digest}")
+	lock_key = frappe.cache.make_key(f"identity-lock:v1:{digest}")
 	registry = _identity_lock_registry()
 	if registry.contains(lock_key):
 		return
