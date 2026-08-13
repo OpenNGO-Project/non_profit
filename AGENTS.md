@@ -92,10 +92,13 @@ supersede old records rather than rewriting accepted history.
 - Preserve valid stored QRRs as immutable compatibility data. Generate only a
   missing Donation reference through Good Connector's Donation namespace.
 - Public Donor, Customer, Contact, Member, and Membership creation shares the
-  hashed `non-profit-identity` Redis lock namespace. Normalized individual
-  emails use identity type `Individual`; leases renew while the transaction is
+  neutral hashed `identity-lock:v1:{sha256(type\nvalue)}` Redis namespace with
+  compatible co-installed identity engines. Normalized public person emails use
+  the shared semantic type `Contact Email`; leases renew while the transaction is
   open, are revalidated before commit, and release on commit or rollback. Keep
-  renewal bounded and fail the transaction if ownership is lost. After the lock
+  renewal bounded and fail the transaction if ownership is lost. If restoring
+  snapshot isolation fails, close the database session best-effort, log a
+  secondary close failure, and preserve the original restore error. After the lock
   is acquired, ambiguity-sensitive Donor/Customer discovery must run in the
   short-lived current-read mode so an earlier MariaDB repeatable-read snapshot
   cannot hide a concurrently committed identity. Lock and compare the current

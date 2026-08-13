@@ -35,6 +35,9 @@ before_migrate = "non_profit.setup.before_migrate"
 after_migrate = "non_profit.setup.after_migrate"
 before_uninstall = "non_profit.setup.before_uninstall"
 
+after_request = ["non_profit.non_profit.identity_lock.cleanup_identity_locks_after_request"]
+after_job = ["non_profit.non_profit.identity_lock.cleanup_identity_locks_after_job"]
+
 override_doctype_class = {
 	"Bank Transaction": "non_profit.non_profit.custom_doctype.bank_transaction.NonProfitBankTransaction",
 }

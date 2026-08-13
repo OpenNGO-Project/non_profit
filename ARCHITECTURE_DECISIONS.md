@@ -62,6 +62,51 @@ migrate, not a pattern for new private imports.
 - The remaining tax-receipt-to-Direct-Mail runtime seam should converge on a
   fully neutral dispatch hook without changing receipt business ownership.
 
+## ADR-0002: Use A Versioned Neutral Identity-Lock Key Protocol
+
+- Status: Accepted
+- Date: 2026-08-12
+- Scope: Public identity serialization compatibility
+- Supersedes: The app-prefixed Redis key namespace
+
+### Context
+
+Non Profit can coexist with other identity engines that create or reuse the
+same Contact, Customer, Member, and Donor graph. An app-prefixed Redis key lets
+two engines process the same normalized identity concurrently even though both
+individually claim transaction-scoped serialization.
+
+### Decision
+
+Derive ephemeral lock keys as
+`identity-lock:v1:{sha256(normalized_type + "\n" + normalized_value)}`. The
+normalization and key format are a public interoperability protocol: compatible
+engines must produce the same key and contend through Redis. Raw identity values
+remain absent from the key. Any format change increments the protocol version
+and ships as a coordinated release. Normalized public person-email work uses
+semantic type `Contact Email`, matching the Frappe identity row rather than a
+business role such as Individual, Member, or Donor. Compatible twins also use
+one neutral request-local registry, prepend cleanup callbacks, rearm rollback
+cleanup during `before_commit`, guard the after-commit callback phase, and keep
+request/job terminal cleanup as the final safety net.
+
+### Alternatives Considered
+
+- Keep the `non_profit` prefix: rejected because it serializes only this app,
+  not the shared identity graph.
+- Acquire every known app-specific lock: rejected because it couples this public
+  app to private implementations and becomes unsafe as engines are added.
+
+### Consequences
+
+- One lock acquisition excludes compatible sibling identity work bench-wide.
+- Nested Non Profit to provider calls are reentrant instead of trying to acquire
+  the same Redis lock through two app-local registries.
+- The rollout needs no persisted-data migration because keys expire after their
+  bounded lease.
+- Cross-engine parity must derive keys through both implementations and prove
+  live mutual exclusion, not compare a test-built expected key with itself.
+
 ## References
 
 - [Technical documentation](DOCUMENTATION.md)

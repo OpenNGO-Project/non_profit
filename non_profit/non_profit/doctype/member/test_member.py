@@ -3,6 +3,7 @@
 
 import json
 import unittest
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import frappe
@@ -217,6 +218,35 @@ class TestMember(unittest.TestCase):
 			self.assertTrue(
 				any(row.link_doctype == link_doctype and row.link_name == link_name for row in address.links)
 			)
+
+	def test_guided_individual_resolves_identity_inside_current_read_mode(self):
+		values = self._guided_person_values()
+		state = {"active": False, "entered": 0}
+
+		@contextmanager
+		def current_read():
+			state["active"] = True
+			state["entered"] += 1
+			try:
+				yield
+			finally:
+				state["active"] = False
+
+		from non_profit.non_profit import member_identity
+
+		original_resolver = member_identity._resolve_person_contact
+
+		def resolve_inside_current_read(*args, **kwargs):
+			self.assertTrue(state["active"])
+			return original_resolver(*args, **kwargs)
+
+		with (
+			patch.object(member_identity, "current_identity_read", current_read, create=True),
+			patch.object(member_identity, "_resolve_person_contact", side_effect=resolve_inside_current_read),
+		):
+			create_member_and_membership(**values)
+
+		self.assertEqual(state["entered"], 1)
 
 	def test_guided_individual_uses_explicit_existing_contact_and_address(self):
 		if "good_connector" not in frappe.get_installed_apps():

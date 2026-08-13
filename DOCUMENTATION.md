@@ -7,7 +7,7 @@ Architecture decisions: [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md).
 `non_profit` is a reusable NPO domain app. It is a hard fork of Frappe's Non
 Profit app with Swiss fundraising additions and membership changes consumed by
 downstream site, presentation, analytics, and dispatch apps through neutral
-DocTypes, services, and hooks. Current package version: `16.19.0`.
+DocTypes, services, and hooks. Current package version: `16.19.1`.
 
 ## Consumer Contract
 
@@ -864,7 +864,7 @@ once in `non_profit.non_profit.campaign_gate.campaign_matches_company()` so
 downstream guest surfaces can reuse the same security boundary; ownership is
 derived from the campaign's Cost Center, never from the campaign name or
 historical Donations. Before any Donor/Customer lookup or creation, the
-normalized email acquires the same hashed `Individual` identity lock used by
+normalized email acquires the same hashed `Contact Email` identity lock used by
 other public and guided identity flows through transaction completion. The
 handler then calls
 `resolve_donor_customer_identity(..., ambiguous_email_policy="reject")`; it
@@ -1066,7 +1066,22 @@ every two minutes, revalidates every token immediately before commit, and
 releases all locks after commit or rollback. Renewal stops after 30 minutes;
 lease loss or that cap aborts commit and asks the caller to retry, while the
 finite Redis TTL still recovers from worker/process failure. Lock keys contain a
-hash of the normalized identity type/value rather than PII.
+hash of the normalized identity type/value rather than PII. Version 16.19.1
+uses the neutral shared protocol
+`identity-lock:v1:{sha256(normalized_type + "\n" + normalized_value)}` rather
+than an app-branded prefix. Compatible co-installed identity engines therefore
+derive the same key and mutually exclude one another; a future format change
+must bump the protocol version in a coordinated release. Public person-email
+paths use semantic type `Contact Email`, not a product role such as
+`Individual`, so Non Profit donation/member intake contends with Connector's
+production Contact resolver. Both twins use the same neutral request-local
+registry for reentrant nested calls. Because Frappe clears rollback callbacks
+before `before_commit`, the registry rearms rollback cleanup before lease
+validation; callback-first commit/rollback release, an after-commit acquisition
+guard, and request/job terminal cleanup cover callback and SQL commit failures.
+If current-read cleanup cannot restore MariaDB snapshot isolation, it closes the
+session before propagating the restore error. A secondary session-close failure
+is logged without replacing that primary error, matching the compatible twin.
 
 Individual creation stores the resolved person in `Member.contact`, links the
 Address to Contact/Customer/Member, and reuses a Member only through that
@@ -1501,6 +1516,15 @@ mutating the shared test site's schema. Workflow Visualizer is not listed in
 candidate contract and uninstalled behavior are covered by non_profit's unit
 tests, while connector-backed QRR registration tests run in authorized
 integration environments where the coordinated Good Connector API is installed.
+
+## Release 16.19.1 (2026-08-12)
+
+- Moves the ephemeral identity-lock key to the versioned neutral
+  `identity-lock:v1:` protocol so compatible co-installed identity engines
+  serialize the same normalized person or organization bench-wide. Public
+  person-email paths use semantic type `Contact Email`, and the lifecycle now
+  rearms rollback cleanup after Frappe's callback reset with terminal cleanup
+  for failed commit/rollback chains.
 
 ## Release 16.19.0 (2026-08-11)
 

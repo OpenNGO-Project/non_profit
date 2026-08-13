@@ -264,6 +264,18 @@ donor to submit again rather than trying to recover the original transaction.
 The same retry occurs if the selected Donor kept the same email candidate but
 its Customer link changed after the request snapshot. This preserves the newer
 staff/system link instead of replacing it from stale Customer visibility.
+The lock key protocol is the neutral
+`identity-lock:v1:{sha256(normalized_type + "\n" + normalized_value)}`. This
+contains no raw email and lets any compatible identity engine installed on the
+same site contend on the same Redis key. A future key-format change requires a
+coordinated version bump rather than an app-specific prefix. Public person-email
+work uses semantic type `Contact Email`; do not substitute a Donor/Member role
+name or sibling engines will derive different digests. Lock cleanup is rearmed
+during pre-commit because Frappe clears rollback callbacks first; request/job
+terminal hooks release any registry left by a failed callback or SQL commit. If
+MariaDB snapshot-isolation restoration fails, the session is closed best-effort;
+a secondary close failure is logged while the original restore error remains the
+error returned to the transaction boundary.
 Use the Frappe **Language** selector for Donor preferred language. The saved
 value is still the language code, for example `de` or `en`, but operators get the
 standard enabled-language lookup. `Donation Tax Receipt.language` is a plain

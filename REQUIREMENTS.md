@@ -8,7 +8,7 @@ stable (never reuse a retired ID — mark it "Retired:" with the reason).
 Status: retrofitted on 2026-07-17 from current code, existing docs, and
 archived agent sessions (opencode/Claude/Codex). Describes what the app is
 required to do today, not a historical design spec. Current package version:
-`16.19.0`.
+`16.19.1`.
 
 ## 1. Purpose and Scope
 
@@ -257,6 +257,7 @@ subject matter is covered by REQ-NP-STR-01 … REQ-NP-STR-10. The
 - REQ-NP-COMP-05: Older public helper dotted paths (`find_donor_by_email()`, `get_or_create_customer_for_donor()`) remain supported alongside the orchestration service. [Trace: `doctype/donor/donor.py`, `non_profit/donor_identity.py`; Tests: `doctype/donor/test_donor.py`]
 - REQ-NP-COMP-06: `bench install-app`/`uninstall-app` must not leave the working tree dirty on a dev site: the `before_uninstall` hook clears this app's Workspace Sidebar ownership so developer-mode uninstall does not delete the shipped sidebar JSON, and install/migrate seed functions must not re-save fixture-backed documents without actual changes. [Trace: `non_profit/setup.py::before_uninstall`, `hooks.py`, bench-root `AGENTS.md` install-hygiene rules; Tests: none]
 - REQ-NP-COMP-07: Public display-name consumers must use `non_profit.non_profit.utils.customer_display_name` and `contact_display_name`. Customer display names strip inputs, join nonblank canonical and additional names with ` - `, and use the supplied fallback only when both are blank. Contact display names prefer stripped `full_name`, then stripped first/last parts, then the explicit fallback or Contact docname. [Trace: `non_profit/non_profit/utils.py`, Member/Donor controllers; Tests: `non_profit/non_profit/test_display_names.py`]
+- REQ-NP-COMP-08: Version 16.19.1 derives every identity lock as `identity-lock:v1:{sha256(normalized_type + "\n" + normalized_value)}`. Public person emails use semantic type `Contact Email`, and compatible twins share one neutral request-local registry so nested provider calls are reentrant and contend on the same Redis lease. The versioned neutral key contains no PII. Cleanup callbacks run first; pre-commit validation rearms rollback cleanup after Frappe clears that queue; an after-commit guard plus request/job terminal cleanup cover callback or SQL commit failure. Failure to restore MariaDB snapshot isolation closes the session best-effort, logs any secondary close error, and propagates the original restore error. Any future key/type/registry change requires a coordinated protocol-version and package release rather than restoring app-specific semantics. [Trace: `hooks.py`, `non_profit/non_profit/identity_lock.py`, `member_identity.py`; Tests: `non_profit/non_profit/test_identity_lock.py`, external sanctioned-twin parity]
 
 ### 3.4 Operations
 

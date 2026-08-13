@@ -6,7 +6,12 @@ import frappe
 from frappe import _
 from frappe.utils import cstr, getdate, validate_email_address
 
-from non_profit.non_profit.identity_lock import _normalized_text, acquire_identity_lock
+from non_profit.non_profit.identity_lock import (
+	PUBLIC_EMAIL_IDENTITY_TYPE,
+	_normalized_text,
+	acquire_identity_lock,
+	current_identity_read,
+)
 from non_profit.non_profit.utils import ensure_person_contact, role_uses_canonical_person
 
 MUTATED_IDENTITY_DOCTYPES = ("Contact", "Address", "Customer", "Member", "Membership")
@@ -52,11 +57,13 @@ def create_guided_membership(
 	if cstr(existing_address).strip():
 		identity_locks.append(("Address", cstr(existing_address).strip()))
 	if member_kind == "Individual" and cstr(email).strip():
-		identity_locks.append(("Individual", cstr(email).strip().lower()))
+		identity_locks.append((PUBLIC_EMAIL_IDENTITY_TYPE, cstr(email).strip().lower()))
 	elif member_kind == "Organization" and cstr(organization_name).strip():
 		identity_locks.append(("Organization", cstr(organization_name).strip()))
 		if cstr(organization_contact_email).strip():
-			identity_locks.append(("Individual", cstr(organization_contact_email).strip().lower()))
+			identity_locks.append(
+				(PUBLIC_EMAIL_IDENTITY_TYPE, cstr(organization_contact_email).strip().lower())
+			)
 	_acquire_identity_locks(identity_locks)
 	_check_permissions()
 	membership_type = cstr(membership_type).strip()
@@ -67,35 +74,36 @@ def create_guided_membership(
 	savepoint = f"guided_member_{frappe.generate_hash(length=8)}"
 	frappe.db.savepoint(savepoint)
 	try:
-		if member_kind == "Individual":
-			result = _create_individual(
-				existing_contact=existing_contact,
-				existing_address=existing_address,
-				first_name=first_name,
-				last_name=last_name,
-				email=email,
-				phone=phone,
-				address_line1=address_line1,
-				postal_code=postal_code,
-				city=city,
-				country=country,
-			)
-		elif member_kind == "Organization":
-			result = _create_organization(
-				existing_contact=existing_contact,
-				existing_address=existing_address,
-				organization_name=organization_name,
-				contact_first_name=organization_contact_first_name,
-				contact_last_name=organization_contact_last_name,
-				contact_email=organization_contact_email,
-				contact_phone=organization_contact_phone,
-				address_line1=address_line1,
-				postal_code=postal_code,
-				city=city,
-				country=country,
-			)
-		else:
-			frappe.throw(_("Select Individual or Organization."))
+		with current_identity_read():
+			if member_kind == "Individual":
+				result = _create_individual(
+					existing_contact=existing_contact,
+					existing_address=existing_address,
+					first_name=first_name,
+					last_name=last_name,
+					email=email,
+					phone=phone,
+					address_line1=address_line1,
+					postal_code=postal_code,
+					city=city,
+					country=country,
+				)
+			elif member_kind == "Organization":
+				result = _create_organization(
+					existing_contact=existing_contact,
+					existing_address=existing_address,
+					organization_name=organization_name,
+					contact_first_name=organization_contact_first_name,
+					contact_last_name=organization_contact_last_name,
+					contact_email=organization_contact_email,
+					contact_phone=organization_contact_phone,
+					address_line1=address_line1,
+					postal_code=postal_code,
+					city=city,
+					country=country,
+				)
+			else:
+				frappe.throw(_("Select Individual or Organization."))
 
 		from non_profit.non_profit.doctype.member.member import get_or_create_membership_for_member
 

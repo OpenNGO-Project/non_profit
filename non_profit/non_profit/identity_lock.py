@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from hashlib import sha256
@@ -14,6 +15,10 @@ from frappe.utils import cstr, validate_email_address
 IDENTITY_LOCK_LEASE_SECONDS = 300
 IDENTITY_LOCK_RENEWAL_INTERVAL_SECONDS = 120
 IDENTITY_LOCK_MAX_HOLD_SECONDS = 1800
+PUBLIC_EMAIL_IDENTITY_TYPE = "Contact Email"
+IDENTITY_LOCK_REGISTRY_ATTR = "identity_lock_v1_registry"
+IDENTITY_LOCK_AFTER_COMMIT_ATTR = "identity_lock_v1_after_commit"
+LOGGER = logging.getLogger(__name__)
 
 
 class _IdentityLockRegistry:
@@ -53,6 +58,13 @@ class _IdentityLockRegistry:
 
 	def ensure_current(self) -> None:
 		"""Fail the transaction before commit if any lease is no longer owned."""
+		# Frappe clears rollback callbacks before running before_commit. Re-arm
+		# cleanup first so any later before_commit failure releases on rollback.
+		try:
+			_add_callback_first(frappe.db.after_rollback, self.release_all)
+		except Exception:
+			self.release_all()
+			raise
 		if monotonic() - self._acquired_at >= IDENTITY_LOCK_MAX_HOLD_SECONDS:
 			with self._mutex:
 				self._max_hold_reached = True
@@ -86,8 +98,8 @@ class _IdentityLockRegistry:
 		for lock in locks:
 			try:
 				lock.release()
-			except Exception:
-				frappe.log_error(title="Non Profit identity lock release failed")
+			except Exception as error:
+				_log_cleanup_failure("lock-release", error)
 		self._clear_request_state()
 
 	def _renew_until_released(self) -> None:
@@ -124,10 +136,18 @@ class _IdentityLockRegistry:
 		)
 
 	def _clear_request_state(self) -> None:
-		if getattr(frappe.local, "non_profit_identity_lock_registry", None) is self:
-			delattr(frappe.local, "non_profit_identity_lock_registry")
-		if getattr(frappe.local, "non_profit_identity_locks", None) is self.locks:
-			delattr(frappe.local, "non_profit_identity_locks")
+		if getattr(frappe.local, IDENTITY_LOCK_REGISTRY_ATTR, None) is self:
+			delattr(frappe.local, IDENTITY_LOCK_REGISTRY_ATTR)
+
+	def release_after_commit(self) -> None:
+		try:
+			self.release_all()
+		finally:
+			setattr(frappe.local, IDENTITY_LOCK_AFTER_COMMIT_ATTR, True)
+			try:
+				frappe.db.after_commit.add(_clear_after_commit_guard)
+			except Exception as error:
+				_log_cleanup_failure("after-commit-guard-clear-registration", error)
 
 
 def acquire_public_email_identity_lock(email: str) -> str:
@@ -135,7 +155,7 @@ def acquire_public_email_identity_lock(email: str) -> str:
 	email = cstr(email).strip().lower()
 	validate_email_address(email, throw=True)
 	acquire_identity_lock(
-		"Individual",
+		PUBLIC_EMAIL_IDENTITY_TYPE,
 		email,
 		busy_message=_("Another public submission for this email address is still being processed."),
 	)
@@ -149,6 +169,11 @@ def acquire_identity_lock(
 	busy_message: str | None = None,
 ) -> None:
 	"""Acquire a PII-safe, request-reentrant Redis lock for an identity."""
+	if getattr(frappe.local, IDENTITY_LOCK_AFTER_COMMIT_ATTR, False):
+		frappe.throw(
+			_("Transaction-scoped identity operations cannot start after commit."),
+			frappe.ValidationError,
+		)
 	normalized_type = _normalized_text(identity_type)
 	normalized_value = _normalized_text(identity_value)
 	if not normalized_type or not normalized_value:
@@ -156,8 +181,8 @@ def acquire_identity_lock(
 
 	digest = sha256(f"{normalized_type}\n{normalized_value}".encode()).hexdigest()
 	lock_key = frappe.cache.make_key(f"identity-lock:v1:{digest}")
-	registry = _identity_lock_registry()
-	if registry.contains(lock_key):
+	registry = getattr(frappe.local, IDENTITY_LOCK_REGISTRY_ATTR, None)
+	if registry is not None and registry.contains(lock_key):
 		return
 
 	lock = frappe.cache.lock(
@@ -169,20 +194,22 @@ def acquire_identity_lock(
 	if not lock.acquire():
 		frappe.throw(busy_message or _("Another operation for this identity is still being processed."))
 	try:
+		if registry is None:
+			registry = _identity_lock_registry()
 		registry.add(lock_key, lock)
 		registry.start()
 	except Exception:
 		try:
 			lock.release()
-		except Exception:
-			frappe.log_error(title="Non Profit identity lock release failed")
+		except Exception as error:
+			_log_cleanup_failure("lock-release", error)
 		raise
 
 
 @contextmanager
 def current_identity_read() -> Iterator[None]:
 	"""Read current committed identity rows while the Redis lock is owned."""
-	registry = getattr(frappe.local, "non_profit_identity_lock_registry", None)
+	registry = getattr(frappe.local, IDENTITY_LOCK_REGISTRY_ATTR, None)
 	if registry is None or not registry.locks:
 		frappe.throw(_("Identity serialization is required before a current identity read."))
 	if (
@@ -227,26 +254,95 @@ def current_identity_read() -> Iterator[None]:
 				try:
 					frappe.db.sql("SET SESSION innodb_snapshot_isolation = ON")
 				except Exception:
-					frappe.db.close()
+					try:
+						frappe.db.close()
+					except Exception as close_error:
+						_log_cleanup_failure("snapshot-session-close", close_error)
 					raise
 
 
 def _identity_lock_registry() -> _IdentityLockRegistry:
-	registry = getattr(frappe.local, "non_profit_identity_lock_registry", None)
+	registry = getattr(frappe.local, IDENTITY_LOCK_REGISTRY_ATTR, None)
 	if registry is not None:
 		return registry
 
 	registry = _IdentityLockRegistry()
-	frappe.local.non_profit_identity_lock_registry = registry
-	frappe.local.non_profit_identity_locks = registry.locks
+	setattr(frappe.local, IDENTITY_LOCK_REGISTRY_ATTR, registry)
 	try:
-		frappe.db.before_commit.add(registry.ensure_current)
-		frappe.db.after_commit.add(registry.release_all)
-		frappe.db.after_rollback.add(registry.release_all)
+		_add_callback_first(frappe.db.before_commit, registry.ensure_current)
+		_add_callback_first(frappe.db.after_commit, registry.release_after_commit)
+		_add_callback_first(frappe.db.after_rollback, registry.release_all)
 	except Exception:
 		registry.release_all()
 		raise
 	return registry
+
+
+def cleanup_identity_locks_after_request(*, response=None, request=None) -> None:
+	"""Request-final safety net for failed commit/rollback callback chains."""
+	try:
+		_cleanup_stranded_identity_registry()
+	finally:
+		_clear_after_commit_guard()
+
+
+def cleanup_identity_locks_after_job(*, method=None, kwargs=None, result=None) -> None:
+	"""Job-final safety net for failed commit/rollback callback chains."""
+	try:
+		_cleanup_stranded_identity_registry()
+	finally:
+		_clear_after_commit_guard()
+
+
+def _clear_after_commit_guard() -> None:
+	if hasattr(frappe.local, IDENTITY_LOCK_AFTER_COMMIT_ATTR):
+		delattr(frappe.local, IDENTITY_LOCK_AFTER_COMMIT_ATTR)
+
+
+def _cleanup_stranded_identity_registry() -> None:
+	registry = getattr(frappe.local, IDENTITY_LOCK_REGISTRY_ATTR, None)
+	if registry is None:
+		return
+	try:
+		frappe.db.rollback()
+	except Exception as rollback_error:
+		_log_cleanup_failure("terminal-rollback", rollback_error)
+		if getattr(frappe.local, IDENTITY_LOCK_REGISTRY_ATTR, None) is registry:
+			try:
+				frappe.db.close()
+			except Exception as close_error:
+				_log_cleanup_failure("terminal-session-close", close_error)
+	finally:
+		if getattr(frappe.local, IDENTITY_LOCK_REGISTRY_ATTR, None) is registry:
+			registry.release_all()
+
+
+def _add_callback_first(callback_manager: Any, callback: Any) -> None:
+	"""Put critical cleanup before ordinary callbacks on Frappe v16."""
+	functions = getattr(callback_manager, "_functions", None)
+	if functions is None:
+		callback_manager.add(callback)
+	else:
+		functions.appendleft(callback)
+
+
+def _log_cleanup_failure(action: str, error: Exception) -> None:
+	exception_type = type(error).__name__[:80]
+	try:
+		frappe.logger("non_profit.identity_lock", allow_site=True).error(
+			"Identity lock cleanup failed: action=%s exception=%s",
+			action[:40],
+			exception_type,
+		)
+	except Exception:
+		try:
+			LOGGER.error(
+				"Identity lock cleanup failed: action=%s exception=%s",
+				action[:40],
+				exception_type,
+			)
+		except Exception:
+			pass
 
 
 def _normalized_text(value: object) -> str:
