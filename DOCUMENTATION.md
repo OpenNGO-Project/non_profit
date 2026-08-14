@@ -1219,6 +1219,19 @@ from Jinja. The slip body renders first, and the QR-bill is placed at the bottom
 of a separate final page so normal document footer behavior does not overlap the
 payment part.
 
+That layout only holds if the format actually owns the whole sheet. Frappe passes
+wkhtmltopdf its page margins through one channel — the four longhand properties
+`margin-top` / `margin-right` / `margin-bottom` / `margin-left` on a
+`.print-format` rule inside the format's HTML — and the `margin` shorthand is not
+parsed. `@page { margin: 0 }` alone is aspirational: any edge left undeclared
+falls back to 15mm, which pushes the 210mm-wide payment part off the paper and
+clips the payment reference a payer types into e-banking. The format therefore
+declares all four longhands as zero, and a test asserts them through Frappe's own
+`get_print_format_styles` parser rather than a private copy of the rule, so the
+check cannot drift from the real PDF path. Every shipped revision of the body is
+added to `DONATION_SLIP_CH_MANAGED_HASHES`, which is how migrate tells its own
+previous output from an operator edit it must preserve.
+
 `swiss_qrbill.py` is a neutral dispatch seam, not a renderer. It calls
 `non_profit_qr_bill_svg_providers` in hook order and uses the first non-empty
 SVG. With no provider, printing continues without a payment part. Ordinary
