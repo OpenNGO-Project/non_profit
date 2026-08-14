@@ -142,6 +142,11 @@ def ensure_good_connector_bank_integration() -> None:
 DONATION_SLIP_CH_HTML = """
 <style>
 @page { size: A4; margin: 0; }
+/* Frappe reads these four longhands off `.print-format` to set wkhtmltopdf's
+   page margins; the `margin` shorthand is not recognised and an undeclared edge
+   falls back to 15mm. That would push the 210mm-wide payment part off the sheet
+   and clip the payment reference a payer types into e-banking. */
+.print-format { margin-top: 0mm; margin-right: 0mm; margin-bottom: 0mm; margin-left: 0mm; }
 .donation-slip-body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10pt; margin: 16mm 17mm 18mm; }
 .donation-slip-qr-page { box-sizing: border-box; font-family: 'Helvetica Neue', Arial, sans-serif; min-height: 297mm; page-break-before: always; display: flex; flex-direction: column; justify-content: flex-end; }
 .donation-slip-qr-note { color: #666; font-size: 9pt; margin: 0 17mm 6mm; }
@@ -194,6 +199,7 @@ DONATION_SLIP_CH_MANAGED_HASHES = frozenset(
 		"55df655758ecbdd705476175b4f13e628f106fc4e6268c46b0c374ce057b7d7c",
 		"930d2ea12fc6daae856332792577551e90089fa07a187556509cbfc99343f789",
 		"73822669976cb45ce956000e0e9f705a403f4533097d1bbdc53945cdfef09ef7",
+		"c3357bb03f9f9be4cd1df1d7f9a902786b5fb72d98d591097d08f630ed489a33",
 	}
 )
 

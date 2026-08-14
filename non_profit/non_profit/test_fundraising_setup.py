@@ -83,6 +83,30 @@ class TestFundraisingSetup(IntegrationTestCase):
 				self.assertNotIn(payload, rendered)
 				self.assertIn("&lt;img", rendered)
 
+	def test_donation_slip_zeroes_the_page_margins_it_depends_on(self) -> None:
+		"""The slip declares `@page { margin: 0 }` and lays out a 210mm-wide payment
+		part. Frappe sets wkhtmltopdf's page margins solely from the longhand
+		properties on a `.print-format` rule, and an undeclared edge falls back to
+		15mm — which would clip the payment reference a payer types into e-banking.
+
+		Checked against Frappe's own parser rather than a copy of it. `non_profit`
+		cannot import `good_connector`, so this does not share that app's helper.
+		"""
+		from bs4 import BeautifulSoup
+		from frappe.utils.pdf import get_print_format_styles
+
+		from non_profit.non_profit.fundraising_setup import DONATION_SLIP_CH_HTML
+
+		declared = {
+			style.name: style.value
+			for style in get_print_format_styles(BeautifulSoup(DONATION_SLIP_CH_HTML, "html5lib"))
+		}
+		for edge in ("top", "right", "bottom", "left"):
+			with self.subTest(margin=edge):
+				value = declared.get(f"margin-{edge}")
+				self.assertIsNotNone(value, f"margin-{edge} is not declared on .print-format")
+				self.assertEqual(float(str(value).removesuffix("mm")), 0.0)
+
 	def test_email_template_remains_create_only(self) -> None:
 		operator_html = "<p>Operator-owned thank-you email</p>"
 		frappe.db.set_value(
