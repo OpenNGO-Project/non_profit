@@ -9,6 +9,14 @@ app_license = "GNU General Public License (v3)"
 
 required_apps = ["erpnext"]
 
+# Identity locks are correctness state, not a cache. They live in the Redis
+# cache namespace only because that is where frappe.cache.lock() puts them, so
+# an unrelated frappe.clear_cache() would delete a lease a live transaction
+# still holds, aborting it with "Identity serialization expired". Registered
+# here too: non_profit owns its own identity_lock copy and installs without
+# good_connector.
+persistent_cache_keys = ["identity-lock:v1:*"]
+
 demo_data_reset_declarations = [
 	"non_profit.non_profit.demo_data_reset.get_reset_declaration",
 ]
