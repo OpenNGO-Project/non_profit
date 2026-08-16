@@ -111,7 +111,7 @@
    "fieldname": "receipt_delivery",
    "fieldtype": "Select",
    "label": "Receipt Delivery",
-   "options": "Email\nPost\nBoth"
+   "options": "Email\nPost\nBoth\nMessenger"
   },
   {
    "fieldname": "relationship_section",

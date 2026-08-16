@@ -7,7 +7,7 @@ Architecture decisions: [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md).
 `non_profit` is a reusable NPO domain app. It is a hard fork of Frappe's Non
 Profit app with Swiss fundraising additions and membership changes consumed by
 downstream site, presentation, analytics, and dispatch apps through neutral
-DocTypes, services, and hooks. Current package version: `16.19.1`.
+DocTypes, services, and hooks. Current package version: `16.20.0`.
 
 ## Consumer Contract
 
@@ -273,6 +273,10 @@ endpoint invokes required source transforms first, then selected creators sequen
 in the request transaction with one title, optional Donation Campaign, and a
 single SHA-256 fingerprint over the transformed saved source configuration plus
 evaluated canonical rows. At least one ordinary campaign channel is required;
+available channels come from the hook-driven registry
+(`non_profit_recipient_selection_channels`, see REQ-NP-CHAN-01) joined with the
+two built-ins; `non_profit.non_profit.channel_router` (REQ-NP-CHAN-02) is the
+1:1 transactional counterpart reading `Donor.receipt_delivery`.
 an infrastructure transform alone is not a valid launch. Optional source apps
 register their validation and fingerprint
 callbacks through `non_profit_audience_source_providers`; this public app does
@@ -1065,7 +1069,14 @@ One request-scoped registry renews its five-minute Redis identity-lock leases
 every two minutes, revalidates every token immediately before commit, and
 releases all locks after commit or rollback. Renewal stops after 30 minutes;
 lease loss or that cap aborts commit and asks the caller to retry, while the
-finite Redis TTL still recovers from worker/process failure. Lock keys contain a
+finite Redis TTL still recovers from worker/process failure. The
+`identity-lock:v1:*` keys are exempted from `frappe.clear_cache()` through
+Frappe's `persistent_cache_keys` hook: the locks are correctness state that
+lives in the cache namespace only because `frappe.cache.lock()` puts them
+there, and an unrelated flush (a scheduler tick, a doctype save, a migrate)
+would otherwise delete a lease a live transaction still holds and abort it at
+the before-commit reacquire. The exemption is registered here as well as in
+compatible twins because non_profit installs standalone. Lock keys contain a
 hash of the normalized identity type/value rather than PII. Version 16.19.1
 uses the neutral shared protocol
 `identity-lock:v1:{sha256(normalized_type + "\n" + normalized_value)}` rather
@@ -1529,6 +1540,30 @@ mutating the shared test site's schema. Workflow Visualizer is not listed in
 candidate contract and uninstalled behavior are covered by non_profit's unit
 tests, while connector-backed QRR registration tests run in authorized
 integration environments where the coordinated Good Connector API is installed.
+
+## Release 16.20.0 (2026-08-16)
+
+- Adds the two neutral channel-architecture seams (REQ-NP-CHAN-01…03): the
+  hook-driven recipient-selection channel registry
+  (`non_profit_recipient_selection_channels`) replacing the hardcoded
+  newsletter/direct_mail pair in availability validation, channel gating and
+  launch-source `available_channels`; and `channel_router.send_transactional`
+  with `non_profit_transactional_channels`, reviving `Donor.receipt_delivery`
+  (now offering `Messenger`) as a *reader* for 1:1 transactional flows —
+  donation thank-you and tax confirmation. Registered channels are additive:
+  with no registered channel, or any default preference, every existing path
+  keeps its exact behavior. This app registers no channel and imports none.
+
+## Release 16.19.2 (2026-08-14)
+
+- Exempts `identity-lock:v1:*` keys from `frappe.clear_cache()` through
+  Frappe's `persistent_cache_keys` hook. The locks land in the Redis cache
+  namespace only because `frappe.cache.lock()` puts them there, so any
+  unrelated flush — a scheduler tick, a doctype save, a migrate — deleted a
+  lease a live transaction still held, and the holder's before-commit
+  reacquire aborted the transaction with "Identity serialization expired".
+  Registered in this app as well as in good_connector because non_profit owns
+  its own identity-lock copy and installs without it.
 
 ## Release 16.19.1 (2026-08-12)
 

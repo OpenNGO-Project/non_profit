@@ -105,6 +105,11 @@ good_direct_mail_audience_providers = [
 # the private channel apps itself.
 non_profit_audience_channel_creators = []
 non_profit_audience_source_providers = []
+# Neutral channel registries (channel apps register via hooks; this public
+# app never imports them): availability flags on NPO Recipient Selection
+# and the transactional 1:1 router reading Donor.receipt_delivery.
+non_profit_recipient_selection_channels = []
+non_profit_transactional_channels = []
 
 # Neutral seam for payment providers that own a recurring schedule. Registered
 # providers are called as provider(action="change_amount"|"cancel"|

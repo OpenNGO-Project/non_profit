@@ -356,6 +356,18 @@ def send_receipt_email(receipt: str) -> dict[str, Any]:
 	if doc.status not in ("Draft", "Issued"):
 		frappe.throw(_("Only Draft or Issued Donation Tax Receipts can be emailed."))
 
+	# Channel preference (Phase 5): a donor explicitly preferring a registered
+	# transactional channel receives the confirmation through it; everyone
+	# else keeps the email path below.
+	from non_profit.non_profit.channel_router import send_transactional
+
+	if send_transactional("tax_confirmation", doc):
+		return {
+			"receipt": doc.name,
+			"channel": "preferred",
+			"print_format": None,
+		}
+
 	email = cstr(get_donor_email(doc.donor)).strip()
 	if not email:
 		frappe.throw(

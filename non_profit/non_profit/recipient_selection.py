@@ -24,6 +24,7 @@ CHANNEL_FIELDS = {
 	"newsletter": "available_for_newsletter",
 	"direct_mail": "available_for_direct_mail",
 }
+RECIPIENT_SELECTION_CHANNEL_HOOK = "non_profit_recipient_selection_channels"
 CONFIGURATION_FIELDS = (
 	"enabled",
 	"available_for_newsletter",
@@ -77,8 +78,37 @@ class _RecipientCandidate:
 		}
 
 
+def get_channel_fields() -> dict[str, str]:
+	"""Channel key → availability fieldname on ``NPO Recipient Selection``.
+
+	The two built-in channels are literals; additional channels register
+	through the neutral ``non_profit_recipient_selection_channels`` hook
+	(each entry a dotted callable returning ``{"key", "fieldname", "label"}``
+	or a list of such dicts). Registered channel availability fields are
+	deliberately **not** part of the configuration snapshot/fingerprint:
+	availability gates which channel may consume a selection, not who the
+	audience is (the built-ins remain in the snapshot for compatibility).
+	"""
+	fields = dict(CHANNEL_FIELDS)
+	for provider in frappe.get_hooks(RECIPIENT_SELECTION_CHANNEL_HOOK) or []:
+		registered = frappe.get_attr(provider)()
+		if isinstance(registered, dict):
+			registered = [registered]
+		if not isinstance(registered, list):
+			continue
+		for channel in registered:
+			if not isinstance(channel, dict):
+				continue
+			key = cstr(channel.get("key")).strip().lower()
+			fieldname = cstr(channel.get("fieldname")).strip()
+			if not key or not fieldname or key in fields:
+				continue
+			fields[key] = fieldname
+	return fields
+
+
 def validate_recipient_selection(selection: Document) -> None:
-	if not any(cint(selection.get(fieldname)) for fieldname in CHANNEL_FIELDS.values()):
+	if not any(cint(selection.get(fieldname)) for fieldname in get_channel_fields().values()):
 		frappe.throw(_("Enable at least one delivery channel."))
 	if not any(
 		cint(selection.get(fieldname))
@@ -212,11 +242,16 @@ def _selection_document(selection: Document | str) -> Document:
 
 def _validate_enabled_channel(selection: Document, channel: str) -> None:
 	channel = cstr(channel).strip().lower()
-	if channel not in CHANNEL_FIELDS:
-		frappe.throw(_("Recipient selection channel must be newsletter or direct_mail."))
+	channel_fields = get_channel_fields()
+	if channel not in channel_fields:
+		frappe.throw(
+			_("Recipient selection channel must be one of: {0}.").format(
+				", ".join(sorted(channel_fields))
+			)
+		)
 	if not cint(selection.get("enabled")):
 		frappe.throw(_("NPO Recipient Selection {0} is disabled.").format(selection.name))
-	if not cint(selection.get(CHANNEL_FIELDS[channel])):
+	if not cint(selection.get(channel_fields[channel])):
 		frappe.throw(
 			_("NPO Recipient Selection {0} is not available for {1}.").format(
 				selection.name, channel.replace("_", " ")
