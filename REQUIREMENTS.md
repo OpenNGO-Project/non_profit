@@ -291,10 +291,11 @@ Intentional behaviors a reader might otherwise mistake for bugs (documented in
   `LETTER_DISPATCH_CONVERGENCE_PLAN_2026-07-31.md`; do not re-model it as a
   second Bescheinigung.
 - **Currency is a presentation assumption, not a contract.** The base `/donate`
-  page, confirmation labels, and the seeded `Donation Thank You DE` template
-  display EUR; `Donation Slip CH` displays CHF. Donation has no currency
-  field, so production sites must provide one approved currency-aware
-  presentation flow.
+  page and confirmation labels display EUR; the seeded `Donation Thank You DE`
+  template formats the Donation Company's default currency (create-only, so
+  pre-16.20.1 sites keep their operator-owned copy); `Donation Slip CH`
+  displays CHF. Donation has no currency field, so production sites must
+  provide one approved currency-aware presentation flow.
 - **Compatibility facades are a telemetry hold, not forgotten debt.** Legacy
   payment/invoice dotted paths warn through the `non_profit.compatibility`
   logger and stay until ≥ 90 days of telemetry plus one zero-call release

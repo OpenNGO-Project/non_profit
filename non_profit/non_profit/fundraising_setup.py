@@ -71,7 +71,7 @@ DONATION_TAX_RECEIPT_DE_HTML = """
 
     <p style="margin-top: 2em; font-size: 10pt;">Es handelt sich nicht um den Verzicht auf Erstattung von Aufwendungen.</p>
 
-    <p style="margin-top: 1em; font-size: 10pt;">Wir bestätigen, dass die aufgeführten Zuwendungen eingegangen sind und ausschliesslich zur Förderung der steuerbefreiten gemeinnützigen Zwecke unserer Organisation verwendet werden. Diese Bescheinigung dient als Nachweis für Ihre Steuererklärung.</p>
+    <p style="margin-top: 1em; font-size: 10pt;">Wir bestätigen, dass die aufgeführten Zuwendungen eingegangen sind und ausschliesslich zur Förderung der steuerbefreiten gemeinnützigen Zwecke unserer Organisation verwendet werden. Diese Bescheinigung dient als Nachweis für die Steuererklärung.</p>
 
     {% if doc.remarks %}<p style="margin-top: 1em; font-size: 10pt;">{{ doc.remarks }}</p>{% endif %}
 
@@ -93,24 +93,26 @@ DONATION_TAX_RECEIPT_DE_MANAGED_HASHES = frozenset(
 	{
 		"36fdea4641a95c1ba07c644dbb5c16a2eab35b0fd3340dfcd8a9f736ee78740f",
 		"9396bff3637c5df634b3933967691a391dcc2748efd2159c8b0c63c76695cc02",
+		"60fae977cb2c5727ce44bb64d668d8c65f0aeefe168f67fc295dd783c0c3aa16",
 	}
 )
 
 
-THANK_YOU_EMAIL_HTML = """<p>Liebe/r {{ doc.donor_name | e }},</p>
+THANK_YOU_EMAIL_HTML = """{%- set donation_currency = frappe.db.get_value("Company", doc.company, "default_currency") if doc.company else None -%}
+<p>Liebe/r {{ doc.donor_name | e }},</p>
 
-<p>herzlichen Dank für Ihre großzügige Spende in Höhe von <strong>{{ frappe.utils.fmt_money(doc.amount, currency="EUR") }}</strong>!</p>
+<p>herzlichen Dank für deine grosszügige Spende in der Höhe von <strong>{{ frappe.utils.fmt_money(doc.amount, currency=donation_currency) }}</strong>!</p>
 
-<p>Mit Ihrer Unterstützung helfen Sie uns, unsere Arbeit fortzuführen. Ihr Beitrag macht einen echten Unterschied.</p>
+<p>Mit deiner Unterstützung hilfst du uns, unsere Arbeit fortzuführen. Dein Beitrag macht einen echten Unterschied.</p>
 
 {% if doc.campaign %}
-<p>Ihre Spende wurde der Kampagne <em>{{ doc.campaign }}</em> zugeordnet.</p>
+<p>Deine Spende wurde der Kampagne <em>{{ doc.campaign }}</em> zugeordnet.</p>
 {% endif %}
 
-<p>Eine Zuwendungsbestätigung für das Finanzjahr senden wir Ihnen zu gegebener Zeit zu.</p>
+<p>Die Spendenbescheinigung für das Steuerjahr senden wir dir zu gegebener Zeit zu.</p>
 
-<p>Mit herzlichen Grüßen,<br>
-Ihr Team</p>"""
+<p>Herzliche Grüsse<br>
+Dein Team</p>"""
 
 
 def ensure_fundraising_fixtures():
@@ -263,7 +265,7 @@ def ensure_email_template():
 		{
 			"doctype": "Email Template",
 			"name": name,
-			"subject": "Herzlichen Dank für Ihre Spende",
+			"subject": "Herzlichen Dank für deine Spende",
 			"response": THANK_YOU_EMAIL_HTML,
 			"use_html": 1,
 		}

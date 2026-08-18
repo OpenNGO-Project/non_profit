@@ -900,11 +900,14 @@ it performs a full database rollback first. Partial identity, Comment, Donation,
 or provider writes and transaction callbacks therefore cannot be committed by a
 late public-form validation failure.
 
-The base public page and confirmation label amounts as EUR, and the seeded
-`Donation Thank You DE` template formats EUR. The separate `Donation Slip CH`
-format displays CHF. Donation has no currency field, so these are presentation
-assumptions, not a company-derived currency contract. Production sites must
-provide one approved currency-aware presentation flow.
+The base public page and confirmation label amounts as EUR. The seeded
+`Donation Thank You DE` template (du-form Swiss German since 16.20.1) formats
+the Donation Company's default currency; because the template is create-only,
+sites seeded earlier keep their operator-owned copy. The separate
+`Donation Slip CH` format displays CHF. Donation has no currency field, so the
+page labels are presentation assumptions, not a company-derived currency
+contract. Production sites must provide one approved currency-aware
+presentation flow.
 
 The `donate_confirm` page is key-gated: every Donation gets a random
 `confirmation_key` on insert (`Donation.before_insert`), the donate flow

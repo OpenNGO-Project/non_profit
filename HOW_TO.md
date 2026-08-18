@@ -68,11 +68,14 @@ disabled one keeps rendering) until the cache is dropped. Remove the key from
 
 ### Currency and receipt jurisdiction
 
-The generic `/donate` and `/donate_confirm` pages currently display **EUR**, and
-the seeded `Donation Thank You DE` email also formats EUR. The separate
-`Donation Slip CH` Swiss QR slip displays CHF. Donation has no currency field,
-so these labels do not derive from the Donation Company. Production sites must
-provide a locally approved, currency-aware presentation flow.
+The generic `/donate` and `/donate_confirm` pages currently display **EUR**.
+The seeded `Donation Thank You DE` email formats the Donation Company's default
+currency (CHF on a Swiss company); the template is create-only, so a site
+seeded before 16.20.1 keeps its operator-owned copy — update wording and
+currency in Desk there. The separate `Donation Slip CH` Swiss QR slip displays
+CHF. Donation has no currency field, so the page labels do not derive from the
+Donation Company. Production sites must provide a locally approved,
+currency-aware presentation flow.
 
 The Bescheinigung is the seeded **Spendenbescheinigung** Print Format for
 **Donation Tax Receipt**: German wording, CHF, calendar tax year, itemized

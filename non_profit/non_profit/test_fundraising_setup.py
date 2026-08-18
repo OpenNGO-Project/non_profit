@@ -107,6 +107,18 @@ class TestFundraisingSetup(IntegrationTestCase):
 				self.assertIsNotNone(value, f"margin-{edge} is not declared on .print-format")
 				self.assertEqual(float(str(value).removesuffix("mm")), 0.0)
 
+	def test_thank_you_email_formats_the_donation_company_currency(self) -> None:
+		# The former shipped body hardcoded EUR on a CHF Swiss stack. Donation has
+		# no currency field, so the company default currency is the contract.
+		company = frappe.db.get_value("Company", {}, "name")
+		currency = frappe.db.get_value("Company", company, "default_currency")
+		rendered = frappe.render_template(  # nosemgrep
+			fundraising_setup.THANK_YOU_EMAIL_HTML,
+			{"doc": frappe._dict(donor_name="Amsale Test", amount=200, company=company, campaign=None)},
+		)
+		self.assertIn(frappe.utils.fmt_money(200, currency=currency), rendered)
+		self.assertNotIn("EUR", fundraising_setup.THANK_YOU_EMAIL_HTML)
+
 	def test_email_template_remains_create_only(self) -> None:
 		operator_html = "<p>Operator-owned thank-you email</p>"
 		frappe.db.set_value(
