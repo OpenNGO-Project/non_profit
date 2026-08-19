@@ -163,9 +163,7 @@ class TestRecipientSelectionChannelRegistry(IntegrationTestCase):
 			CHANNEL_HOOK, ["non_profit.non_profit.tests.test_channel_router.messenger_channel_provider"]
 		):
 			descriptor = _validate_recipient_selection_source(selection.name)
-		self.assertEqual(
-			set(descriptor["available_channels"]), {"newsletter", "direct_mail", "messenger"}
-		)
+		self.assertEqual(set(descriptor["available_channels"]), {"newsletter", "direct_mail", "messenger"})
 
 	def test_rows_readable_for_registered_channel(self) -> None:
 		"""Gating a read on a registered channel must consult the resolved
@@ -233,9 +231,7 @@ class TestRecipientSelectionChannelRegistry(IntegrationTestCase):
 class TestTransactionalChannelRouter(IntegrationTestCase):
 	def _donor(self, name: str, delivery: str) -> str:
 		frappe.db.delete("Donor", {"donor_name": name})
-		donor = frappe.get_doc(
-			{"doctype": "Donor", "donor_name": name, "receipt_delivery": delivery}
-		)
+		donor = frappe.get_doc({"doctype": "Donor", "donor_name": name, "receipt_delivery": delivery})
 		donor.donor_type = frappe.db.get_value("Donor Type", {}, "name") or ""
 		donor.insert(ignore_permissions=True)
 		self.addCleanup(frappe.delete_doc, "Donor", donor.name, ignore_permissions=True, force=True)
@@ -260,25 +256,19 @@ class TestTransactionalChannelRouter(IntegrationTestCase):
 	def test_accepted_channel_handles_send(self) -> None:
 		donor = self._donor("Router Accept", "Messenger")
 		doc = frappe._dict(donor=donor, name="X")
-		with _patch_hooks(
-			ROUTER_HOOK, ["non_profit.non_profit.tests.test_channel_router.accept_descriptor"]
-		):
+		with _patch_hooks(ROUTER_HOOK, ["non_profit.non_profit.tests.test_channel_router.accept_descriptor"]):
 			self.assertTrue(send_transactional("tax_confirmation", doc, context={"a": 1}))
 
 	def test_channel_exception_falls_back(self) -> None:
 		donor = self._donor("Router Error", "Messenger")
 		doc = frappe._dict(donor=donor)
-		with _patch_hooks(
-			ROUTER_HOOK, ["non_profit.non_profit.tests.test_channel_router.raise_descriptor"]
-		):
+		with _patch_hooks(ROUTER_HOOK, ["non_profit.non_profit.tests.test_channel_router.raise_descriptor"]):
 			self.assertFalse(send_transactional("donation_thank_you", doc))
 
 	def test_default_preference_never_routes(self) -> None:
 		donor = self._donor("Router Email Default", "Email")
 		self.assertEqual(donor_channel_preference(donor), "Email")
-		with _patch_hooks(
-			ROUTER_HOOK, ["non_profit.non_profit.tests.test_channel_router.accept_descriptor"]
-		):
+		with _patch_hooks(ROUTER_HOOK, ["non_profit.non_profit.tests.test_channel_router.accept_descriptor"]):
 			self.assertFalse(send_transactional("donation_thank_you", frappe._dict(donor=donor)))
 
 

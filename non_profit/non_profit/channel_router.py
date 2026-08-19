@@ -90,9 +90,7 @@ def send_transactional(flow: str, doc: Any, context: dict | None = None) -> bool
 			# logging failures (e.g. inside patched test environments) neither.
 			try:
 				frappe.log_error(
-					title=_("Transactional channel {0} failed for flow {1}").format(
-						channel.get("key"), flow
-					),
+					title=_("Transactional channel {0} failed for flow {1}").format(channel.get("key"), flow),
 					message=frappe.get_traceback(),
 				)
 			except Exception:

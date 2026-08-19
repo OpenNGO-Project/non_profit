@@ -245,9 +245,7 @@ def _validate_enabled_channel(selection: Document, channel: str) -> None:
 	channel_fields = get_channel_fields()
 	if channel not in channel_fields:
 		frappe.throw(
-			_("Recipient selection channel must be one of: {0}.").format(
-				", ".join(sorted(channel_fields))
-			)
+			_("Recipient selection channel must be one of: {0}.").format(", ".join(sorted(channel_fields)))
 		)
 	if not cint(selection.get("enabled")):
 		frappe.throw(_("NPO Recipient Selection {0} is disabled.").format(selection.name))

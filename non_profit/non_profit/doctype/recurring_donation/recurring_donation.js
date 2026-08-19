@@ -37,7 +37,9 @@ frappe.ui.form.on("Recurring Donation", {
 						label: __("New Amount"),
 						reqd: 1,
 						default: frm.doc.amount,
-						description: __("Applies from the next charge, not the one already taken."),
+						description: __(
+							"Applies from the next charge, not the one already taken."
+						),
 					},
 					({ amount }) => {
 						frm.call("change_amount", { amount }).then(() => frm.reload_doc());
