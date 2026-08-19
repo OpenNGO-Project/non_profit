@@ -1,5 +1,7 @@
 """Tests for password-protected Spendenbescheinigung delivery."""
 
+import shutil
+from unittest import skipUnless
 from unittest.mock import patch
 
 import frappe
@@ -7,6 +9,13 @@ import frappe
 from non_profit.non_profit import tax_receipts
 from non_profit.non_profit.receipt_protection import receipt_password, receipt_protection_enabled
 from non_profit.non_profit.test_tax_receipts import TaxReceiptFixtures
+
+# frappe's `get_pdf` shells out to wkhtmltopdf through pdfkit. The bench image
+# ships the binary, so this passes locally; the CI runner installs only
+# mariadb-client, where pdfkit raises `FileNotFoundError: b''` before any
+# encryption happens. Guard rather than install it in CI: the assertion is about
+# our wiring reaching frappe's encryption, not about PDF rendering itself.
+WKHTMLTOPDF_AVAILABLE = bool(shutil.which("wkhtmltopdf"))
 
 
 class ReceiptProtectionFixtures(TaxReceiptFixtures):
@@ -78,6 +87,7 @@ class TestReceiptEmailPassesPassword(ReceiptProtectionFixtures):
 
 
 class TestPdfIsActuallyEncrypted(ReceiptProtectionFixtures):
+	@skipUnless(WKHTMLTOPDF_AVAILABLE, "wkhtmltopdf is not installed")
 	def test_frappe_get_pdf_produces_a_password_protected_file(self):
 		"""The encryption itself is frappe's; this proves the wiring reaches it."""
 		from io import BytesIO
