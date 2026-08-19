@@ -43,7 +43,11 @@ window.npoChannelLaunch = {
 				description: __("Optional umbrella campaign; attribution only."),
 			});
 		}
-		fields.push({ fieldname: "channels_section", fieldtype: "Section Break", label: __("Channels") });
+		fields.push({
+			fieldname: "channels_section",
+			fieldtype: "Section Break",
+			label: __("Channels"),
+		});
 
 		const selectable = [];
 		for (const channel of channels) {
@@ -75,7 +79,9 @@ window.npoChannelLaunch = {
 					copy.fieldname = `${channel.key}__${field.fieldname}`;
 				}
 				const fieldCondition = qualifyCondition(field.depends_on);
-				copy.depends_on = `eval:${channelCondition}${fieldCondition ? ` && (${fieldCondition})` : ""}`;
+				copy.depends_on = `eval:${channelCondition}${
+					fieldCondition ? ` && (${fieldCondition})` : ""
+				}`;
 				const mandatoryCondition = qualifyCondition(field.mandatory_depends_on);
 				if (copy.reqd || mandatoryCondition) {
 					delete copy.reqd;
@@ -84,7 +90,9 @@ window.npoChannelLaunch = {
 					}`;
 				}
 				if (copy.read_only_depends_on) {
-					copy.read_only_depends_on = `eval:${qualifyCondition(copy.read_only_depends_on)}`;
+					copy.read_only_depends_on = `eval:${qualifyCondition(
+						copy.read_only_depends_on
+					)}`;
 				}
 				return copy;
 			});
@@ -109,7 +117,8 @@ window.npoChannelLaunch = {
 				for (const channel of chosen) {
 					channel_values[channel.key] = {};
 					for (const field of channel.fields || []) {
-						if (["Section Break", "Column Break", "HTML"].includes(field.fieldtype)) continue;
+						if (["Section Break", "Column Break", "HTML"].includes(field.fieldtype))
+							continue;
 						channel_values[channel.key][field.fieldname] =
 							values[`${channel.key}__${field.fieldname}`];
 					}
@@ -137,7 +146,10 @@ window.npoChannelLaunch = {
 					const links = created
 						.map(
 							(campaign) =>
-								`<li><a href="${frappe.utils.get_form_link(campaign.doctype, campaign.name)}">${frappe.utils.escape_html(
+								`<li><a href="${frappe.utils.get_form_link(
+									campaign.doctype,
+									campaign.name
+								)}">${frappe.utils.escape_html(
 									campaign.label || campaign.name
 								)}</a></li>`
 						)

@@ -239,9 +239,7 @@ def _validate_recipient_selection_source(reference: str) -> dict[str, Any]:
 		frappe.throw(_("Select an enabled Recipient Selection."))
 	from non_profit.non_profit.recipient_selection import get_channel_fields
 
-	channels = [
-		channel for channel, field in get_channel_fields().items() if selection.get(field)
-	]
+	channels = [channel for channel, field in get_channel_fields().items() if selection.get(field)]
 	return {
 		"source_label": selection.selection_name or selection.name,
 		"available_channels": channels,
