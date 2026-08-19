@@ -30,13 +30,14 @@ from frappe import _
 from frappe.utils import cint, cstr, escape_html, flt, fmt_money, formatdate, getdate, now_datetime, nowdate
 
 from non_profit.non_profit.doctype.donation_tax_receipt.donation_tax_receipt import (
+	DEFAULT_RECEIPT_CURRENCY,
 	MAX_TAX_YEAR,
 	MIN_TAX_YEAR,
-	RECEIPT_CURRENCY,
 	_authorize_receipt_service_write,
+	receipt_currency,
 )
 from non_profit.non_profit.doctype.donor.donor import get_donor_email
-from non_profit.non_profit.fundraising_setup import DONATION_TAX_RECEIPT_PRINT_FORMAT
+from non_profit.non_profit.fundraising_setup import receipt_print_format_for
 from non_profit.non_profit.mailer import send_referenced_email
 from non_profit.non_profit.recipient_selection import _donor_canonical_subject
 
@@ -186,9 +187,9 @@ def direct_mail_candidate_rows(reference: str) -> list[dict[str, Any]]:
 			"producer_context": {
 				"tax_year": cstr(tax_year),
 				"receipt_name": receipt.name,
-				"receipt_total": fmt_money(flt(receipt.total_amount), currency=RECEIPT_CURRENCY),
+				"receipt_total": fmt_money(flt(receipt.total_amount), currency=receipt.currency),
 				"donation_count": cstr(cint(receipt.donation_count)),
-				"donation_table_html": donation_table_html(details),
+				"donation_table_html": donation_table_html(details, receipt.currency),
 			},
 		}
 		if donor.contact:
@@ -376,12 +377,17 @@ def send_receipt_email(receipt: str) -> dict[str, Any]:
 			)
 		)
 
-	print_format = _receipt_print_format()
+	print_format = _receipt_print_format(doc.company)
+	# When Non Profit Settings asks for it, the PDF is password-protected before
+	# it leaves — a receipt that reaches the wrong inbox stays unreadable there.
+	from non_profit.non_profit.receipt_protection import receipt_password
+
 	attachment = frappe.attach_print(
 		doc.doctype,
 		doc.name,
 		print_format=print_format,
 		lang=doc.language or "de",
+		password=receipt_password(doc.donor),
 	)
 	send_referenced_email(
 		recipients=[email],
@@ -405,25 +411,25 @@ def _receipt_email_body(doc: Any) -> str:
 	).format(escape_html(cstr(doc.donor_name or doc.donor)), cint(doc.tax_year))
 
 
-def _receipt_print_format() -> str:
-	values = frappe.db.get_value(
-		"Print Format", DONATION_TAX_RECEIPT_PRINT_FORMAT, ["doc_type", "disabled"], as_dict=True
-	)
+def _receipt_print_format(company: str | None = None) -> str:
+	print_format = receipt_print_format_for(company)
+	values = frappe.db.get_value("Print Format", print_format, ["doc_type", "disabled"], as_dict=True)
 	if not values or values.doc_type != RECEIPT_DOCTYPE or values.disabled:
 		frappe.throw(
 			_("The {0} Print Format is missing or disabled; run a bench migrate to restore it.").format(
-				frappe.bold(DONATION_TAX_RECEIPT_PRINT_FORMAT)
+				frappe.bold(print_format)
 			)
 		)
-	return DONATION_TAX_RECEIPT_PRINT_FORMAT
+	return print_format
 
 
-def donation_table_html(details: list[dict[str, Any]]) -> str:
+def donation_table_html(details: list[dict[str, Any]], currency: str | None = None) -> str:
 	"""Build the de-locale date/amount table handed to the letter as trusted markup."""
+	currency = currency or DEFAULT_RECEIPT_CURRENCY
 	rows = "".join(
 		'<tr><td>{0}</td><td style="text-align:right">{1}</td></tr>'.format(
 			escape_html(formatdate(row.get("date"), "dd.MM.yyyy")),
-			escape_html(fmt_money(flt(row.get("amount")), currency=RECEIPT_CURRENCY)),
+			escape_html(fmt_money(flt(row.get("amount")), currency=currency)),
 		)
 		for row in details
 	)
@@ -574,7 +580,7 @@ def _insert_draft_receipt(
 			"donor": donor,
 			"tax_year": tax_year,
 			"company": company,
-			"currency": RECEIPT_CURRENCY,
+			"currency": receipt_currency(company),
 			"status": "Draft",
 			"total_amount": total,
 			"donation_count": len(details),
@@ -624,8 +630,12 @@ def _validated_company(company: str) -> str:
 	if not company or not frappe.db.exists("Company", company):
 		frappe.throw(_("Company {0} does not exist.").format(company or _("(blank)")))
 	frappe.has_permission("Company", "read", doc=company, throw=True)
-	if frappe.get_cached_value("Company", company, "default_currency") != RECEIPT_CURRENCY:
-		frappe.throw(_("Donation Tax Receipts require a Company with CHF as its default currency."))
+	if not frappe.get_cached_value("Company", company, "default_currency"):
+		frappe.throw(
+			_("Company {0} has no default currency, so receipt amounts cannot be issued.").format(
+				frappe.bold(company)
+			)
+		)
 	return company
 
 

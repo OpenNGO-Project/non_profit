@@ -6,7 +6,10 @@ from frappe.model.document import Document
 from frappe.model.naming import make_autoname
 from frappe.utils import cint
 
-RECEIPT_CURRENCY = "CHF"
+# Receipts are issued in the currency of the issuing Company. The constant is
+# the fallback for a receipt that has no company yet, and the historical Swiss
+# default; it is no longer a restriction.
+DEFAULT_RECEIPT_CURRENCY = "CHF"
 RECEIPT_STATUSES = ("Draft", "Issued", "Cancelled")
 RECEIPT_LANGUAGES = ("de", "fr", "it", "en")
 DEFAULT_RECEIPT_LANGUAGE = "de"
@@ -44,6 +47,13 @@ def is_receipt_service_write(doc) -> bool:
 	return doc.flags.get("donation_tax_receipt_service_write") is _RECEIPT_SERVICE_WRITE
 
 
+def receipt_currency(company: str | None) -> str:
+	"""The currency a receipt for `company` is issued in."""
+	if not company:
+		return DEFAULT_RECEIPT_CURRENCY
+	return frappe.get_cached_value("Company", company, "default_currency") or DEFAULT_RECEIPT_CURRENCY
+
+
 class DonationTaxReceipt(Document):
 	def before_naming(self) -> None:
 		# Reject unauthorized inserts before they consume an official series value.
@@ -57,14 +67,14 @@ class DonationTaxReceipt(Document):
 
 	def validate(self) -> None:
 		self._validate_service_controlled_write()
-		self.currency = self.currency or RECEIPT_CURRENCY
-		if self.currency != RECEIPT_CURRENCY:
-			frappe.throw(_("Donation Tax Receipts are issued in {0} only.").format(RECEIPT_CURRENCY))
-		if (
-			self.company
-			and frappe.get_cached_value("Company", self.company, "default_currency") != RECEIPT_CURRENCY
-		):
-			frappe.throw(_("Donation Tax Receipts require a Company with CHF as its default currency."))
+		company_currency = receipt_currency(self.company)
+		self.currency = self.currency or company_currency
+		if self.company and self.currency != company_currency:
+			frappe.throw(
+				_("Donation Tax Receipts are issued in the Company currency ({0}), not {1}.").format(
+					company_currency, self.currency
+				)
+			)
 		tax_year = cint(self.tax_year)
 		if not MIN_TAX_YEAR <= tax_year <= MAX_TAX_YEAR:
 			frappe.throw(

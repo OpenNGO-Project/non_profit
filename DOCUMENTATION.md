@@ -42,14 +42,17 @@ else described a Customer-regime redesign that was never shipped.
 - **Household** (with the **Household Person** child table) groups Contacts who share an address into one solicitation unit; see [Households](#households).
 - **Donor**, **Donation**, **Donation Campaign**, **Recurring Donation**, read-only **Recurring Donation Installment**, and **Donation Tax Receipt** for fundraising. `Donor.customer` is the canonical ERPNext Customer relation for donor identity; Donation still links to Donor.
   Donation carries analysis dimensions `cost_center` (fetched from the campaign's cost center when empty) and `project` (both ERPNext doctypes) for downstream fundraising analytics (e.g. the `good_analytics` app).
-- **Donation Tax Receipt** is the Swiss annual *Spendenbescheinigung*: one row per Donor, calendar tax year, and Company (unique index), holding the aggregated total, donation count, and the `{donation, date, amount}` detail list behind it. It is a plain (non-submittable) document whose `status` (Draft / Issued / Cancelled) can only be changed through `non_profit.non_profit.tax_receipts`; see [Donation Tax Receipts](#donation-tax-receipts). Since 16.10.0 it is the **single** Bescheinigung of the app — the older submittable `Donation Receipt` (+ `Donation Receipt Item`) was removed outright. It serves both dispatch paths: annual postal batches through `good_direct_mail`, and individual email issuance with the seeded `Spendenbescheinigung` PDF.
+- **Donation Tax Receipt** is the annual donation receipt — the Swiss
+  *Spendenbescheinigung*, or the German *Zuwendungsbestätigung* when the
+  issuing Company is in Germany: one row per Donor, calendar tax year, and Company (unique index), holding the aggregated total, donation count, and the `{donation, date, amount}` detail list behind it. It is a plain (non-submittable) document whose `status` (Draft / Issued / Cancelled) can only be changed through `non_profit.non_profit.tax_receipts`; see [Donation Tax Receipts](#donation-tax-receipts). Since 16.10.0 it is the **single** Bescheinigung of the app — the older submittable `Donation Receipt` (+ `Donation Receipt Item`) was removed outright. It serves both dispatch paths: annual postal batches through `good_direct_mail`, and individual email issuance with the seeded jurisdiction PDF, optionally password-protected; see [Receipt jurisdiction contract](#receipt-jurisdiction-contract).
 - **Sponsor**, **Sponsor Tier**, **Volunteer**, and **Grant Application** for broader NPO operations.
-- **Non Profit Settings** for company, donor type, billing, invoicing, payment account, and email defaults.
+- **Non Profit Settings** for company, donor type, billing, invoicing, payment account, and email defaults, plus the **Spendenbescheinigung Delivery** block (`protect_receipt_pdf`, `receipt_pdf_password_source`, `de_tax_exemption_notice`).
 - **NPO Recipient Selection** stores reusable channel-neutral Contact, Member,
   and Donor criteria for optional newsletter and direct-mail consumers.
 - **Non Profit** Workspace and Workspace Sidebar for current Desk navigation,
   including Good Help, fundraising, Major Gifts, membership, community,
-  Recipient Selections, settings, and the Expiring Memberships report. Contact,
+  Recipient Selections, settings, and the Expiring Memberships and Donation
+  Receipt Email Check reports. Contact,
   Address, Household, Customer, and Supplier are grouped together under
   **People**. The upstream links remain permission-filtered by Frappe; Non
   Profit roles do not gain broad access to those ERPNext masters.
@@ -420,8 +423,8 @@ default `de`) records the correspondence language for the letter and the email;
   stale_issued}` (whitelisted POST). Qualifying Donations are submitted
   (`docstatus 1`), paid (`paid = 1`), belong to the Company, fall inside the
   calendar year, have `amount > 0`, and name a Donor. The current user needs
-  read/User Permission access to the Company, whose default currency must be
-  CHF, plus Donation read and Donation Tax Receipt create/write/delete. The
+  read/User Permission access to the Company, which must have a default
+  currency, plus Donation read and Donation Tax Receipt create/write/delete. The
   service first locks the existing Company row `FOR UPDATE`; this stable anchor
   exists even when no series/Donation/receipt row exists. It then performs
   permission-complete reads and deterministic locking re-reads of current
@@ -477,8 +480,9 @@ default `de`) records the correspondence language for the letter and the email;
   may be emailed. The donor address is resolved live through the canonical Donor
   chain (`get_donor_email`: canonical Contact → `Customer.email_id` → linked
   Contact → legacy), and a donor without any email produces a clear error rather
-  than a silent no-op. The seeded `Spendenbescheinigung` Print Format is rendered
-  to PDF with `frappe.attach_print(..., lang=receipt.language)` and handed to
+  than a silent no-op. The jurisdiction's seeded Print Format — `Spendenbescheinigung`
+  or, for a German Company, `Zuwendungsbestätigung` — is rendered to PDF with
+  `frappe.attach_print(..., lang=receipt.language, password=...)` and handed to
   `non_profit.non_profit.mailer.send_referenced_email` with
   `reference_doctype`/`reference_name` set to the receipt. A registered
   downstream provider can therefore create a Communication on the receipt
@@ -797,22 +801,75 @@ contract.
 
 ### Receipt jurisdiction contract
 
-There is one Bescheinigung and it is Swiss. Fundraising setup seeds the German
-Print Format **Spendenbescheinigung** for `Donation Tax Receipt`: CHF amounts,
-calendar tax year, itemized `donation_details` table, total, and the Swiss
-confirmation wording ("Wir bestätigen, dass die aufgeführten Zuwendungen
-eingegangen sind und ausschliesslich zur Förderung der steuerbefreiten
-gemeinnützigen Zwecke unserer Organisation verwendet werden."). The header is
-deliberately address-free: donor address and issuer identity come from the
-Letter Head, exactly as in the retired `Donation Receipt DE` format whose German
-layout and wording this format is based on.
+There is one Bescheinigung DocType and two regulated layouts behind it. The
+layout follows the issuing **Company's `country`**, not a setting: the country
+already determines which tax law the receipt has to satisfy, and one fewer
+switch is one fewer way to issue a receipt under the wrong regime.
+`fundraising_setup.receipt_print_format_for(company)` resolves it through the
+`RECEIPT_JURISDICTIONS` map; anything not listed keeps the Swiss format, which
+is what every existing site already has.
 
-The German income-tax paragraphs of `Donation Receipt DE` (`§ 10b EStG`,
-`§ 5 KStG`, `§ 9 GewStG`) were **not** carried over — the app has always
-rejected German legal wording on the Swiss send path, and the tax receipt is
-CHF-only by construction. Deployments that need a legally reviewed local variant
-edit the seeded format in place; once its HTML no longer matches a shipped hash
-it is operator-owned and migrate never touches it again.
+**Switzerland (default) — `Spendenbescheinigung`.** Calendar tax year, itemized
+`donation_details` table, total, and the Swiss confirmation wording ("Wir
+bestätigen, dass die aufgeführten Zuwendungen eingegangen sind und
+ausschliesslich zur Förderung der steuerbefreiten gemeinnützigen Zwecke unserer
+Organisation verwendet werden."). The header is deliberately address-free: donor
+address and issuer identity come from the Letter Head, exactly as in the retired
+`Donation Receipt DE` format whose German layout and wording this format is
+based on. It carries **no** German income-tax paragraphs (`§ 10b EStG`,
+`§ 5 KStG`, `§ 9 GewStG`), and a test enforces that.
+
+**Germany — `Zuwendungsbestätigung`.** A regulated form under `§ 50 EStDV`, so
+its content is not a style choice: the `§ 10b EStG` / `§ 5 Abs. 1 Nr. 9 KStG`
+heading, the amount in figures *and* in words, the day/period of the donation,
+the itemized gifts, the explicit "nicht um den Verzicht auf Erstattung von
+Aufwendungen" statement, the operator's Freistellungsbescheid quoted verbatim
+from `Non Profit Settings.de_tax_exemption_notice`, and the `§ 10b Abs. 4 EStG`
+liability notice. The two formats stay separate documents rather than one format
+growing jurisdiction conditionals — a conditional receipt is a receipt that can
+silently render under the wrong law.
+
+Receipt **currency** follows the same source: `receipt_currency(company)` reads
+the Company's `default_currency`, so a Swiss company issues CHF and a German one
+EUR. `DEFAULT_RECEIPT_CURRENCY` ("CHF") survives only as the fallback for a
+receipt with no company yet. A receipt may not be issued in a currency other
+than its Company's; the old CHF-only gate on `generate_receipts` is now just a
+check that the Company has a default currency at all.
+
+Deployments that need a legally reviewed local variant edit the seeded format in
+place; once its HTML no longer matches a shipped hash it is operator-owned and
+migrate never touches it again.
+
+### Receipt delivery protection
+
+Receipts have been sent to the wrong inbox, and the cause is master data rather
+than transport. Two mitigations ship, in that order of importance:
+
+`Donation Receipt Email Check` (Script Report, Non Profit Manager, filters
+Company and Tax Year) is the real fix. It lists — *before* the annual batch goes
+out — every donor whose receipt would misfire, and it reports on the address
+`send_receipt_email` would actually resolve through `get_donor_email`, not on
+whatever the Donor form displays. **Blockers**: no email, an address that fails
+validation, or an address shared with another donor. **Warnings**: a role or
+shared mailbox (`info@`, `kontakt@`, `vorstand@`, …), or a Donor record showing a
+different address than the receipt would use. Blockers sort first, then by the
+size of the gift at risk.
+
+`non_profit/non_profit/receipt_protection.py` is the belt to that report's
+braces. When `Non Profit Settings.protect_receipt_pdf` is on, the emailed PDF is
+password-protected with a donor detail the donor already knows and the
+organisation already stores — the postal code (default) or the Donor ID, chosen
+by `receipt_pdf_password_source`. Be precise about what this buys: it is
+**access protection, not encryption in transit**. The mail still travels as
+ordinary SMTP, anyone who can read the mailbox still sees sender and subject,
+and Frappe's `get_pdf` uses pypdf's default cipher. What it stops is a receipt
+that landed in the wrong inbox from being *read*, which is the actual reported
+incident. Encryption itself is Frappe's — `attach_print(password=...)` routes
+through `get_pdf`; the module only decides *whether* to pass a password and
+*what* it should be. A donor with no postal code under the Postal Code source
+makes the send **refuse** rather than silently deliver an unprotected receipt,
+because sending unprotected would defeat the setting the operator switched on.
+Protection is off by default, so existing sites are unchanged.
 
 Fundraising setup inserts `Spendenbescheinigung` and `Donation Slip CH` when they
 are missing. Existing Print Format HTML is treated as app-managed only when its

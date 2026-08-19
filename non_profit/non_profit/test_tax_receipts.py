@@ -9,6 +9,9 @@ import frappe
 from frappe.tests import IntegrationTestCase, UnitTestCase
 from frappe.utils import flt, getdate, nowdate
 
+from non_profit.non_profit.doctype.donation_tax_receipt.donation_tax_receipt import (
+	_authorize_receipt_service_write,
+)
 from non_profit.non_profit.doctype.donor.donor import get_or_create_donor_for_contact
 from non_profit.non_profit.fundraising_setup import (
 	DONATION_TAX_RECEIPT_PRINT_FORMAT,
@@ -284,14 +287,10 @@ class TestDonationTaxReceiptGeneration(TaxReceiptFixtures):
 		with self.assertRaisesRegex(frappe.ValidationError, "only be deleted by the receipt service"):
 			receipt.delete()
 
-	def test_tax_year_company_currency_and_company_permission_are_validated(self) -> None:
+	def test_tax_year_and_company_permission_are_validated(self) -> None:
 		_donor, _contact = self._contact_donor("Dora")
 		with self.assertRaisesRegex(frappe.ValidationError, "Tax Year must be between"):
 			generate_receipts(self.company, 1899)
-
-		eur_company = self._company_with_currency("EUR")
-		with self.assertRaisesRegex(frappe.ValidationError, "Company with CHF"):
-			generate_receipts(eur_company, self.tax_year)
 
 		denied_company = self._company_with_currency("CHF")
 		user = frappe.get_doc(
@@ -683,3 +682,99 @@ class TestLegacyDonationReceiptRemovalPatch(UnitTestCase):
 			removal.execute()
 		delete_doc.assert_not_called()
 		sql_ddl.assert_not_called()
+
+
+class TestReceiptJurisdiction(TaxReceiptFixtures):
+	"""Receipts follow the issuing company's currency and tax regime."""
+
+	def _german_company(self) -> str:
+		hash_value = frappe.generate_hash(length=6)
+		return (
+			frappe.get_doc(
+				{
+					"doctype": "Company",
+					"company_name": f"NPO Receipt DE {hash_value}",
+					"abbr": f"D{hash_value[:4]}".upper(),
+					"country": "Germany",
+					"default_currency": "EUR",
+					"create_chart_of_accounts_based_on": "Standard Template",
+					"chart_of_accounts": "Standard",
+				}
+			)
+			.insert(ignore_permissions=True)
+			.name
+		)
+
+	def test_a_eur_company_issues_receipts_in_eur(self):
+		company = self._german_company()
+		donor, _contact = self._contact_donor("Deutscher Spender")
+		self._donation(donor.name, 200, f"{self.tax_year}-03-01", company=company)
+
+		generate_receipts(company, self.tax_year)
+
+		currency = frappe.db.get_value(
+			"Donation Tax Receipt",
+			{"donor": donor.name, "tax_year": self.tax_year, "company": company},
+			"currency",
+		)
+		self.assertEqual(currency, "EUR")
+
+	def test_a_chf_company_still_issues_receipts_in_chf(self):
+		donor, _contact = self._contact_donor("Schweizer Spender")
+		self._donation(donor.name, 200, f"{self.tax_year}-03-01")
+
+		generate_receipts(self.company, self.tax_year)
+
+		currency = frappe.db.get_value(
+			"Donation Tax Receipt",
+			{"donor": donor.name, "tax_year": self.tax_year, "company": self.company},
+			"currency",
+		)
+		self.assertEqual(currency, "CHF")
+
+	def test_a_receipt_cannot_be_issued_in_a_foreign_currency(self):
+		receipt = frappe.get_doc(
+			{
+				"doctype": "Donation Tax Receipt",
+				"donor": self._subjectless_donor().name,
+				"tax_year": self.tax_year,
+				"company": self.company,
+				"currency": "EUR",
+				"status": "Draft",
+			}
+		)
+		_authorize_receipt_service_write(receipt)
+		with self.assertRaisesRegex(frappe.ValidationError, "Company currency"):
+			receipt.insert()
+
+	def test_german_company_selects_the_zuwendungsbestaetigung(self):
+		from non_profit.non_profit.fundraising_setup import (
+			DONATION_TAX_RECEIPT_DE_DE_PRINT_FORMAT,
+			receipt_print_format_for,
+		)
+
+		self.assertEqual(
+			receipt_print_format_for(self._german_company()),
+			DONATION_TAX_RECEIPT_DE_DE_PRINT_FORMAT,
+		)
+
+	def test_swiss_company_keeps_the_spendenbescheinigung(self):
+		from non_profit.non_profit.fundraising_setup import receipt_print_format_for
+
+		self.assertEqual(receipt_print_format_for(self.company), DONATION_TAX_RECEIPT_PRINT_FORMAT)
+
+	def test_german_format_carries_the_required_legal_references(self):
+		from non_profit.non_profit.fundraising_setup import (
+			DONATION_TAX_RECEIPT_DE_DE_HTML,
+			ensure_tax_receipt_print_format,
+		)
+
+		ensure_tax_receipt_print_format()
+		for reference in ("10b", "KStG", "GewStG", "Buchstaben", "Zuwendungsbestätigung"):
+			self.assertIn(reference, DONATION_TAX_RECEIPT_DE_DE_HTML)
+
+	def test_swiss_format_still_carries_no_german_tax_law(self):
+		from non_profit.non_profit.fundraising_setup import DONATION_TAX_RECEIPT_DE_HTML
+
+		for reference in ("10b", "KStG", "GewStG"):
+			self.assertNotIn(reference, DONATION_TAX_RECEIPT_DE_HTML)

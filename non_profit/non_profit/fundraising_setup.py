@@ -98,6 +98,120 @@ DONATION_TAX_RECEIPT_DE_MANAGED_HASHES = frozenset(
 )
 
 
+# ---------------------------------------------------------------------------
+# German Zuwendungsbestaetigung
+# ---------------------------------------------------------------------------
+
+# German receipts are a regulated form (ss 50 EStDV): the heading must name
+# ss 10b EStG and ss 5 Abs. 1 Nr. 9 KStG, the amount must appear in figures and
+# in words, the Freistellungsbescheid of the Finanzamt must be quoted, and the
+# liability notice under ss 10b Abs. 4 EStG must be present. The Swiss
+# Spendenbescheinigung above deliberately carries none of this; the two formats
+# stay separate rather than one format growing conditionals.
+DONATION_TAX_RECEIPT_DE_DE_PRINT_FORMAT = "Zuwendungsbestätigung"
+
+DONATION_TAX_RECEIPT_DE_DE_HTML = """
+{%- set exemption_notice = frappe.db.get_single_value("Non Profit Settings", "de_tax_exemption_notice") -%}
+<div style="font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10.5pt; line-height: 1.45; color: #222;">
+    <div style="text-align: right; margin-bottom: 1em;">
+        <strong>Zuwendungsbestätigung</strong><br>
+        Nr.: {{ doc.name }}
+    </div>
+
+    <h2 style="margin: 1em 0 0.3em 0; font-size: 12pt;">Bestätigung über Geldzuwendungen</h2>
+    <p style="font-size: 9pt; margin: 0 0 1.5em 0;">
+        im Sinne des &sect; 10b des Einkommensteuergesetzes an eine der in
+        &sect; 5 Abs. 1 Nr. 9 des Körperschaftsteuergesetzes bezeichneten
+        Körperschaften, Personenvereinigungen oder Vermögensmassen
+    </p>
+
+    <table style="width: 100%; margin-bottom: 1.5em;">
+        <tr>
+            <td style="width: 38%; vertical-align: top;"><strong>Name und Anschrift des Zuwendenden:</strong></td>
+            <td>{{ doc.donor_name | e }}</td>
+        </tr>
+    </table>
+
+    <table style="width: 100%; margin-bottom: 1.5em;">
+        <tr>
+            <td style="width: 38%;"><strong>Betrag der Zuwendung (in Ziffern):</strong></td>
+            <td><strong>{{ frappe.utils.fmt_money(doc.total_amount, currency=doc.currency) }}</strong></td>
+        </tr>
+        <tr>
+            <td style="vertical-align: top;"><strong>Betrag der Zuwendung (in Buchstaben):</strong></td>
+            <td>{{ frappe.utils.money_in_words(doc.total_amount, doc.currency) }}</td>
+        </tr>
+        <tr>
+            <td><strong>Tag der Zuwendung:</strong></td>
+            <td>Steuerjahr {{ doc.tax_year }} (01.01.{{ doc.tax_year }} bis 31.12.{{ doc.tax_year }})</td>
+        </tr>
+    </table>
+
+    <h3 style="margin-top: 1.5em; margin-bottom: 0.5em; font-size: 11pt;">Einzelzuwendungen</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr style="background: #f2f2f2;">
+                <th style="text-align: left; border: 1px solid #ccc; padding: 4px 8px;">Datum</th>
+                <th style="text-align: left; border: 1px solid #ccc; padding: 4px 8px;">Referenz</th>
+                <th style="text-align: right; border: 1px solid #ccc; padding: 4px 8px;">Betrag</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in frappe.utils.parse_json(doc.donation_details) or [] %}
+            <tr>
+                <td style="border: 1px solid #ccc; padding: 4px 8px;">{{ frappe.utils.format_date(row.date, "dd.MM.yyyy") }}</td>
+                <td style="border: 1px solid #ccc; padding: 4px 8px;">{{ row.donation }}</td>
+                <td style="text-align: right; border: 1px solid #ccc; padding: 4px 8px;">{{ frappe.utils.fmt_money(row.amount, currency=doc.currency) }}</td>
+            </tr>
+            {% endfor %}
+            <tr style="font-weight: bold; background: #fafafa;">
+                <td colspan="2" style="border: 1px solid #ccc; padding: 4px 8px;">Gesamt</td>
+                <td style="text-align: right; border: 1px solid #ccc; padding: 4px 8px;">{{ frappe.utils.fmt_money(doc.total_amount, currency=doc.currency) }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p style="margin-top: 1.5em; font-size: 9.5pt;">Es handelt sich <strong>nicht</strong> um den Verzicht auf Erstattung von Aufwendungen.</p>
+
+    {% if exemption_notice %}
+    <p style="margin-top: 1em; font-size: 9.5pt;">{{ exemption_notice }}</p>
+    {% endif %}
+
+    <p style="margin-top: 1em; font-size: 9.5pt;">
+        Wir bestätigen, dass wir den uns zugewendeten Betrag ausschliesslich zur
+        Förderung unserer steuerbegünstigten satzungsmässigen Zwecke verwenden.
+    </p>
+
+    {% if doc.remarks %}<p style="margin-top: 1em; font-size: 9.5pt;">{{ doc.remarks }}</p>{% endif %}
+
+    <div style="margin-top: 2.5em;">
+        <table style="width: 100%;">
+            <tr>
+                <td style="width: 50%;"><strong>Ort, Datum</strong><br>
+                    {{ frappe.utils.format_date(doc.issued_on or doc.creation, "dd.MM.yyyy") }}</td>
+                <td style="text-align: right;"><strong>Unterschrift des Zuwendungsempfängers</strong><br><br>______________________________</td>
+            </tr>
+        </table>
+    </div>
+
+    <p style="margin-top: 2em; font-size: 8.5pt; color: #555;">
+        Hinweis: Wer vorsätzlich oder grob fahrlässig eine unrichtige Zuwendungsbestätigung
+        erstellt oder veranlasst, dass Zuwendungen nicht zu den in der Zuwendungsbestätigung
+        angegebenen steuerbegünstigten Zwecken verwendet werden, haftet für die entgangene
+        Steuer (&sect; 10b Abs. 4 EStG, &sect; 9 Abs. 3 KStG, &sect; 9 Nr. 5 GewStG).
+    </p>
+</div>
+"""
+
+DONATION_TAX_RECEIPT_DE_DE_MANAGED_HASHES = frozenset()
+
+# Company country -> (print format, managed hashes). Anything not listed keeps
+# the Swiss format, which is what every existing site already has.
+RECEIPT_JURISDICTIONS = {
+	"Germany": DONATION_TAX_RECEIPT_DE_DE_PRINT_FORMAT,
+}
+
+
 THANK_YOU_EMAIL_HTML = """{%- set donation_currency = frappe.db.get_value("Company", doc.company, "default_currency") if doc.company else None -%}
 <p>Liebe/r {{ doc.donor_name | e }},</p>
 
@@ -222,6 +336,24 @@ def ensure_tax_receipt_print_format():
 		html=DONATION_TAX_RECEIPT_DE_HTML,
 		managed_hashes=DONATION_TAX_RECEIPT_DE_MANAGED_HASHES,
 	)
+	ensure_managed_print_format(
+		name=DONATION_TAX_RECEIPT_DE_DE_PRINT_FORMAT,
+		doc_type="Donation Tax Receipt",
+		html=DONATION_TAX_RECEIPT_DE_DE_HTML,
+		managed_hashes=DONATION_TAX_RECEIPT_DE_DE_MANAGED_HASHES,
+	)
+
+
+def receipt_print_format_for(company: str | None) -> str:
+	"""
+	The receipt layout for a company's jurisdiction.
+
+	Derived from the Company country rather than a setting: the country already
+	determines which tax law the receipt has to satisfy, and one fewer switch is
+	one fewer way to issue a receipt under the wrong regime.
+	"""
+	country = frappe.get_cached_value("Company", company, "country") if company else None
+	return RECEIPT_JURISDICTIONS.get(country, DONATION_TAX_RECEIPT_PRINT_FORMAT)
 
 
 def ensure_managed_print_format(*, name: str, doc_type: str, html: str, managed_hashes: frozenset[str]):

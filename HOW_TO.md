@@ -77,13 +77,35 @@ CHF. Donation has no currency field, so the page labels do not derive from the
 Donation Company. Production sites must provide a locally approved,
 currency-aware presentation flow.
 
-The Bescheinigung is the seeded **Spendenbescheinigung** Print Format for
-**Donation Tax Receipt**: German wording, CHF, calendar tax year, itemized
-donation table, and the Swiss confirmation sentence. It is address-free by
-design — donor address and issuer identity come from the **Letter Head** you
-select on the letter campaign or the print view. If your organisation needs a
-legally reviewed local variant, edit the format in Desk; migrate will then leave
-it alone forever.
+The Bescheinigung follows the **issuing Company** — you do not choose it, and
+there is no setting to get wrong:
+
+| Company `country` | Print Format | Currency |
+| --- | --- | --- |
+| Germany | `Zuwendungsbestätigung` | the Company's `default_currency`, EUR on a German company |
+| anything else | `Spendenbescheinigung` | the Company's `default_currency`, CHF on a Swiss company |
+
+The Swiss **Spendenbescheinigung** is German-language wording, calendar tax
+year, itemized donation table, and the Swiss confirmation sentence. It is
+address-free by design — donor address and issuer identity come from the
+**Letter Head** you select on the letter campaign or the print view.
+
+The German **Zuwendungsbestätigung** is the regulated form under § 50 EStDV: the
+§ 10b EStG / § 5 Abs. 1 Nr. 9 KStG heading, the amount in figures and in words,
+the itemized gifts, and the § 10b Abs. 4 EStG liability notice. Before issuing
+German receipts, fill **Non Profit Settings → German Tax Exemption Notice** with
+your Freistellungsbescheid or Feststellungsbescheid exactly as the Finanzamt
+worded it, for example:
+
+> Wir sind wegen Förderung gemeinnütziger Zwecke nach dem Freistellungsbescheid
+> des Finanzamts München, StNr. 143/210/00001, vom 01.03.2026 nach § 5 Abs. 1
+> Nr. 9 KStG von der Körperschaftsteuer befreit.
+
+Leave it empty and the receipt prints without the exemption paragraph, which
+makes it invalid for the donor's tax return.
+
+If your organisation needs a legally reviewed local variant, edit the format in
+Desk; migrate will then leave it alone forever.
 
 You may edit **Spendenbescheinigung**, **Donation Slip CH**, and **Donation Thank
 You DE** in Desk. Migrate updates a Print Format only while its HTML still
@@ -497,10 +519,50 @@ bench --site <site> execute non_profit.non_profit.tax_receipts.cancel_receipt \
   --kwargs '{"receipt": "NPO-STR-2026-00001", "reason": "Donation refunded"}'
 ```
 
+### Check the donor addresses before an annual batch
+
+Run **Donation Receipt Email Check** (report list → *Donation Receipt Email
+Check*, filters Company and Tax Year) before generating or sending an annual
+run. It reports on the address the receipt would *actually* be sent to — the
+same `get_donor_email` chain the send uses — not on what the Donor form shows,
+which is exactly where misdeliveries have come from.
+
+- **Blocker** — no email, an invalid address, or an address shared with another
+  donor. Fix these; the receipt either will not send or will go to the wrong
+  person.
+- **Warning** — a role or shared mailbox (`info@`, `kontakt@`, `vorstand@`, …),
+  or a Donor record showing a different address than the receipt would use.
+  Worth a look before a batch of a few thousand.
+
+Blockers sort first, then by the size of the gift at risk, so the top of the
+list is where the damage would be.
+
+### Password-protecting the receipt PDF
+
+Optional, off by default. In **Non Profit Settings → Spendenbescheinigung
+Delivery**:
+
+1. Enable **Password-Protect Receipt PDF**.
+2. Choose **PDF Password Source** — *Postal Code* (default) or *Donor ID*.
+
+Every emailed receipt is then attached as a password-protected PDF, opened with
+that donor detail. Nothing has to be communicated out of band: the donor already
+knows their postal code.
+
+Understand what this does and does not do. It is **access protection, not
+encryption in transit** — the mail travels as ordinary SMTP, and anyone who can
+read the mailbox still sees the sender and subject. What it stops is a receipt
+that landed in the wrong inbox from being *read*. The data-quality report above
+is the real fix; this is the backstop.
+
+With *Postal Code* selected, a donor who has no postal code makes the send
+**fail** with a clear message rather than quietly going out unprotected. Add the
+address, or switch the source to *Donor ID*.
+
 ### Sending one receipt by email
 
 Open the Donation Tax Receipt and use **Actions → Spendenbescheinigung per
-E-Mail senden**. The seeded **Spendenbescheinigung** Print Format is rendered to
+E-Mail senden**. The Print Format for the Company's jurisdiction is rendered to
 PDF and emailed to the donor; the send is recorded on the receipt timeline and
 `Email Sent On` is stamped.
 
@@ -525,8 +587,9 @@ bench --site <site> execute non_profit.non_profit.tax_receipts.send_receipt_emai
 
 Still open and deliberately not implemented: minimum-amount and in-kind /
 membership-fee refinements to the qualifying rules, cantonal receipt format
-variations, the signature image on the receipt letter, and fr/it/en print
-formats (`language` already records the intent).
+variations *within* Switzerland, the signature image on the receipt letter,
+and fr/it/en print formats (`language` already records the intent). National
+jurisdiction is handled — see the Company-country table above.
 
 ## Memberships
 

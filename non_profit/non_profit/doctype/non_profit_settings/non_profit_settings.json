@@ -28,6 +28,10 @@
   "donation_debit_account",
   "donation_payment_account",
   "default_thank_you_template",
+  "receipt_protection_section",
+  "protect_receipt_pdf",
+  "receipt_pdf_password_source",
+  "de_tax_exemption_notice",
   "section_break_27",
   "creation_user",
   "major_gifts_section",
@@ -224,6 +228,34 @@
   {
    "fieldname": "column_break_mg",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "receipt_protection_section",
+   "fieldtype": "Section Break",
+   "label": "Spendenbescheinigung Delivery"
+  },
+  {
+   "default": "0",
+   "description": "Attach the receipt as a password-protected PDF. This is access protection, not encryption — the mail itself travels normally.",
+   "fieldname": "protect_receipt_pdf",
+   "fieldtype": "Check",
+   "label": "Password-Protect Receipt PDF"
+  },
+  {
+   "default": "Postal Code",
+   "depends_on": "protect_receipt_pdf",
+   "description": "Which donor detail becomes the PDF password. Whatever is chosen must be something the donor already knows and the organisation already stores.",
+   "fieldname": "receipt_pdf_password_source",
+   "fieldtype": "Select",
+   "label": "PDF Password Source",
+   "mandatory_depends_on": "protect_receipt_pdf",
+   "options": "Postal Code\nDonor ID"
+  },
+  {
+   "description": "German receipts only (§ 50 EStDV). The Freistellungsbescheid or Feststellungsbescheid of the Finanzamt, quoted verbatim on the Zuwendungsbestätigung. Example: \"Wir sind wegen Förderung gemeinnütziger Zwecke nach dem Freistellungsbescheid des Finanzamts München, StNr. 143/210/00001, vom 01.03.2026 nach § 5 Abs. 1 Nr. 9 KStG von der Körperschaftsteuer befreit.\"",
+   "fieldname": "de_tax_exemption_notice",
+   "fieldtype": "Small Text",
+   "label": "German Tax Exemption Notice"
   }
  ],
  "index_web_pages_for_search": 1,

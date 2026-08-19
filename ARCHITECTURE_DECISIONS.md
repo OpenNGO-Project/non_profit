@@ -107,6 +107,102 @@ request/job terminal cleanup as the final safety net.
 - Cross-engine parity must derive keys through both implementations and prove
   live mutual exclusion, not compare a test-built expected key with itself.
 
+## ADR-0003: Derive The Receipt Regime From The Company Country
+
+- Status: Accepted
+- Date: 2026-08-19
+- Scope: Donation Tax Receipt layout and currency
+- Supersedes: The CHF-only, single-format receipt contract
+
+### Context
+
+`Donation Tax Receipt` was Swiss by construction: the currency was the constant
+`RECEIPT_CURRENCY = "CHF"`, a Company whose default currency was not CHF was
+rejected outright, and one `Spendenbescheinigung` Print Format was the only
+layout. A German deployment needs EUR amounts and a `Zuwendungsbestätigung`,
+which is a regulated form under `§ 50 EStDV` — the heading naming `§ 10b EStG`
+and `§ 5 Abs. 1 Nr. 9 KStG`, the amount in figures and in words, the
+Freistellungsbescheid of the Finanzamt, and the `§ 10b Abs. 4 EStG` liability
+notice. None of that is optional, and none of it belongs on a Swiss receipt.
+
+### Decision
+
+Derive both the currency and the layout from the issuing **Company**: currency
+from its `default_currency`, layout from its `country` through the
+`RECEIPT_JURISDICTIONS` map, defaulting to the Swiss format. Ship the German
+form as a **second Print Format**, not as conditionals inside the Swiss one.
+
+### Alternatives Considered
+
+- A `Non Profit Settings` field selecting the receipt regime: rejected as a
+  second source of truth for something the Company country already states, and
+  as one more switch that can be left on the wrong value — a mis-set switch here
+  issues receipts under the wrong tax law.
+- One format with `{% if country == "Germany" %}` blocks: rejected because the
+  two forms share almost no required content, and a conditional receipt is a
+  receipt that can silently render under the wrong law.
+- Keeping CHF-only and forking the app per country: rejected; the domain
+  substrate is meant to be jurisdiction-neutral (see ADR-0001).
+
+### Consequences
+
+- Existing Swiss sites are unchanged: an unlisted country keeps the
+  `Spendenbescheinigung`, and a CHF Company keeps issuing CHF.
+- Adding a jurisdiction means adding a Print Format plus one `RECEIPT_JURISDICTIONS`
+  entry, not editing the Swiss format.
+- The German notice text is operator data (`de_tax_exemption_notice`), because
+  the Freistellungsbescheid is per-organisation and must be quoted verbatim.
+- Tests must assert both directions — that the German format carries the
+  required references and that the Swiss one still carries none of them.
+
+## ADR-0004: Treat Misdirected Receipts As A Data Problem, With A PDF Password As Backstop
+
+- Status: Accepted
+- Date: 2026-08-19
+- Scope: Donation Tax Receipt email delivery
+- Supersedes: None
+
+### Context
+
+Receipts have reached the wrong inbox. A Bescheinigung names a donor and an
+amount, so a misdelivery is a real disclosure. The reflex mitigation the sector
+reaches for is a password on the PDF, but the underlying cause in every observed
+case was master data: a donor with no email, a typo, two donors sharing one
+inbox, or a Donor form showing one address while the receipt resolves to another
+through the contact/customer chain.
+
+### Decision
+
+Ship both, and rank them. The `Donation Receipt Email Check` report is the
+primary control: it lists the donors whose receipt would misfire *before* the
+annual batch goes out, reporting on the address `get_donor_email` actually
+resolves rather than the one displayed on the form. Optional PDF password
+protection (`protect_receipt_pdf`) is the backstop, defaulting to **off**.
+
+### Alternatives Considered
+
+- Password protection alone: rejected as treating the symptom; a protected
+  receipt in a stranger's inbox is still a misdelivery, and the donor still does
+  not get theirs.
+- A generated password communicated out of band: rejected because it needs a
+  second channel the organisation does not have for every donor. The password is
+  therefore a detail the donor already knows and the organisation already stores
+  — postal code, or Donor ID.
+- Encrypting the mail itself: rejected as out of scope for this app; it needs
+  per-donor key material that does not exist here.
+
+### Consequences
+
+- The documentation must say plainly that this is *access protection, not
+  encryption in transit* — the mail still travels as ordinary SMTP and
+  Frappe's `get_pdf` uses pypdf's default cipher. Overstating it would be worse
+  than not shipping it.
+- With protection on and the Postal Code source, a donor with no postal code
+  makes the send **refuse**; silently sending unprotected would defeat the
+  setting the operator switched on.
+- The report is the thing to run before an annual batch; that belongs in
+  `HOW_TO.md`, not only here.
+
 ## References
 
 - [Technical documentation](DOCUMENTATION.md)
