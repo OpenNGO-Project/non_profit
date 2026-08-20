@@ -27,6 +27,13 @@ frappe.ui.form.on("Donor", {
 				}
 			});
 
+			// Deliberately outside the `frm.doc.customer` branch below: a
+			// Zuwendungsbestätigung is owed to a donor whether or not anyone
+			// ever created an ERPNext Customer for them.
+			frm.page.add_action_item(__("Zuwendungsbestätigung erzeugen"), () =>
+				generate_donor_tax_receipt(frm)
+			);
+
 			if (frm.doc.customer) {
 				frm.page.add_action_item(__("Accounts Receivable"), function () {
 					frappe.set_route("query-report", "Accounts Receivable", {
@@ -93,5 +100,51 @@ function show_donor_creation_dialog(frm) {
 		},
 	});
 
+	dialog.show();
+}
+
+// The annual batch on the Donation Tax Receipt list is the normal route. This is
+// the counter case: one donor asks for their Bescheinigung out of season, and
+// re-running a whole year to answer them would be absurd. The server applies the
+// same permissions, locking and reconciliation rules either way.
+function generate_donor_tax_receipt(frm) {
+	const dialog = new frappe.ui.Dialog({
+		title: __("Zuwendungsbestätigung für {0}", [frm.doc.donor_name || frm.doc.name]),
+		fields: [
+			{
+				fieldtype: "Link",
+				fieldname: "company",
+				label: __("Unternehmen"),
+				options: "Company",
+				reqd: 1,
+				default: frappe.defaults.get_user_default("Company"),
+			},
+			{
+				fieldtype: "Int",
+				fieldname: "tax_year",
+				label: __("Steuerjahr"),
+				reqd: 1,
+				default: new Date().getFullYear() - 1,
+			},
+		],
+		primary_action_label: __("Erzeugen"),
+		primary_action(values) {
+			frappe.call({
+				method: "non_profit.non_profit.tax_receipts.generate_receipt_for_donor",
+				args: { donor: frm.doc.name, company: values.company, tax_year: values.tax_year },
+				freeze: true,
+				freeze_message: __("Bescheinigung wird erzeugt..."),
+				callback(response) {
+					dialog.hide();
+					const report = response.message || {};
+					if (report.receipt) {
+						frappe.set_route("Form", "Donation Tax Receipt", report.receipt);
+					} else {
+						frappe.msgprint(__("Es wurde keine Bescheinigung erzeugt."));
+					}
+				},
+			});
+		},
+	});
 	dialog.show();
 }

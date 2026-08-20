@@ -419,6 +419,23 @@ default `de`) records the correspondence language for the letter and the email;
    seeded `Spendenbescheinigung` PDF to one donor. This is the path ported from
    the retired `Donation Receipt.send_to_donor()`.
 
+### Desk entry points
+
+Receipts are generated, never typed, and the DocType is `in_create` to say so:
+the list has no **New** button. Generation is reached from
+**Donation Tax Receipt → Bescheinigungen erzeugen** (the list's primary action,
+`donation_tax_receipt_list.js`) and, for one donor, from
+**Donor → Actions → Zuwendungsbestätigung erzeugen** (`donor.js`). The Donor
+action deliberately sits outside the `frm.doc.customer` branch that guards the
+accounting actions: a Bescheinigung is owed to a donor whether or not anyone
+ever created an ERPNext Customer for them. A bookmarked
+`/new-donation-tax-receipt` URL still reaches the form, where every field is
+read-only and a save could only ever complain about fields the user may not
+fill, so `onload` explains the generation route and returns to the list.
+
+Before this, `generate_receipts` was whitelisted but had no caller in the UI,
+which left the annual batch reachable only from bench.
+
 - `generate_receipts(company, tax_year) -> {created, updated, deleted, unchanged,
   stale_issued}` (whitelisted POST). Qualifying Donations are submitted
   (`docstatus 1`), paid (`paid = 1`), belong to the Company, fall inside the
@@ -435,6 +452,17 @@ default `de`) records the correspondence language for the letter and the email;
   revived, and every stale **Issued** receipt (including a donor absent from the
   current groups) is reported by name under `stale_issued` instead of being
   silently rewritten.
+- `generate_receipt_for_donor(donor, company, tax_year) -> {created, updated,
+  deleted, unchanged, stale_issued, receipt}` (whitelisted POST) is the
+  single-donor counterpart, for the donor who asks out of season rather than the
+  annual run. Same permission gate, same Company `FOR UPDATE` lock, same
+  reconciliation. Both entry points call one `_reconcile_donor_receipt`, which
+  is the point: which receipts may be rewritten, which are protected once
+  Issued, and which stay dead once Cancelled is decided in exactly one place, so
+  the batch and the single request cannot drift apart. It throws for an unknown
+  Donor, and for a Donor with neither qualifying donations nor an existing
+  receipt for that year. `receipt` is the resulting name, or `None` when the
+  call deleted a stale Draft.
 - `direct_mail_candidate_rows(reference) -> list[dict]` is the
   `good_direct_mail_audience_providers` implementation registered under the key
   `donation_tax_receipt`. `reference` is `"<company>|<tax_year>"`. It returns one
@@ -486,7 +514,19 @@ default `de`) records the correspondence language for the letter and the email;
   `non_profit.non_profit.mailer.send_referenced_email` with
   `reference_doctype`/`reference_name` set to the receipt. A registered
   downstream provider can therefore create a Communication on the receipt
-  timeline; without one, delivery falls back to `frappe.sendmail`. Finally
+  timeline; without one, delivery falls back to `frappe.sendmail`. That queued
+  mail is then flushed immediately by `mailer.send_queued_email_now`:
+  `frappe.sendmail` only queues, and the queue is drained by the `all` scheduler
+  bucket, which additionally skips rows younger than a ten-second undo window —
+  right for a batch, wrong for a button that has just told someone the receipt
+  went out. The flush enqueues a short-queue job running as Administrator (the
+  staff member who pressed the button has no rights on `Email Queue`, and the
+  decision to send was authorised by then) and swallows failure, leaving the row
+  queued for the scheduler's normal retry. When PDF protection is on the body
+  also carries a note naming the password by its *source* — never printing it,
+  since a receipt in the wrong inbox only stays shut while the reader does not
+  know the intended donor's postal code — and saying that this protects the
+  attachment, not the transport. Finally
   `email_sent_on` is stamped. **Emailing never changes the status** — `Issued` remains the explicit
   `mark_receipts_issued` action for the annual run, so a courtesy copy of a Draft
   does not pretend the batch went out. The Desk action lives in
@@ -828,6 +868,22 @@ from `Non Profit Settings.de_tax_exemption_notice`, and the `§ 10b Abs. 4 EStG`
 liability notice. The two formats stay separate documents rather than one format
 growing jurisdiction conditionals — a conditional receipt is a receipt that can
 silently render under the wrong law.
+
+Two things the format has to do for itself. A custom Jinja Print Format renders
+its own document — Frappe injects the Letter Head only through `standard.html`'s
+`add_header` macro, which never runs here — so the format emits
+`{{ letter_head }}` explicitly. Without it the receipt goes out with no issuer
+on it at all, and since `§ 50 EStDV` requires the name and address of the
+*Zuwendungsempfänger*, that is a defective receipt rather than merely an
+unbranded one. The same paragraph requires the *Zuwendender*'s address, so the
+"Name und Anschrift des Zuwendenden" row prints the donor address under the name
+through `tax_receipts.donor_address_lines`, exposed to Jinja by the
+`jinja.methods` hook. That helper reuses `receipt_protection._primary_address`
+rather than querying on its own: it is the address whose postal code locks the
+PDF, and two independent lookups could disagree — leaving a receipt addressed to
+one place and unlockable with the code of another. The country line is printed
+only when it differs from the issuing Company's, so a German receipt for a
+German donor keeps the plain two-line address the form expects.
 
 Receipt **currency** follows the same source: `receipt_currency(company)` reads
 the Company's `default_currency`, so a Swiss company issues CHF and a German one

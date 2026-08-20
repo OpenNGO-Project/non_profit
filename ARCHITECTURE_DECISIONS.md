@@ -203,6 +203,54 @@ protection (`protect_receipt_pdf`) is the backstop, defaulting to **off**.
 - The report is the thing to run before an annual batch; that belongs in
   `HOW_TO.md`, not only here.
 
+## ADR-0005: One Reconciliation, Two Ways In
+
+- Status: Accepted
+- Date: 2026-08-20
+- Scope: Donation Tax Receipt generation entry points
+- Supersedes: Nothing; `generate_receipts` remains the annual route
+
+### Context
+
+`generate_receipts` was whitelisted but had no caller in the Desk, so the annual
+batch was reachable only from bench. The list's **New** button, meanwhile, led
+to a form whose every field is read-only — a receipt is derived from a year's
+donations, not typed — where a save could only complain about fields the user is
+not allowed to fill. And the batch answers the wrong question for the common
+counter case: a donor rings up in March wanting last year's Bescheinigung, and
+re-running a whole year to serve one person is absurd.
+
+### Decision
+
+Give generation two entry points — the list's **Bescheinigungen erzeugen**
+action for the year, and **Zuwendungsbestätigung erzeugen** on the Donor for one
+person — and make the single-donor endpoint reuse the batch's permission gate,
+its Company `FOR UPDATE` lock, and one shared `_reconcile_donor_receipt`. Mark
+the DocType `in_create` so the dead-end New button disappears.
+
+### Alternatives Considered
+
+- A simpler bespoke path for the single donor: rejected. The rules that matter
+  here are which receipts may be rewritten, which are protected once Issued, and
+  which stay dead once Cancelled. Two implementations of that drift, and the
+  drift is invisible until a receipt is silently rewritten.
+- Letting the operator filter the batch to one donor: rejected as the same whole-
+  year read and lock wearing a filter, with a report that still talks about a
+  year the operator did not ask about.
+- Leaving generation on bench: rejected. An annual duty that requires shell
+  access is an annual duty that gets skipped or delegated to whoever has the
+  shell.
+
+### Consequences
+
+- A receipt produced from the Donor form is indistinguishable from one the batch
+  would have produced, and a later batch run reports it `unchanged`.
+- The single-donor call still takes the Company-wide lock. That is deliberate —
+  it serializes against a concurrent batch — and it means the action is not free
+  while a batch is running.
+- `in_create` removes the New button but not the `/new-...` URL, so the form
+  explains the generation route and returns to the list.
+
 ## References
 
 - [Technical documentation](DOCUMENTATION.md)

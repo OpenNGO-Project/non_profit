@@ -23,6 +23,8 @@ from non_profit.non_profit.tax_receipts import (
 	direct_mail_audience_provider,
 	direct_mail_candidate_rows,
 	donation_table_html,
+	donor_address_lines,
+	generate_receipt_for_donor,
 	generate_receipts,
 	mark_receipts_issued,
 	receipt_campaign_reference,
@@ -682,6 +684,115 @@ class TestLegacyDonationReceiptRemovalPatch(UnitTestCase):
 			removal.execute()
 		delete_doc.assert_not_called()
 		sql_ddl.assert_not_called()
+
+
+class TestSingleDonorReceiptGeneration(TaxReceiptFixtures):
+	"""The out-of-season single request must agree with the annual batch."""
+
+	def _receipt(self, donor: str) -> Any:
+		name = frappe.db.get_value(
+			"Donation Tax Receipt",
+			{"company": self.company, "tax_year": self.tax_year, "donor": donor},
+		)
+		return frappe.get_doc("Donation Tax Receipt", name)
+
+	def test_one_donor_is_generated_without_touching_the_rest_of_the_year(self) -> None:
+		asked, _contact = self._contact_donor("Asked In March")
+		untouched, _contact = self._contact_donor("Not Asked")
+		self._donation(asked.name, 120, f"{self.tax_year}-02-01")
+		self._donation(untouched.name, 80, f"{self.tax_year}-02-02")
+
+		report = generate_receipt_for_donor(asked.name, self.company, self.tax_year)
+
+		self.assertEqual(report["created"], 1)
+		self.assertEqual(flt(self._receipt(asked.name).total_amount), 120)
+		self.assertFalse(
+			frappe.db.exists(
+				"Donation Tax Receipt",
+				{"company": self.company, "tax_year": self.tax_year, "donor": untouched.name},
+			)
+		)
+		self.assertEqual(report["receipt"], self._receipt(asked.name).name)
+
+	def test_the_batch_afterwards_reports_it_unchanged_rather_than_rewriting_it(self) -> None:
+		donor, _contact = self._contact_donor("Same As Batch")
+		self._donation(donor.name, 90, f"{self.tax_year}-04-01")
+
+		generate_receipt_for_donor(donor.name, self.company, self.tax_year)
+		single = self._receipt(donor.name)
+		report = generate_receipts(self.company, self.tax_year)
+
+		self.assertEqual(report["created"], 0)
+		self.assertEqual(report["updated"], 0)
+		self.assertEqual(report["unchanged"], 1)
+		self.assertEqual(self._receipt(donor.name).name, single.name)
+
+	def test_a_refreshed_donation_updates_the_draft(self) -> None:
+		donor, _contact = self._contact_donor("Changed Later")
+		self._donation(donor.name, 50, f"{self.tax_year}-06-01")
+		generate_receipt_for_donor(donor.name, self.company, self.tax_year)
+		self._donation(donor.name, 25, f"{self.tax_year}-06-02")
+
+		report = generate_receipt_for_donor(donor.name, self.company, self.tax_year)
+
+		self.assertEqual(report["updated"], 1)
+		self.assertEqual(flt(self._receipt(donor.name).total_amount), 75)
+
+	def test_an_issued_receipt_is_reported_stale_and_never_rewritten(self) -> None:
+		donor, _contact = self._contact_donor("Already Issued")
+		self._donation(donor.name, 100, f"{self.tax_year}-08-01")
+		generate_receipt_for_donor(donor.name, self.company, self.tax_year)
+		receipt = self._receipt(donor.name)
+		mark_receipts_issued(self.company, self.tax_year, [receipt.name])
+		self._donation(donor.name, 10, f"{self.tax_year}-08-02")
+
+		report = generate_receipt_for_donor(donor.name, self.company, self.tax_year)
+
+		self.assertEqual(report["stale_issued"], [receipt.name])
+		self.assertEqual(flt(self._receipt(donor.name).total_amount), 100)
+
+	def test_a_donor_without_qualifying_donations_is_refused(self) -> None:
+		donor, _contact = self._contact_donor("Nothing To Certify")
+		with self.assertRaises(frappe.ValidationError):
+			generate_receipt_for_donor(donor.name, self.company, self.tax_year)
+
+	def test_an_unknown_donor_is_refused(self) -> None:
+		with self.assertRaises(frappe.ValidationError):
+			generate_receipt_for_donor(f"NPO-DON-missing-{self.suffix}", self.company, self.tax_year)
+
+
+class TestDonorAddressLines(TaxReceiptFixtures):
+	"""§ 50 EStDV wants the donor's address, not only the donor's name."""
+
+	def test_lines_carry_street_and_locality_from_the_receipt_address(self) -> None:
+		donor, _contact = self._contact_donor("Mit Anschrift")
+
+		lines = donor_address_lines(donor.name, self.company)
+
+		self.assertIn("Teststrasse 1", lines)
+		self.assertIn("8000 Zurich", lines)
+
+	def test_the_country_is_printed_only_when_it_differs_from_the_issuer(self) -> None:
+		donor, _contact = self._contact_donor("Auslandspender")
+
+		swiss_issuer = donor_address_lines(donor.name, self.company)
+		self.assertNotIn("Switzerland", swiss_issuer)
+
+		german_company = frappe.get_doc(
+			{
+				"doctype": "Company",
+				"company_name": f"NPO Address DE {self.suffix}",
+				"abbr": f"A{self.suffix[:4]}".upper(),
+				"country": "Germany",
+				"default_currency": "EUR",
+				"create_chart_of_accounts_based_on": "Standard Template",
+				"chart_of_accounts": "Standard",
+			}
+		).insert(ignore_permissions=True)
+		self.assertIn("Switzerland", donor_address_lines(donor.name, german_company.name))
+
+	def test_a_donor_without_an_address_yields_no_lines(self) -> None:
+		self.assertEqual(donor_address_lines(self._subjectless_donor().name, self.company), [])
 
 
 class TestReceiptJurisdiction(TaxReceiptFixtures):

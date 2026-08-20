@@ -1,4 +1,21 @@
 frappe.ui.form.on("Donation Tax Receipt", {
+	onload(frm) {
+		// The DocType is `in_create`, so the New button is gone from the list —
+		// but a bookmarked /new-donation-tax-receipt URL still lands here, on a
+		// form whose every field is read-only. Saving it can only ever produce
+		// "Spender ist erforderlich / Steuerjahr ist erforderlich" for fields
+		// the user is not allowed to fill. Say what to do instead.
+		if (!frm.is_new()) return;
+		frappe.msgprint({
+			title: __("Bescheinigungen werden erzeugt, nicht angelegt"),
+			indicator: "orange",
+			message: __(
+				"Zuwendungsbestätigungen entstehen aus den Spenden eines Steuerjahres. Bitte in der Liste auf <b>Bescheinigungen erzeugen</b> klicken und Unternehmen und Steuerjahr wählen."
+			),
+		});
+		frappe.set_route("List", "Donation Tax Receipt");
+	},
+
 	refresh(frm) {
 		if (frm.is_new() || !["Draft", "Issued"].includes(frm.doc.status)) {
 			return;

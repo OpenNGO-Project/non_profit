@@ -112,6 +112,13 @@ DONATION_TAX_RECEIPT_DE_DE_PRINT_FORMAT = "Zuwendungsbestätigung"
 
 DONATION_TAX_RECEIPT_DE_DE_HTML = """
 {%- set exemption_notice = frappe.db.get_single_value("Non Profit Settings", "de_tax_exemption_notice") -%}
+{#- A custom Jinja format renders its own document: frappe only injects the
+    Letter Head automatically through `standard.html`'s add_header macro, which
+    never runs here. Without this line the receipt goes out with no issuer on
+    it at all — and § 50 EStDV requires the name and address of the
+    Zuwendungsempfänger, so that is a defective receipt, not just an unbranded
+    one. -#}
+{%- if letter_head and not no_letterhead %}<div class="letter-head">{{ letter_head }}</div>{% endif -%}
 <div style="font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10.5pt; line-height: 1.45; color: #222;">
     <div style="text-align: right; margin-bottom: 1em;">
         <strong>Zuwendungsbestätigung</strong><br>
@@ -128,7 +135,10 @@ DONATION_TAX_RECEIPT_DE_DE_HTML = """
     <table style="width: 100%; margin-bottom: 1.5em;">
         <tr>
             <td style="width: 38%; vertical-align: top;"><strong>Name und Anschrift des Zuwendenden:</strong></td>
-            <td>{{ doc.donor_name | e }}</td>
+            <td>
+                {{ doc.donor_name | e }}
+                {%- for line in donor_address_lines(doc.donor, doc.company) %}<br>{{ line | e }}{% endfor -%}
+            </td>
         </tr>
     </table>
 
@@ -203,7 +213,16 @@ DONATION_TAX_RECEIPT_DE_DE_HTML = """
 </div>
 """
 
-DONATION_TAX_RECEIPT_DE_DE_MANAGED_HASHES = frozenset()
+# Keep hashes of every previously shipped body. Matching content is app-managed
+# and may be upgraded; any other body belongs to the operator and is preserved.
+DONATION_TAX_RECEIPT_DE_DE_MANAGED_HASHES = frozenset(
+	{
+		# First shipped body: donor name only, no address on the § 50 EStDV row.
+		"34b891de4ad2f66fc2b4a53edd4576839a1ab0244aca726172a0a3ac3e0fc9bc",
+		# Donor address added, still without the Letter Head.
+		"3d9857ddd01577ac32293d17e38ecc118bc1768d6a0f776eb1ee028f0d4c6127",
+	}
+)
 
 # Company country -> (print format, managed hashes). Anything not listed keeps
 # the Swiss format, which is what every existing site already has.
@@ -392,14 +411,24 @@ def ensure_email_template():
 	# (bench pattern: seeded Email Templates are never overwritten).
 	name = "Donation Thank You DE"
 	if frappe.db.exists("Email Template", name):
+		# Repair a body that was never filled. `Email Template.response_`
+		# resolves to `response_html` when `use_html` is set, so a template
+		# seeded into `response` alone sent a correctly-addressed, correctly-
+		# subjected, entirely empty mail. Only an empty body is rewritten; an
+		# operator's own wording is still never touched.
+		if not (frappe.db.get_value("Email Template", name, "response_html") or "").strip():
+			frappe.db.set_value("Email Template", name, "response_html", THANK_YOU_EMAIL_HTML)
 		return
 	frappe.get_doc(
 		{
 			"doctype": "Email Template",
 			"name": name,
 			"subject": "Herzlichen Dank für deine Spende",
-			"response": THANK_YOU_EMAIL_HTML,
+			# Both fields: `response_` picks one by `use_html`, and a template
+			# that fills only the other sends an empty message.
 			"use_html": 1,
+			"response_html": THANK_YOU_EMAIL_HTML,
+			"response": THANK_YOU_EMAIL_HTML,
 		}
 	).insert(ignore_permissions=True)
 

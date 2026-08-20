@@ -336,3 +336,35 @@ keine Zuordnung,keine Zuordnung
 "Applying workflow action...","Workflow-Aktion wird ausgeführt..."
 "An outcome reason is required.","Ein Ergebnisgrund ist erforderlich."
 "Unsupported Major Gift outcome action: {0}","Nicht unterstützte Major-Gift-Ergebnisaktion: {0}"
+Set Next Action,Nächste Aktion festlegen
+Next Action,Nächste Aktion
+Assign To,Zuweisen an
+Relationship & Cultivation,Beziehung und Betreuung
+Relationship Manager,Ansprechpartner/in
+Capacity Rating,Spendenpotenzial
+Donor Level,Spenderstufe
+Major Donor,Großspender/in
+Major Gift,Großspende
+Giving Summary,Spendenübersicht
+Lifetime Giving,Spenden gesamt
+Gift Count,Anzahl Spenden
+First Gift Date,Erste Spende am
+Largest Gift,Höchste Spende
+Last Gift Date,Letzte Spende am
+Last Gift Amount,Betrag der letzten Spende
+Household,Haushalt
+Tribute Gift,Anlassspende
+Tribute Type,Art der Anlassspende
+Honouree,Geehrte Person
+Tribute Message,Nachricht zur Anlassspende
+Notification Requested,Benachrichtigung gewünscht
+Notification Contact,Kontakt für Benachrichtigung
+Notification Email,E-Mail für Benachrichtigung
+Notification Address,Adresse für Benachrichtigung
+Tribute Fulfillment,Bearbeitung der Anlassspende
+Fulfillment Status,Bearbeitungsstatus
+Fulfilled On,Bearbeitet am
+Fulfilled By,Bearbeitet von
+Fulfillment Note,Notiz zur Bearbeitung
+QR Reference,QR-Referenz
+Confirmation Key,Bestätigungsschlüssel

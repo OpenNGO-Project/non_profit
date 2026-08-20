@@ -38,7 +38,7 @@ from non_profit.non_profit.doctype.donation_tax_receipt.donation_tax_receipt imp
 )
 from non_profit.non_profit.doctype.donor.donor import get_donor_email
 from non_profit.non_profit.fundraising_setup import receipt_print_format_for
-from non_profit.non_profit.mailer import send_referenced_email
+from non_profit.non_profit.mailer import send_queued_email_now, send_referenced_email
 from non_profit.non_profit.recipient_selection import _donor_canonical_subject
 
 RECEIPT_DOCTYPE = "Donation Tax Receipt"
@@ -100,33 +100,113 @@ def generate_receipts(company: str, tax_year: int) -> dict[str, Any]:
 		"stale_issued": [],
 	}
 	for donor in sorted(set(donations_by_donor) | set(existing)):
-		details = donations_by_donor.get(donor)
-		record = existing.get(donor)
-		if not details:
-			if record.status == "Draft":
-				_delete_draft_receipt(record.name)
-				report["deleted"] += 1
-			elif record.status == "Issued":
-				report["stale_issued"].append(record.name)
-			continue
-		total = flt(sum(row["amount"] for row in details))
-		if record is None:
-			_insert_draft_receipt(company, tax_year, donor, details, total)
-			report["created"] += 1
-			continue
-		if _receipt_matches(record, details, total):
-			report["unchanged"] += 1
-			continue
-		if record.status == "Issued":
-			report["stale_issued"].append(record.name)
-			continue
-		if record.status == "Cancelled":
-			# A cancelled receipt is an operator decision; never revive it.
-			report["unchanged"] += 1
-			continue
-		_update_draft_receipt(record.name, details, total)
-		report["updated"] += 1
+		_reconcile_donor_receipt(
+			company=company,
+			tax_year=tax_year,
+			donor=donor,
+			details=donations_by_donor.get(donor),
+			record=existing.get(donor),
+			report=report,
+		)
 	report["stale_issued"].sort()
+	return report
+
+
+def _reconcile_donor_receipt(
+	*,
+	company: str,
+	tax_year: int,
+	donor: str,
+	details: list[dict[str, Any]] | None,
+	record: Any,
+	report: dict[str, Any],
+) -> None:
+	"""Bring one donor's receipt in line with that donor's donations.
+
+	Extracted so the whole-year batch and the single-donor action below cannot
+	drift apart: which receipts may be rewritten, which are protected once
+	Issued, and which stay dead once Cancelled is one decision, made here.
+	"""
+	if not details:
+		if record.status == "Draft":
+			_delete_draft_receipt(record.name)
+			report["deleted"] += 1
+		elif record.status == "Issued":
+			report["stale_issued"].append(record.name)
+		return
+	total = flt(sum(row["amount"] for row in details))
+	if record is None:
+		_insert_draft_receipt(company, tax_year, donor, details, total)
+		report["created"] += 1
+		return
+	if _receipt_matches(record, details, total):
+		report["unchanged"] += 1
+		return
+	if record.status == "Issued":
+		report["stale_issued"].append(record.name)
+		return
+	if record.status == "Cancelled":
+		# A cancelled receipt is an operator decision; never revive it.
+		report["unchanged"] += 1
+		return
+	_update_draft_receipt(record.name, details, total)
+	report["updated"] += 1
+
+
+@frappe.whitelist()
+def generate_receipt_for_donor(donor: str, company: str, tax_year: int) -> dict[str, Any]:
+	"""Create or refresh the Draft receipt of a single donor.
+
+	The annual batch is the normal route; this is the counter case — a donor
+	rings up in March asking for last year's Bescheinigung, and the
+	Geschäftsstelle should not have to re-run the whole year to answer.
+
+	Same permissions, same locking and the same reconciliation rules as
+	`generate_receipts`, so a receipt produced here is indistinguishable from
+	one the batch would have produced. The report has the batch's shape too,
+	counting exactly one donor.
+	"""
+	frappe.has_permission("Donation", "read", throw=True)
+	for permission_type in ("create", "write", "delete"):
+		frappe.has_permission(RECEIPT_DOCTYPE, permission_type, throw=True)
+	if not frappe.db.exists("Donor", donor):
+		frappe.throw(_("Donor {0} does not exist.").format(frappe.bold(donor)))
+	company = _validated_company(company)
+	tax_year = _validated_tax_year(tax_year)
+	_lock_generation_scope(company)
+
+	details = _qualifying_donations(company, tax_year).get(donor)
+	record = next(
+		(row for row in _locked_existing_receipts(company, tax_year) if row.donor == donor),
+		None,
+	)
+	if not details and record is None:
+		frappe.throw(
+			_("{0} has no paid, submitted donations for {1} in {2}.").format(
+				frappe.bold(frappe.db.get_value("Donor", donor, "donor_name") or donor),
+				frappe.bold(tax_year),
+				frappe.bold(company),
+			)
+		)
+
+	report: dict[str, Any] = {
+		"created": 0,
+		"updated": 0,
+		"deleted": 0,
+		"unchanged": 0,
+		"stale_issued": [],
+	}
+	_reconcile_donor_receipt(
+		company=company,
+		tax_year=tax_year,
+		donor=donor,
+		details=details,
+		record=record,
+		report=report,
+	)
+	report["receipt"] = frappe.db.get_value(
+		RECEIPT_DOCTYPE, {"company": company, "tax_year": tax_year, "donor": donor}, "name"
+	)
 	return report
 
 
@@ -389,7 +469,7 @@ def send_receipt_email(receipt: str) -> dict[str, Any]:
 		lang=doc.language or "de",
 		password=receipt_password(doc.donor),
 	)
-	send_referenced_email(
+	email_queue = send_referenced_email(
 		recipients=[email],
 		subject=_("Spendenbescheinigung {0}").format(doc.tax_year),
 		message=_receipt_email_body(doc),
@@ -397,10 +477,61 @@ def send_receipt_email(receipt: str) -> dict[str, Any]:
 		reference_name=doc.name,
 		attachments=[attachment],
 	)
+	send_queued_email_now(email_queue)
 	doc.email_sent_on = now_datetime()
 	_authorize_receipt_service_write(doc)
 	doc.save()
 	return {"receipt": doc.name, "email": email, "print_format": print_format}
+
+
+def donor_address_lines(donor: str, company: str | None = None) -> list[str]:
+	"""The donor's postal address, as the lines a receipt prints under the name.
+
+	Exposed to Jinja (the `jinja.methods` hook) because § 50 EStDV requires the
+	name *and* the address of the Zuwendender on a German Zuwendungsbestätigung
+	— a "Name und Anschrift des Zuwendenden" row carrying only a name does not
+	satisfy the form.
+
+	The lookup is `receipt_protection._primary_address`, not a second query of
+	its own: that helper already resolves Donor → Contact → Customer in the
+	order a receipt wants, and it is the address whose postal code locks the
+	PDF. Two independent lookups could disagree, and then the receipt would be
+	addressed to one place and unlockable with the code of another.
+
+	The country is printed only when it differs from the issuing company's, so
+	a German receipt for a German donor keeps the plain two-line address the
+	form expects.
+	"""
+	from non_profit.non_profit.receipt_protection import _primary_address
+
+	address = _primary_address(donor)
+	if not address:
+		return []
+
+	values = (
+		frappe.db.get_value(
+			"Address",
+			address,
+			["address_line1", "address_line2", "pincode", "city", "country"],
+			as_dict=True,
+		)
+		or {}
+	)
+
+	lines = [cstr(values.get("address_line1")).strip(), cstr(values.get("address_line2")).strip()]
+	locality = " ".join(
+		part
+		for part in (cstr(values.get("pincode")).strip(), cstr(values.get("city")).strip())
+		if part
+	)
+	lines.append(locality)
+
+	country = cstr(values.get("country")).strip()
+	issuer_country = cstr(frappe.db.get_value("Company", company, "country")).strip() if company else ""
+	if country and country != issuer_country:
+		lines.append(country)
+
+	return [line for line in lines if line]
 
 
 def _receipt_email_body(doc: Any) -> str:
@@ -408,7 +539,52 @@ def _receipt_email_body(doc: Any) -> str:
 		"<p>Guten Tag {0}</p>"
 		"<p>Im Anhang finden Sie Ihre Spendenbescheinigung für das Steuerjahr {1}.</p>"
 		"<p>Herzlichen Dank für Ihre Unterstützung.</p>"
-	).format(escape_html(cstr(doc.donor_name or doc.donor)), cint(doc.tax_year))
+	).format(escape_html(cstr(doc.donor_name or doc.donor)), cint(doc.tax_year)) + _protection_note()
+
+
+def _protection_note() -> str:
+	"""Tell the recipient the attachment is locked, and what that does and does not buy.
+
+	A password-protected PDF with no accompanying explanation is a support call:
+	the donor cannot open their own receipt. The password is named by its
+	*source* ("Ihre Postleitzahl"), never printed — the whole point is that a
+	receipt delivered to the wrong inbox stays shut, and that only works while
+	the reader does not already know the intended donor's postal code.
+
+	The honesty about transport is deliberate. This is access protection on the
+	attachment, not encryption in transit: the mail still travels as ordinary
+	SMTP. Saying so is what lets a donor who needs more ask for another channel.
+	See `non_profit.non_profit.receipt_protection`.
+	"""
+	from non_profit.non_profit.receipt_protection import (
+		DEFAULT_PASSWORD_SOURCE,
+		receipt_protection_enabled,
+	)
+
+	if not receipt_protection_enabled():
+		return ""
+
+	source = (
+		frappe.db.get_single_value("Non Profit Settings", "receipt_pdf_password_source")
+		or DEFAULT_PASSWORD_SOURCE
+	)
+	key = (
+		_("Ihre Postleitzahl")
+		if source == "Postal Code"
+		else _("Ihre Spendernummer, die Sie auf früheren Bescheinigungen finden")
+	)
+
+	return _(
+		"<hr>"
+		"<p><strong>Hinweis zum Datenschutz</strong></p>"
+		"<p>Das angehängte PDF ist mit einem Passwort geschützt. Das Passwort ist {0}. "
+		"So bleibt Ihre Bescheinigung auch dann unlesbar, wenn diese E-Mail versehentlich "
+		"an den falschen Empfänger gerät.</p>"
+		"<p>Bitte beachten Sie: Der Passwortschutz sichert den Anhang, nicht den Transportweg. "
+		"Eine gewöhnliche E-Mail wird unverschlüsselt übertragen. Wenn Sie eine verschlüsselte "
+		"Übermittlung wünschen, antworten Sie uns bitte — wir senden Ihnen die Bescheinigung "
+		"dann per Post oder über einen gesicherten Kanal zu.</p>"
+	).format(key)
 
 
 def _receipt_print_format(company: str | None = None) -> str:

@@ -447,11 +447,17 @@ Company, are dated inside the calendar year, have an amount above zero, and name
 a Donor. The operator must have read/User Permission access to that Company;
 generation fails rather than aggregating a Company hidden from the current user.
 
-1. **Generate.** Run `non_profit.non_profit.tax_receipts.generate_receipts`
-   with the Company and tax year. It creates a Draft receipt per Donor and
-   returns `{created, updated, deleted, unchanged, stale_issued}`. Generation
+1. **Generate.** In the **Donation Tax Receipt** list, click
+   **Bescheinigungen erzeugen** and choose the Company and tax year (it
+   defaults to the year just ended). It creates a Draft receipt per Donor and
+   reports `{created, updated, deleted, unchanged, stale_issued}`. Generation
    locks the existing Company row before re-reading current Donations and
    receipts, so concurrent and empty first runs use the same safe serialization.
+
+   There is no **New** button on this list, and that is deliberate: a receipt is
+   derived from a year's donations, never typed by hand.
+
+   The same run from a script:
 
    ```bash
    bench --site <site> execute non_profit.non_profit.tax_receipts.generate_receipts \
@@ -500,6 +506,24 @@ generation fails rather than aggregating a Company hidden from the current user.
    bench --site <site> execute non_profit.non_profit.tax_receipts.mark_receipts_issued \
      --kwargs '{"company": "Example AG", "tax_year": 2026, "receipt_names": ["NPO-STR-2026-00001"]}'
    ```
+
+### Generating one donor's receipt out of season
+
+A donor rings up in March and wants last year's Bescheinigung. You do not have
+to re-run the whole year to answer them: open the **Donor** and use
+**Actions → Zuwendungsbestätigung erzeugen**, then pick the Company and tax
+year. The form opens on the resulting receipt.
+
+The server applies the same permissions, the same Company lock, and the same
+reconciliation rules as the annual batch, so the receipt is indistinguishable
+from one the batch would have produced — and a later batch run reports it as
+`unchanged` rather than rewriting it. A donor with no qualifying donations for
+that year, and no existing receipt, is refused with a clear message.
+
+```bash
+bench --site <site> execute non_profit.non_profit.tax_receipts.generate_receipt_for_donor \
+  --kwargs '{"donor": "NPO-DON-00001", "company": "Example AG", "tax_year": 2026}'
+```
 
 ### Cancelling an incorrect receipt
 
@@ -566,6 +590,13 @@ E-Mail senden**. The Print Format for the Company's jurisdiction is rendered to
 PDF and emailed to the donor; the send is recorded on the receipt timeline and
 `Email Sent On` is stamped.
 
+- The mail is **flushed immediately** instead of waiting for the scheduler's
+  next sweep, so a receipt you just sent does not sit in the queue for minutes.
+  If that immediate attempt fails the row stays queued and the scheduler retries
+  it as usual.
+- When PDF protection is on, the mail tells the donor that the attachment is
+  locked and *which detail of theirs* the password is — never the password
+  itself — and says plainly that this protects the attachment, not the transport.
 - Only **Draft** and **Issued** receipts can be emailed.
 - **Emailing does not issue the receipt.** The status stays what it was;
   `mark_receipts_issued` remains the explicit action that closes an annual run.

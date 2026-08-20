@@ -49,3 +49,50 @@ def send_referenced_email(
 	if providers:
 		return frappe.get_attr(providers[-1])(**kwargs)
 	return frappe.sendmail(**kwargs)
+
+
+def send_queued_email_now(email_queue: Any) -> None:
+	"""Deliver one just-queued transactional mail without waiting for the scheduler.
+
+	``frappe.sendmail`` only queues. The queue is flushed by the ``all``
+	scheduler bucket, which runs every few minutes and additionally skips rows
+	younger than a ten-second undo window — fine for a batch, wrong for a
+	button. Someone who clicked *send this receipt* should not be told it went
+	out and then watch nothing arrive for four minutes.
+
+	Takes the queue returned by :func:`send_referenced_email`, so there is no
+	race with the row's creation. Delivery runs as Administrator because the
+	staff member who pressed the button has no rights on ``Email Queue`` —
+	the decision to send was already made and authorised by then.
+
+	Failure is deliberately swallowed: the row stays queued and the scheduler
+	will retry it, which is exactly the behaviour without this call.
+	"""
+	name = str(getattr(email_queue, "name", "") or email_queue or "")
+	if not name:
+		return
+	frappe.enqueue(
+		"non_profit.non_profit.mailer._send_email_queue_as_administrator",
+		queue="short",
+		enqueue_after_commit=True,
+		deduplicate=True,
+		job_id=f"non_profit_send_email_queue:{name}",
+		email_queue_name=name,
+	)
+
+
+def _send_email_queue_as_administrator(email_queue_name: str) -> None:
+	from frappe.email.doctype.email_queue.email_queue import send_now
+
+	user = frappe.session.user
+	try:
+		frappe.set_user("Administrator")
+		if frappe.db.get_value("Email Queue", email_queue_name, "status") == "Not Sent":
+			send_now(email_queue_name)
+	except Exception:
+		frappe.log_error(
+			title="Non Profit: queued email could not be sent immediately",
+			message=frappe.get_traceback(),
+		)
+	finally:
+		frappe.set_user(user)

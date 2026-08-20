@@ -24,6 +24,7 @@ demo_data_reset_declarations = [
 jinja = {
 	"methods": [
 		"non_profit.non_profit.swiss_qrbill.swiss_qrbill_svg",
+		"non_profit.non_profit.tax_receipts.donor_address_lines",
 	]
 }
 
