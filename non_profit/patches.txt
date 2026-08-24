@@ -6,6 +6,7 @@ non_profit.patches.remove_certification_module
 non_profit.patches.remove_certification_module_tables
 non_profit.patches.drop_legacy_donation_receipt
 non_profit.patches.simplify_major_gifts
+non_profit.patches.seed_naming_series_counters
 
 [post_model_sync]
 non_profit.patches.finalize_household_person_migration

@@ -474,3 +474,48 @@ def get_donation_payment_custom_fields():
 			"no_copy": 1,
 		},
 	]
+
+
+# Series keys owned by non_profit doctypes. The previous
+# ``format:NPO-ORG-{#####}`` autoname resolved each braced parameter in
+# isolation, so the counter prefix was built from nothing and the doctype drew
+# from a single shared ``tabSeries`` row named "".
+NAMING_SERIES_KEYS: dict[str, str] = {
+	"NPO Organization": "NPO-ORG-",
+}
+
+
+def seed_naming_series_counters() -> None:
+	"""Give each migrated doctype a counter at or above its highest used number.
+
+	Switching away from the shared "" series restarts a key at zero, which
+	would re-issue names that already exist. Seed from the live maximum first,
+	and never lower a counter that is already ahead.
+	"""
+	for doctype, prefix in NAMING_SERIES_KEYS.items():
+		if not frappe.db.exists("DocType", doctype):
+			continue
+		current = _highest_used_series_number(doctype, prefix)
+		if not current:
+			continue
+		frappe.db.sql(
+			"""
+			INSERT INTO `tabSeries` (`name`, `current`) VALUES (%(prefix)s, %(current)s)
+			ON DUPLICATE KEY UPDATE `current` = GREATEST(`current`, %(current)s)
+			""",
+			{"prefix": prefix, "current": current},
+		)
+
+
+def _highest_used_series_number(doctype: str, prefix: str) -> int:
+	"""Return the largest numeric suffix already issued under ``prefix``."""
+	rows = frappe.db.sql(
+		"""
+		SELECT MAX(CAST(SUBSTRING(`name`, %(offset)s) AS UNSIGNED))
+		FROM `tab{doctype}`
+		WHERE `name` LIKE %(like)s
+			AND SUBSTRING(`name`, %(offset)s) REGEXP '^[0-9]+$'
+		""".format(doctype=doctype.replace("`", "")),
+		{"offset": len(prefix) + 1, "like": f"{prefix}%"},
+	)
+	return cint(rows[0][0]) if rows and rows[0] else 0
