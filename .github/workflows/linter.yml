@@ -39,9 +39,23 @@ jobs:
             echo "No changed Python, JavaScript, or JSON files to scan."
             exit 0
           fi
-          semgrep scan --error --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness "${targets[@]}"
+          semgrep scan --error --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness "${targets[@]}" 2>&1 | tee -a /tmp/lint.log
         env:
+          # Trunk-based: there is no pull_request context any more, so this is
+          # empty and the scan falls back to HEAD^ -- the commit just pushed.
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
+      # This Forgejo has no Actions log API and the web log route needs a
+      # browser session a token cannot produce, so a failing lint publishes its
+      # own log. Without it, a red base branch can only be guessed at.
+      - name: Post failure log
+        if: failure()
+        run: |
+          U="https://code.goodvantage.cloud/api/packages/Goodvantage/generic/ci-logs/run-${RUNID}"
+          curl -s -o /dev/null -u "Goodfred:${AT}" --upload-file /tmp/lint.log "$U/lint-semgrep.log" || true
+        env:
+          AT: ${{ secrets.CI_ARTIFACT_TOKEN }}
+          RUNID: ${{ github.run_id }}
 
   deps-vulnerable-check:
     name: 'Vulnerable Dependency Check'
@@ -66,4 +80,16 @@ jobs:
         run: |
           pip install pip-audit
           cd ${GITHUB_WORKSPACE}
-          pip-audit --desc on --requirement requirements.txt
+          pip-audit --desc on --requirement requirements.txt 2>&1 | tee -a /tmp/audit.log
+
+      # This Forgejo has no Actions log API and the web log route needs a
+      # browser session a token cannot produce, so a failing lint publishes its
+      # own log. Without it, a red base branch can only be guessed at.
+      - name: Post failure log
+        if: failure()
+        run: |
+          U="https://code.goodvantage.cloud/api/packages/Goodvantage/generic/ci-logs/run-${RUNID}"
+          curl -s -o /dev/null -u "Goodfred:${AT}" --upload-file /tmp/audit.log "$U/lint-pip-audit.log" || true
+        env:
+          AT: ${{ secrets.CI_ARTIFACT_TOKEN }}
+          RUNID: ${{ github.run_id }}
