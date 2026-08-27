@@ -509,6 +509,10 @@ def seed_naming_series_counters() -> None:
 
 def _highest_used_series_number(doctype: str, prefix: str) -> int:
 	"""Return the largest numeric suffix already issued under ``prefix``."""
+	# The table name cannot be parameterised, so only names that exist as a
+	# DocType may reach the query - guard here rather than at the call site.
+	if not frappe.db.exists("DocType", doctype):
+		return 0
 	rows = frappe.db.sql(
 		"""
 		SELECT MAX(CAST(SUBSTRING(`name`, %(offset)s) AS UNSIGNED))

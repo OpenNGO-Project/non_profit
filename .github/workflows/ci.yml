@@ -3,9 +3,8 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches: [version-16, miki-dev, dev_mikk]
+    branches: [version-16]
   pull_request:
-    branches: [version-16, miki-dev, dev_mikk]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -15,23 +14,19 @@ jobs:
   tests:
     name: Server
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
+    # Forgejo act_runner: jobs run inside containers, so services are reached
+    # by hostname (mariadb:3306, redis-cache:6379), not host port mappings.
     services:
       redis-cache:
         image: redis:alpine
-        ports:
-          - 13000:6379
       redis-queue:
         image: redis:alpine
-        ports:
-          - 11000:6379
       mariadb:
         image: mariadb:11.8
         env:
           MYSQL_ROOT_PASSWORD: root
-        ports:
-          - 3306:3306
         options: --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
 
     steps:
@@ -41,7 +36,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.14"
+          python-version: '3.14'
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -49,81 +44,108 @@ jobs:
           node-version: 24
           check-latest: true
 
-      - name: Cache pip
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/setup.py') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
-
-      - name: Cache yarn
-        uses: actions/cache@v5
-        with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
-
-      - name: Install MariaDB Client
+      - name: System dependencies and CI user
         run: |
-          sudo apt update
-          sudo apt-get install mariadb-client
+          apt-get update -qq
+          # cron: bench init aborts without /usr/bin/crontab.
+          apt-get install -y -qq git curl ca-certificates cron mariadb-client >/dev/null
+          npm install -g yarn >/dev/null
+          # bench refuses to run as root; job containers run as root.
+          useradd -m -s /bin/bash runner
+          chown -R runner "$GITHUB_WORKSPACE"
 
-      - name: Setup
+      - name: Setup bench
         run: |
-          pip install frappe-bench
-          bench init --skip-redis-config-generation --skip-assets --frappe-branch version-16 --python "$(which python)" ~/frappe-bench
-
-      - name: Install
-        working-directory: /home/runner/frappe-bench
-        run: |
-          bench get-app erpnext --branch version-16
-          bench get-app payments --branch version-16
-          bench get-app non_profit $GITHUB_WORKSPACE
-          bench setup requirements --dev
-          bench new-site --db-root-password root --admin-password admin test_site
-          bench --site test_site install-app erpnext
-          bench --site test_site install-app payments
-          bench --site test_site install-app non_profit
-          bench build
+          set -o pipefail
+          pip install -q frappe-bench
+          touch /tmp/ci.log && chmod 666 /tmp/ci.log
+          sudo -u runner -H env "PATH=$PATH" "TOKEN=$TOKEN" bash -c '
+            set -e
+            git config --global url."https://x-access-token:${TOKEN}@code.goodvantage.cloud/".insteadOf "https://code.goodvantage.cloud/"
+            cd /home/runner
+            bench init --skip-redis-config-generation --skip-assets --frappe-branch version-16 --python "$(which python)" /home/runner/frappe-bench
+            cd /home/runner/frappe-bench
+            bench set-config -g redis_cache redis://redis-cache:6379
+            bench set-config -g redis_queue redis://redis-queue:6379
+            bench set-config -g redis_socketio redis://redis-queue:6379
+          ' 2>&1 | tee -a /tmp/ci.log
         env:
-          CI: "Yes"
+          TOKEN: ${{ secrets.CI_FORGEJO_TOKEN }}
+
+      - name: Get apps
+        run: |
+          set -o pipefail
+          sudo -u runner -H env "PATH=$PATH" "WS=$GITHUB_WORKSPACE" bash -c '
+            set -e
+            cd /home/runner/frappe-bench
+            bench get-app erpnext --branch version-16
+            bench get-app payments --branch version-16
+            bench get-app non_profit "$WS"
+            bench setup requirements --dev
+          ' 2>&1 | tee -a /tmp/ci.log
+        env:
+          CI: 'Yes'
+
+      - name: Site setup and install apps
+        run: |
+          set -o pipefail
+          sudo -u runner -H env "PATH=$PATH" bash -c '
+            set -e
+            cd /home/runner/frappe-bench
+            # frappe logger wants <bench>/test_site/logs before the site exists
+            mkdir -p ~/logs logs test_site/logs
+            bench new-site --db-host mariadb --db-root-password root --admin-password admin test_site
+            mkdir -p sites/test_site/logs
+            # frappe throttles User creation at 60/hour in production; every
+            # upstream Frappe app raises this for CI (see erpnext, hrms,
+            # payments, non_profit .github/helper/site_config.json).
+            bench --site test_site set-config -p throttle_user_limit 1000
+            bench --site test_site install-app erpnext
+            bench --site test_site install-app payments
+            bench --site test_site install-app non_profit
+            /home/runner/frappe-bench/env/bin/python -c "
+            import frappe
+            frappe.init(\"test_site\", sites_path=\"/home/runner/frappe-bench/sites\")
+            frappe.connect()
+            from erpnext.setup.setup_wizard.setup_wizard import setup_complete
+            setup_complete(frappe._dict({\"country\": \"Switzerland\", \"currency\": \"CHF\", \"company_name\": \"Test Company\", \"company_abbr\": \"TC\", \"chart_of_accounts\": \"Standard\", \"fy_start_date\": \"2026-01-01\", \"fy_end_date\": \"2026-12-31\"}))
+            frappe.db.commit()
+            frappe.destroy()
+            "
+            bench build
+          ' 2>&1 | tee -a /tmp/ci.log
+        env:
+          CI: 'Yes'
 
       - name: Run Tests
-        working-directory: /home/runner/frappe-bench
         run: |
-          bench --site test_site set-config allow_tests true
-          mkdir -p ~/logs ~/frappe-bench/logs ~/frappe-bench/sites/test_site/logs ~/frappe-bench/test_site/logs
-          /home/runner/frappe-bench/env/bin/python -c "
-          import frappe
-          frappe.init('test_site', sites_path='/home/runner/frappe-bench/sites')
-          frappe.connect()
-          from erpnext.setup.setup_wizard.setup_wizard import setup_complete
-          setup_complete(frappe._dict({'country': 'Switzerland', 'currency': 'CHF', 'company_name': 'Test Company', 'company_abbr': 'TC', 'chart_of_accounts': 'Standard', 'fy_start_date': '2026-01-01', 'fy_end_date': '2026-12-31'}))
-          # Drop the Price Lists the setup wizard created. ERPNext's
-          # BootStrapTestData re-inserts them as test fixtures and currently
-          # uses insert() without ignore_if_duplicate, so leaving them around
-          # crashes the test bootstrap with DuplicateEntryError.
-          for name in ('Standard Buying', 'Standard Selling'):
-              if frappe.db.exists('Price List', name):
-                  frappe.delete_doc('Price List', name, force=True, ignore_permissions=True)
-          frappe.db.commit()
-          frappe.destroy()
-          "
-          bench --site test_site run-tests --app non_profit --coverage
+          set -o pipefail
+          sudo -u runner -H env "PATH=$PATH" bash -c '
+            set -e
+            cd /home/runner/frappe-bench
+            bench --site test_site set-config allow_tests true
+            bench --site test_site run-tests --app non_profit --coverage
+          ' 2>&1 | tee -a /tmp/ci.log
         env:
           TYPE: server
 
-      - name: Upload Coverage
-        if: always()
-        uses: codecov/codecov-action@v5
-        with:
-          files: /home/runner/frappe-bench/sites/coverage.xml
-          flags: server
-          fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
+      # This Forgejo exposes no Actions log API and its web log route needs a
+      # browser session, so a failing run publishes its own tail as an issue.
+      - name: Post failure log
+        if: failure()
+        run: |
+          export TAIL=$(tail -c 12000 /tmp/ci.log 2>/dev/null || echo "no captured log")
+          python3 - <<'PYEOF'
+          import os, json, urllib.request
+          fence = chr(96) * 3
+          body = "Run %s\n\n%s\n%s\n%s" % (os.environ.get('RUNID', '?'), fence, os.environ.get('TAIL', ''), fence)
+          payload = json.dumps({'title': 'CI failure log: non_profit', 'body': body}).encode()
+          req = urllib.request.Request(os.environ['API'] + '/repos/Goodvantage/non_profit/issues',
+                data=payload, method='POST',
+                headers={'Content-Type': 'application/json', 'Authorization': 'token ' + os.environ['GT']})
+          urllib.request.urlopen(req, timeout=30)
+          PYEOF
+        env:
+          GT: ${{ secrets.GITHUB_TOKEN }}
+          API: ${{ github.api_url }}
+          RUNID: ${{ github.run_id }}
