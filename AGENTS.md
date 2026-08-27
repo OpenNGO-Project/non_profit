@@ -162,6 +162,28 @@ supersede old records rather than rewriting accepted history.
 - `before_tests` may bootstrap an entirely empty test site and refresh app-owned
   fixtures, but must never delete shared rows, rename ERPNext records, or mutate
   global Customer, Fiscal Year, Address, Item Price, or Email Account state.
+- CI runs on a **wizard-less** site, and `before_tests` owns the setup. Do not
+  add an ERPNext setup-wizard call to `ci.yml`: the hook only sets the site up
+  when no Company exists, so a wizard-built site skips it and then carries
+  records that ERPNext's own test bootstrap collides with.
+- Two collisions with ERPNext test fixtures are already handled here, and both
+  presented as a wall of `setUpClass` errors that never named the cause:
+  - the test Company uses abbreviation `FCL`. `WP` belongs to ERPNext's
+    `Wind Power LLC` test record, and claiming it makes every later
+    `make_test_records` call that reaches Company fail on "Abbreviation already
+    used for another company".
+  - `reserve_erpnext_standard_price_lists` seeds Standard Buying / Standard
+    Selling as **INR** before the wizard. `erpnext.tests.utils` runs
+    `BootStrapTestData()` at import time and de-duplicates on a filter that
+    includes the currency, so on a non-INR site it does not recognise the
+    site's own copies, inserts, and dies on a primary-key duplicate.
+- Never hardcode a Country, Territory, or Customer Group name in a test.
+  Resolve it from the site (`Selling Settings`, or the first non-group row).
+  A hardcoded `Switzerland` passes only on a site whose wizard ran with that
+  country.
+- Skip on the site, not the import path. `find_spec("<app>")` proves only that
+  the bench carries an app; the site under test may never have installed it,
+  and then the DocTypes are missing while the guard reads as available.
 - Fundraising setup owns the `Spendenbescheinigung` and `Donation Slip CH` Print
   Formats only while their HTML matches a known shipped hash. Keep the
   managed-hash allowlists append-only when changing shipped HTML so untouched

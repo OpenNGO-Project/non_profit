@@ -103,15 +103,13 @@ jobs:
             bench --site test_site install-app erpnext
             bench --site test_site install-app payments
             bench --site test_site install-app non_profit
-            /home/runner/frappe-bench/env/bin/python -c "
-            import frappe
-            frappe.init(\"test_site\", sites_path=\"/home/runner/frappe-bench/sites\")
-            frappe.connect()
-            from erpnext.setup.setup_wizard.setup_wizard import setup_complete
-            setup_complete(frappe._dict({\"country\": \"Switzerland\", \"currency\": \"CHF\", \"company_name\": \"Test Company\", \"company_abbr\": \"TC\", \"chart_of_accounts\": \"Standard\", \"fy_start_date\": \"2026-01-01\", \"fy_end_date\": \"2026-12-31\"}))
-            frappe.db.commit()
-            frappe.destroy()
-            "
+            # Do not run the ERPNext setup wizard here. This app owns a
+            # before_tests hook that sets the site up itself, and it only does
+            # so when no Company exists. A wizard-built site therefore skips
+            # that hook and still carries the wizard Price List "Standard
+            # Buying", which collides on the primary key with the ERPNext test
+            # record of the same name as soon as any suite pulls it in.
+            # good_pm CI is green on exactly this wizard-less shape.
             bench build
           ' 2>&1 | tee -a /tmp/ci.log
         env:
@@ -130,10 +128,16 @@ jobs:
           TYPE: server
 
       # This Forgejo exposes no Actions log API and its web log route needs a
-      # browser session, so a failing run publishes its own tail as an issue.
+      # browser session, so a failing run publishes its own log. Upload the
+      # whole thing to the package registry and open the tail as an issue: this
+      # suite runs in three batches, and a tail alone showed only the last one
+      # -- which passed -- while sixteen errors in the middle batch scrolled
+      # past the window and the failure looked undiagnosable.
       - name: Post failure log
         if: failure()
         run: |
+          U="https://code.goodvantage.cloud/api/packages/Goodvantage/generic/ci-logs/run-${RUNID}"
+          curl -s -o /dev/null -u "Goodfred:${AT}" --upload-file /tmp/ci.log "$U/ci.log" || true
           export TAIL=$(tail -c 12000 /tmp/ci.log 2>/dev/null || echo "no captured log")
           python3 - <<'PYEOF'
           import os, json, urllib.request
@@ -147,5 +151,6 @@ jobs:
           PYEOF
         env:
           GT: ${{ secrets.GITHUB_TOKEN }}
+          AT: ${{ secrets.CI_ARTIFACT_TOKEN }}
           API: ${{ github.api_url }}
           RUNID: ${{ github.run_id }}

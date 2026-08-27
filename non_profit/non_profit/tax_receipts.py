@@ -520,9 +520,7 @@ def donor_address_lines(donor: str, company: str | None = None) -> list[str]:
 
 	lines = [cstr(values.get("address_line1")).strip(), cstr(values.get("address_line2")).strip()]
 	locality = " ".join(
-		part
-		for part in (cstr(values.get("pincode")).strip(), cstr(values.get("city")).strip())
-		if part
+		part for part in (cstr(values.get("pincode")).strip(), cstr(values.get("city")).strip()) if part
 	)
 	lines.append(locality)
 
@@ -535,11 +533,14 @@ def donor_address_lines(donor: str, company: str | None = None) -> list[str]:
 
 
 def _receipt_email_body(doc: Any) -> str:
-	return _(
-		"<p>Guten Tag {0}</p>"
-		"<p>Im Anhang finden Sie Ihre Spendenbescheinigung für das Steuerjahr {1}.</p>"
-		"<p>Herzlichen Dank für Ihre Unterstützung.</p>"
-	).format(escape_html(cstr(doc.donor_name or doc.donor)), cint(doc.tax_year)) + _protection_note()
+	return (
+		_(
+			"<p>Guten Tag {0}</p>"
+			"<p>Im Anhang finden Sie Ihre Spendenbescheinigung für das Steuerjahr {1}.</p>"
+			"<p>Herzlichen Dank für Ihre Unterstützung.</p>"
+		).format(escape_html(cstr(doc.donor_name or doc.donor)), cint(doc.tax_year))
+		+ _protection_note()
+	)
 
 
 def _protection_note() -> str:

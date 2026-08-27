@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from importlib.util import find_spec
 from typing import Any
-from unittest import skipUnless
+from unittest import SkipTest
 from unittest.mock import patch
 
 import frappe
@@ -31,7 +30,7 @@ from non_profit.non_profit.tax_receipts import (
 	send_receipt_email,
 )
 
-GOOD_DIRECT_MAIL_AVAILABLE = find_spec("good_direct_mail") is not None
+CAMPAIGN_DOCTYPE = "Good Direct Mail Campaign"
 
 
 class TaxReceiptFixtures(IntegrationTestCase):
@@ -570,8 +569,23 @@ class TestDonationTaxReceiptCandidateRows(TaxReceiptFixtures):
 		self.assertIn("250.00", html)
 
 
-@skipUnless(GOOD_DIRECT_MAIL_AVAILABLE, "good_direct_mail is not installed")
 class TestDonationTaxReceiptCampaign(TaxReceiptFixtures):
+	@classmethod
+	def setUpClass(cls) -> None:
+		"""Skip on the site, not on the import path.
+
+		This used to gate on ``find_spec("good_direct_mail")``, which only
+		proves the *bench* carries the app. A bench that clones good_direct_mail
+		but never installs it on the site under test — the ordinary case on a
+		shared dev bench — passed that gate with ``CAMPAIGN_DOCTYPE`` absent, so
+		every test here died on the "requires the configured campaign
+		integration" ValidationError instead of skipping, and a local run
+		disagreed with CI for no reason the failure explained.
+		"""
+		if not frappe.db.exists("DocType", CAMPAIGN_DOCTYPE):
+			raise SkipTest(f"{CAMPAIGN_DOCTYPE} is not installed on this site")
+		super().setUpClass()
+
 	def test_receipt_campaign_freezes_letters_with_receipt_values(self) -> None:
 		from good_direct_mail.services.freeze import freeze_campaign
 		from good_direct_mail.services.preparation import prepare_recipients

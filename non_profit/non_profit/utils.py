@@ -224,15 +224,23 @@ def before_tests():
 
 	use_short_test_host_name()
 	skip_hrms_test_record_bootstrap()
+	reserve_erpnext_standard_price_lists()
 
 	if not frappe.get_list("Company"):
+		# "WP" is ERPNext's own Company test record (Wind Power LLC, in
+		# erpnext/setup/doctype/company/test_records.json). This hook runs
+		# before those records load, so claiming WP here made every later
+		# make_test_records call that reaches Company die on "Abbreviation
+		# already used for another company" -- fifteen setUpClass errors, none
+		# of which named this function. Keep our test company on an
+		# abbreviation ERPNext does not reserve.
 		setup_complete(
 			{
 				"currency": "USD",
 				"full_name": "Test User",
 				"company_name": "Frappe Care LLC",
 				"timezone": "America/New_York",
-				"company_abbr": "WP",
+				"company_abbr": "FCL",
 				"industry": "Healthcare",
 				"country": "United States",
 				"fy_start_date": "2021-01-01",
@@ -246,9 +254,41 @@ def before_tests():
 			}
 		)
 		setup_non_profit()
+		scope_wizard_fiscal_year_to_company("Frappe Care LLC", "2021")
 
 	ensure_test_selling_defaults()
 	ensure_fundraising_fixtures()
+
+
+def scope_wizard_fiscal_year_to_company(company: str, fiscal_year: str):
+	"""Stop our Fiscal Year from blocking ERPNext's test fiscal years.
+
+	``erpnext.tests.utils`` seeds ``_Test Fiscal Year <year>`` for every year
+	from 2012 to twenty-five years out, and Frappe loads the Fiscal Year test
+	records on the way to any doctype that links to one. ``validate_overlap``
+	rejects an overlapping year only when *both* rows are global::
+
+	    if not self.get("companies") and not company_for_existing:
+	        overlap = True
+
+	The wizard above creates its Fiscal Year global, so ERPNext's
+	``_Test Fiscal Year 2021`` cannot be inserted and every test class that
+	reaches a Fiscal Year link dies in ``setUpClass``. Naming the company on
+	our row is the escape hatch ERPNext's own error message points at, and it
+	leaves the year current for this company rather than for the whole site.
+
+	This only ever runs on the branch that just created the company, so it
+	never touches a Fiscal Year the site already had. Test-only.
+	"""
+	if not frappe.db.exists("Fiscal Year", fiscal_year) or not frappe.db.exists("Company", company):
+		return
+
+	doc = frappe.get_doc("Fiscal Year", fiscal_year)
+	if any(row.company == company for row in doc.get("companies", [])):
+		return
+
+	doc.append("companies", {"company": company})
+	doc.save(ignore_permissions=True)
 
 
 def ensure_test_selling_defaults() -> None:
@@ -261,6 +301,53 @@ def ensure_test_selling_defaults() -> None:
 		leaf = frappe.db.get_value(doctype, {"is_group": 0}, "name", order_by="lft asc")
 		if leaf:
 			frappe.db.set_single_value("Selling Settings", fieldname, leaf)
+
+
+def reserve_erpnext_standard_price_lists():
+	"""Create ERPNext's Standard price lists before the setup wizard does.
+
+	``erpnext.tests.utils`` runs ``BootStrapTestData()`` at import time, and
+	Frappe imports it as soon as a test class walks a link to Company. Its
+	``make_records`` de-duplicates on a filter that includes ``currency``, and
+	its Standard Buying / Standard Selling records are INR::
+
+	    filters = {"price_list_name": ..., "enabled": ..., "selling": ..., "buying": ..., "currency": "INR"}
+	    if not frappe.db.exists(doctype, filters):
+	        frappe.get_doc(x).insert()
+
+	The setup wizard below creates both names in the *site* currency. On any
+	non-INR site that filter therefore matches nothing, ERPNext inserts, and
+	Price List autonames from ``price_list_name`` -- so the insert dies on a
+	primary-key duplicate and takes every test class that reaches Company with
+	it. That is an upstream ERPNext bug; ``erpnext`` is not ours to patch.
+
+	Seeding the records here, in the exact shape ERPNext looks for, fixes it
+	from our side without touching either app. ERPNext then finds them and
+	skips, and the wizard's own ``make_records`` passes
+	``ignore_if_duplicate=True``, so it skips them too.
+
+	Test-only: this runs from the ``before_tests`` hook and never on a real
+	site.
+	"""
+	if "erpnext" not in frappe.get_installed_apps():
+		return
+
+	for price_list_name, buying, selling in (
+		("Standard Buying", 1, 0),
+		("Standard Selling", 0, 1),
+	):
+		if frappe.db.exists("Price List", price_list_name):
+			continue
+		frappe.get_doc(
+			{
+				"doctype": "Price List",
+				"price_list_name": price_list_name,
+				"enabled": 1,
+				"buying": buying,
+				"selling": selling,
+				"currency": "INR",
+			}
+		).insert(ignore_permissions=True, ignore_if_duplicate=True)
 
 
 def skip_hrms_test_record_bootstrap():

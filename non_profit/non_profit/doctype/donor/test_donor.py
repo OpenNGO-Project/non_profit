@@ -876,8 +876,16 @@ class TestDonorForCustomerConcurrency(IntegrationTestCase):
 				"doctype": "Customer",
 				"customer_name": f"Donor Race Customer {token}",
 				"customer_type": "Individual",
-				"customer_group": "Individual",
-				"territory": "Switzerland",
+				# Resolve both from the site instead of naming them. This test
+				# hardcoded "Switzerland", which only exists when the ERPNext
+				# wizard ran with country Switzerland -- so it passed on a
+				# wizard-built site and died on LinkValidationError anywhere
+				# else. Every sibling suite already resolves these this way.
+				"customer_group": frappe.db.get_value(
+					"Customer Group", {"is_group": 0}, "name", order_by="name asc"
+				),
+				"territory": frappe.db.get_single_value("Selling Settings", "territory")
+				or frappe.db.get_value("Territory", {"is_group": 0}, "name", order_by="lft asc"),
 			}
 		)
 		customer.flags.ignore_mandatory = True
